@@ -3,6 +3,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:kartoved/data/catalog.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/ui/sheets.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kartoved/ui/collections.dart';
 import 'package:kartoved/ui/style.dart';
 
 void main() {
@@ -36,7 +38,10 @@ void main() {
   testWidgets('В пустой коллекции есть переход к сканеру', (tester) async {
     final model = AppModel(CatalogStore(), History());
     await tester.pumpWidget(
-      MaterialApp(theme: kartovedTheme(), home: CollectionPage(model)),
+      MaterialApp(
+        theme: kartovedTheme(),
+        home: BlocProvider.value(value: model, child: const CollectionPage()),
+      ),
     );
     expect(find.text('Сканировать карту'), findsOneWidget);
   });

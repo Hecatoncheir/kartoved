@@ -11,14 +11,17 @@ typedef Hit = ({int index, double score});
 
 /// Распознаёт одиночную фотографию. Вызывается в рабочем изоляте.
 List<Hit> identify(String directory, String photo) {
+  final decoded = im.decodeImage(File(photo).readAsBytesSync());
+  if (decoded == null) throw const FormatException('Не удалось открыть снимок');
+  return identifyImage(directory, im.bakeOrientation(decoded));
+}
+
+List<Hit> identifyImage(String directory, im.Image original) {
   final config = jsonDecode(
     File(p.join(directory, 'catalog.json')).readAsStringSync(),
   ) as Map;
   final constants = config['constants'] as Map;
   final side = constants['scene'] as int;
-  final decoded = im.decodeImage(File(photo).readAsBytesSync());
-  if (decoded == null) throw const FormatException('Не удалось открыть снимок');
-  final original = im.bakeOrientation(decoded);
   final large = math.max(original.width, original.height);
   final scale = side / large;
   final scaled = im.copyResize(

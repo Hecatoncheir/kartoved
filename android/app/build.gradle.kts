@@ -4,6 +4,9 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val keyPath = System.getenv("KARTOVED_KEYSTORE")
+val storePasswordEnv = System.getenv("KARTOVED_STORE_PASSWORD")
+
 android {
     namespace = "dev.hecatoncheir.kartoved"
     compileSdk = flutter.compileSdkVersion
@@ -29,11 +32,17 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (keyPath != null) create("kartoved") {
+            storeFile = file(keyPath)
+            storePassword = storePasswordEnv
+            keyAlias = "kartoved"
+            keyPassword = storePasswordEnv
+        }
+    }
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (keyPath == null) "debug" else "kartoved")
         }
     }
 }
@@ -46,4 +55,9 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
+    implementation("com.google.mlkit:language-id:17.0.6")
 }

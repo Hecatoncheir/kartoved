@@ -7,6 +7,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
+export 'collections.dart';
+
 const _files = [
   'detector.onnx',
   'embed.onnx',
@@ -44,6 +46,59 @@ class Catalog {
   const Catalog(this.directory, this.spec);
   final Directory directory;
   final CatalogSpec spec;
+  Future<Edition> front(Edition card) async {
+    if (!card.id.endsWith('-1')) return card;
+    final id = card.id.substring(0, card.id.length - 2);
+    final db = await openReadOnlyDatabase(
+      p.join(directory.path, 'cards.sqlite'),
+      singleInstance: false,
+    );
+    try {
+      final rows = await db.query(
+        'editions',
+        where: 'id=?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      return rows.isEmpty ? card : Edition.fromRow(rows.first);
+    } finally {
+      await db.close();
+    }
+  }
+
+  Future<List<Edition>> variants(Edition card) async {
+    final db = await openReadOnlyDatabase(
+      p.join(directory.path, 'cards.sqlite'),
+      singleInstance: false,
+    );
+    try {
+      final rows = await db.rawQuery(
+        'SELECT * FROM editions WHERE art = (SELECT art FROM editions WHERE id = ? LIMIT 1) ORDER BY rowid',
+        [card.id],
+      );
+      return rows.map(Edition.fromRow).toList();
+    } finally {
+      await db.close();
+    }
+  }
+
+  Future<List<Edition>> inSet(String code, String language) async {
+    final db = await openReadOnlyDatabase(
+      p.join(directory.path, 'cards.sqlite'),
+      singleInstance: false,
+    );
+    try {
+      final rows = await db.query(
+        'editions',
+        where: 'set_code=? AND lang=?',
+        whereArgs: [code, language],
+      );
+      return rows.map(Edition.fromRow).toList();
+    } finally {
+      await db.close();
+    }
+  }
+
   Future<List<Edition>> editions(int index) async {
     final db = await openReadOnlyDatabase(
       p.join(directory.path, 'cards.sqlite'),
@@ -66,8 +121,9 @@ class Catalog {
 class Edition {
   const Edition(this.id, this.name, this.set, this.number, this.language);
   final String id, name, set, number, language;
+  Edition withLanguage(String lang) => Edition(id, name, set, number, lang);
   String get detail =>
-      '${set.toUpperCase()}  ·  № $number  ·  ${language.toUpperCase()}';
+      '${set.toUpperCase()}  ·  № $number  ·  ${language == 'und' ? 'язык не определён' : language.toUpperCase()}';
   factory Edition.fromRow(Map<String, Object?> row) => Edition(
     row['id'] as String,
     row['name'] as String,
@@ -174,6 +230,55 @@ class CatalogStore {
     return _install(spec, current, source);
   }
 
+  Future<void> _stageFile(
+    Directory staging,
+    String name,
+    CatalogSpec spec,
+    Catalog? previous,
+    _FileSource source,
+  ) async {
+    final file = File(p.join(staging.path, name));
+    if (previous != null &&
+        name != 'cards.sqlite.pack' &&
+        previous.spec.hash(name) == spec.hash(name)) {
+      await File(p.join(previous.directory.path, name)).copy(file.path);
+    } else {
+      var bytes = 0;
+      await (await source(name))
+          .map((chunk) {
+            bytes += chunk.length;
+            if (bytes > spec.size(name)) {
+              throw const FormatException('Превышен размер файла');
+            }
+            return chunk;
+          })
+          .pipe(file.openWrite());
+    }
+    if (await file.length() != spec.size(name) ||
+        (await sha256.bind(file.openRead()).first).toString() !=
+            spec.hash(name)) {
+      throw const FormatException('Не совпала контрольная сумма');
+    }
+  }
+
+  Future<void> _unpack(Directory staging, CatalogSpec spec) async {
+    final packed = File(p.join(staging.path, 'cards.sqlite.pack'));
+    final database = File(p.join(staging.path, 'cards.sqlite'));
+    await packed.openRead().transform(gzip.decoder).pipe(database.openWrite());
+    await packed.delete();
+    final db = await openReadOnlyDatabase(database.path, singleInstance: false);
+    try {
+      final count = Sqflite.firstIntValue(
+        await db.rawQuery('SELECT count(*) FROM arts'),
+      );
+      if (count != spec.count) {
+        throw const FormatException('Неполный каталог');
+      }
+    } finally {
+      await db.close();
+    }
+  }
+
   Future<Catalog> _install(
     CatalogSpec spec,
     Catalog? previous,
@@ -183,50 +288,9 @@ class CatalogStore {
     final staging = await root.createTemp('install-');
     try {
       for (final name in _files) {
-        final file = File(p.join(staging.path, name));
-        if (previous != null &&
-            name != 'cards.sqlite.pack' &&
-            previous.spec.hash(name) == spec.hash(name)) {
-          await File(p.join(previous.directory.path, name)).copy(file.path);
-        } else {
-          var bytes = 0;
-          await (await source(name))
-              .map((chunk) {
-                bytes += chunk.length;
-                if (bytes > spec.size(name)) {
-                  throw const FormatException('Превышен размер файла');
-                }
-                return chunk;
-              })
-              .pipe(file.openWrite());
-        }
-        if (await file.length() != spec.size(name) ||
-            (await sha256.bind(file.openRead()).first).toString() !=
-                spec.hash(name)) {
-          throw const FormatException('Не совпала контрольная сумма');
-        }
+        await _stageFile(staging, name, spec, previous, source);
       }
-      final packed = File(p.join(staging.path, 'cards.sqlite.pack'));
-      final database = File(p.join(staging.path, 'cards.sqlite'));
-      await packed
-          .openRead()
-          .transform(gzip.decoder)
-          .pipe(database.openWrite());
-      await packed.delete();
-      final db = await openReadOnlyDatabase(
-        database.path,
-        singleInstance: false,
-      );
-      try {
-        final count = Sqflite.firstIntValue(
-          await db.rawQuery('SELECT count(*) FROM arts'),
-        );
-        if (count != spec.count) {
-          throw const FormatException('Неполный каталог');
-        }
-      } finally {
-        await db.close();
-      }
+      await _unpack(staging, spec);
       await File(p.join(staging.path, 'catalog.json'))
           .writeAsString(jsonEncode(spec.raw), flush: true);
       // Готовый каталог мог остаться после прерывания между переименованием и сменой указателя.
@@ -246,38 +310,4 @@ class CatalogStore {
       if (await staging.exists()) await staging.delete(recursive: true);
     }
   }
-}
-
-class History {
-  late Database _db;
-  Future<void> open() async {
-    _db = await openDatabase(
-      p.join(await getDatabasesPath(), 'collection.sqlite'),
-      version: 1,
-      onCreate: (db, _) => db.execute(
-        'CREATE TABLE cards(id TEXT PRIMARY KEY,name TEXT,set_code TEXT,number TEXT,lang TEXT,qty INTEGER,touched INTEGER)',
-      ),
-    );
-  }
-
-  Future<void> add(Edition card) async {
-    await _db.transaction((tx) async {
-      await tx.insert('cards', {
-        ...card.row,
-        'qty': 0,
-        'touched': 0,
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
-      await tx.rawUpdate('UPDATE cards SET qty=qty+1,touched=? WHERE id=?', [
-        DateTime.now().microsecondsSinceEpoch,
-        card.id,
-      ]);
-    });
-  }
-
-  Future<List<({Edition card, int quantity})>> list() async =>
-      (await _db.query('cards', orderBy: 'touched DESC'))
-          .map(
-            (row) => (card: Edition.fromRow(row), quantity: row['qty'] as int),
-          )
-          .toList();
 }

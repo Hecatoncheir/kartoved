@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'picture.dart';
+import '../data/pictures.dart';
 
 import 'package:material_ui/material_ui.dart';
 
@@ -26,16 +27,16 @@ Future<T?> panel<T>(BuildContext context, Widget child) =>
     );
 
 class ResultSheet extends StatefulWidget {
-  const ResultSheet(this.matches, this.path, {super.key});
+  const ResultSheet(this.matches, this.initial, {super.key});
   final List<Match> matches;
-  final String path;
+  final Edition initial;
   @override
   State<ResultSheet> createState() => _ResultSheetState();
 }
 
 class _ResultSheetState extends State<ResultSheet> {
   int selected = 0;
-  late Edition card = widget.matches.first.editions.first;
+  late Edition card = widget.initial;
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
     child: Column(
@@ -48,14 +49,7 @@ class _ResultSheetState extends State<ResultSheet> {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
-              child: Image.file(
-                File(widget.path),
-                width: 66,
-                height: 90,
-                fit: BoxFit.cover,
-                cacheWidth: 160,
-                errorBuilder: (_, _, _) => const Mark(),
-              ),
+              child: SizedBox(width: 66, height: 90, child: CardPicture(card)),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -167,77 +161,6 @@ class _EditionPickerState extends State<EditionPicker> {
   }
 }
 
-class CollectionPage extends StatelessWidget {
-  const CollectionPage(this.model, {super.key});
-  final AppModel model;
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(backgroundColor: paper, title: const Text('Картовед')),
-    body: SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SheetHeading('Коллекция'),
-            const SizedBox(height: 12),
-            if (model.cards.isEmpty)
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Folio(),
-                      const SizedBox(height: 14),
-                      const Text(
-                        'Пока нет карт',
-                        style: TextStyle(
-                          fontSize: 21,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      FilledButton.icon(
-                        icon: const Icon(Icons.center_focus_strong),
-                        onPressed: () => Navigator.pop(context),
-                        label: const Text('Сканировать карту'),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              Expanded(
-                child: ListView.separated(
-                  itemCount: model.cards.length,
-                  separatorBuilder: (_, _) => const Divider(),
-                  itemBuilder: (c, i) {
-                    final entry = model.cards[i];
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        entry.card.name,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      subtitle: Text(entry.card.detail),
-                      trailing: Text(
-                        '×${entry.quantity}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
 class CatalogPanel extends StatefulWidget {
   const CatalogPanel(this.model, {super.key});
   final AppModel model;
@@ -312,6 +235,13 @@ class _CatalogPanelState extends State<CatalogPanel> {
             ),
           ),
         ),
+        TextButton.icon(
+          icon: const Icon(Icons.download_outlined),
+          label: const Text('Миниатюры выпуска офлайн'),
+          onPressed: loading
+              ? null
+              : () => panel<void>(context, PicturePack(widget.model.catalog!)),
+        ),
         if (message != null)
           Padding(
             padding: const EdgeInsets.only(top: 12),
@@ -331,4 +261,87 @@ class _CatalogPanelState extends State<CatalogPanel> {
       ],
     );
   }
+}
+
+class PicturePack extends StatefulWidget {
+  const PicturePack(this.catalog, {super.key});
+  final Catalog catalog;
+  @override
+  State<PicturePack> createState() => _PicturePackState();
+}
+
+class _PicturePackState extends State<PicturePack> {
+  String code = '', language = 'en', status = '';
+  bool loading = false;
+  void progress(String text) {
+    if (mounted) setState(() => status = text);
+  }
+
+  Future<void> download() async {
+    setState(() {
+      loading = true;
+      status = 'Поиск изданий…';
+    });
+    try {
+      final cards = await widget.catalog.inSet(
+        code.trim().toLowerCase(),
+        language.trim().toLowerCase(),
+      );
+      var done = 0;
+      for (final card in cards) {
+        if (!mounted) return;
+        await Pictures.shared.get(card.id);
+        if (mounted) setState(() => status = '${++done} из ${cards.length}');
+      }
+      progress(
+        cards.isEmpty
+            ? 'Выпуск на этом языке не найден'
+            : 'Миниатюры сохранены',
+      );
+    } catch (_) {
+      progress('Загрузка прервана. Можно продолжить.');
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SheetHeading('Миниатюры выпуска'),
+        TextField(
+          enabled: !loading,
+          decoration: const InputDecoration(
+            labelText: 'Код выпуска',
+            hintText: 'SNC',
+          ),
+          onChanged: (v) => setState(() => code = v),
+        ),
+        TextFormField(
+          initialValue: language,
+          enabled: !loading,
+          decoration: const InputDecoration(
+            labelText: 'Язык',
+            hintText: 'ru, en…',
+          ),
+          onChanged: (v) => setState(() => language = v),
+        ),
+        if (status.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Text(status),
+          ),
+        FilledButton(
+          onPressed: code.trim().isEmpty || language.trim().isEmpty || loading
+              ? null
+              : download,
+          child: const Text('Скачать'),
+        ),
+      ],
+    ),
+  );
 }

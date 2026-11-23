@@ -1,377 +1,465 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
-import 'package:camera_view_mask/mask/camera_mask_base_with_backdrop_filter.dart';
 import 'package:camera_view_mask/mask/mask.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../data/android.dart';
 import '../data/catalog.dart';
+import '../data/frame.dart';
+import '../data/language.dart';
 import '../model.dart';
+import '../scan_cubit.dart';
 import 'sheets.dart';
+import 'scan_strip.dart';
 import 'style.dart';
 
 class Scanner extends StatefulWidget {
-  const Scanner(this.model, {super.key});
-  final AppModel model;
+  const Scanner({super.key});
   @override
   State<Scanner> createState() => _ScannerState();
 }
 
 class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
+  final scan = ScanCubit();
+  final clock = Stopwatch()..start();
   CameraController? camera;
-  String? cameraError;
-  bool torch = false, taking = false;
-  int generation = 0;
+  String? error;
+  bool reading = false, modal = false, torch = false;
+  int epoch = 0, nextFrame = 0, frameSession=0;
   Future<void> cameraQueue = Future.value();
+  AppModel get library => context.read<AppModel>();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _scheduleCamera(true);
-  }
-
-  void _scheduleCamera(bool open) {
-    final token = ++generation;
-    cameraQueue = cameraQueue
-        .then((_) async {
-          final old = camera;
-          camera = null;
-          torch = false;
-          if (mounted) setState(() {});
-          await old?.dispose();
-          if (!open || token != generation || !mounted) return;
-          CameraController? next;
-          try {
-            final cameras = await availableCameras();
-            if (cameras.isEmpty) throw StateError('Камера недоступна');
-            final back = cameras.firstWhere(
-              (v) => v.lensDirection == CameraLensDirection.back,
-              orElse: () => cameras.first,
-            );
-            next = CameraController(
-              back,
-              ResolutionPreset.high,
-              enableAudio: false,
-            );
-            await next.initialize();
-            if (token != generation || !mounted) {
-              await next.dispose();
-              return;
-            }
-            setState(() {
-              camera = next;
-              cameraError = null;
-            });
-          } catch (e) {
-            await next?.dispose();
-            if (mounted && token == generation) {
-              setState(
-                () => cameraError =
-                    e is CameraException && e.code.contains('Access')
-                    ? 'Разрешите доступ к камере'
-                    : 'Камера недоступна',
-              );
-            }
-          }
-        })
-        .catchError((Object e) {
-          debugPrint('Камера: $e');
-        });
+    openCamera(true);
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.resumed) {
-      _scheduleCamera(state == AppLifecycleState.resumed);
+    if (state == AppLifecycleState.paused) openCamera(false);
+    if (state == AppLifecycleState.resumed) openCamera(true);
+  }
+
+  void openCamera(bool open) {
+    final token = ++epoch;
+    frameSession++;
+    scan.cancelFrame();
+    cameraQueue = cameraQueue.then((_) => _open(open, token)).catchError((
+      Object e,
+    ) {
+      if (mounted && token == epoch) {
+        setState(() => error = 'Камера недоступна');
+      }
+    });
+  }
+
+  Future<void> _open(bool open, int token) async {
+    final old = camera;
+    camera = null;
+    torch = false;
+    if (mounted) setState(() {});
+    await old?.dispose();
+    if (!open || !mounted || token != epoch) return;
+    await _connect(token);
+  }
+
+  Future<void> _connect(int token)async {
+    final cameras = await availableCameras();
+    final back = cameras.firstWhere(
+      (c) => c.lensDirection == CameraLensDirection.back,
+      orElse: () => cameras.first,
+    );
+    final next = CameraController(
+      back,
+      ResolutionPreset.high,
+      enableAudio: false,
+      imageFormatGroup: ImageFormatGroup.nv21,
+    );
+    try {
+      await next.initialize();
+      if (!mounted || token != epoch) {
+        await next.dispose();
+        return;
+      }
+      setState(() {
+        camera = next;
+        error = null;
+      });
+      await _syncStream();
+    } on CameraException catch (e) {
+      if (identical(camera, next)) camera = null;
+      await next.dispose();
+      if (mounted && token == epoch) {
+        setState(
+          () => error = e.code.contains('Access')
+              ? 'Разрешите доступ к камере'
+              : 'Камера недоступна',
+        );
+      }
     }
+  }
+
+  Future<void> _syncStream() async {
+    final c = camera;
+    if (c == null) return;
+    final auto = scan.state == ScanMode.automatic;
+    if (auto == c.value.isStreamingImages) return;
+    if (auto) {
+      await c.startImageStream(_onFrame);
+    } else {
+      await c.stopImageStream();
+    }
+  }
+
+  void _mode() {
+    frameSession++;
+    scan.toggle();
+    cameraQueue = cameraQueue.then((_) => _syncStream()).catchError((Object e) {
+      if (!mounted) return;
+      if (scan.state == ScanMode.automatic) scan.toggle();
+      message('Не удалось включить поток камеры');
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    generation++;
-    final old = camera;
-    camera = null;
-    unawaited(old?.dispose());
+    openCamera(false);
+    unawaited(scan.close());
     super.dispose();
   }
 
-  void note(String text) {
+  void message(String value) {
     if (mounted) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(text)));
+        ..showSnackBar(SnackBar(content: Text(value)));
     }
   }
 
-  Future<void> scan({bool gallery = false}) async {
-    if (taking || widget.model.busy || widget.model.catalog == null) return;
-    setState(() => taking = true);
+  bool get active => mounted && ModalRoute.of(context)?.isCurrent == true;
+  bool accepts(int token) =>
+      active && token == frameSession && !modal && scan.state == ScanMode.automatic;
+  int rotation(CameraController c) {
+    final turns = switch (c.value.deviceOrientation) {
+      DeviceOrientation.portraitUp => 0,
+      DeviceOrientation.landscapeLeft => 90,
+      DeviceOrientation.portraitDown => 180,
+      DeviceOrientation.landscapeRight => 270,
+    };
+    final sensor = c.description.sensorOrientation;
+    return (sensor +
+            (c.description.lensDirection == CameraLensDirection.front
+                ? turns
+                : -turns) +
+            360) %
+        360;
+  }
+
+  void _onFrame(CameraImage image) {
+    if (reading || !accepts(frameSession) || clock.elapsedMilliseconds < nextFrame) {
+      return;
+    }
+    final c = camera;
+    if (c == null || image.planes.length != 1) return;
+    final frame = (
+      bytes: image.planes.single.bytes,
+      width: image.width,
+      height: image.height,
+      rotation: rotation(c),
+    );
+    unawaited(_automatic(frame, frameSession));
+  }
+
+  Future<void> _automatic(PreviewFrame frame, int token) async {
+    reading = true;
+    try {
+      final matches = await library.recognizeFrame(frame);
+      if (!accepts(token)) return;
+      final hit = scan.evaluate(matches);
+      if (hit == null) return;
+      final options = matches.first.editions;
+      final lang = await CardLanguage.read(frame: frame, options: options);
+      if (accepts(token)) await _save(CardLanguage.select(options, lang));
+    } catch (e) {
+      if (accepts(token)) {
+        _mode();
+        message('Автоскан остановлен. Попробуйте ещё раз.');
+      }
+    } finally {
+      nextFrame = clock.elapsedMilliseconds + 220;
+      reading = false;
+    }
+  }
+
+  Future<void> _save(Edition card) async {
+    await library.save(card);
+    if (!mounted) return;
+    scan.gate.saved(card);
+    await AndroidActions.chime();
+  }
+
+  Future<void> _confirm(XFile file) async {
+    final matches = await library.recognize(file.path);
+    if (!active) return;
+    if (matches.isEmpty) {
+      message('Карта не найдена');
+      return;
+    }
+    final options = matches.first.editions;
+    final lang = await CardLanguage.read(file: file.path, options: options);
+    if (!mounted || !active) return;
+    final card = await panel<Edition>(
+      context,
+      ResultSheet(matches, CardLanguage.select(options, lang)),
+    );
+    if (card != null && active) await _save(card);
+  }
+
+  Future<void> _discard(XFile? file) async {
+    if (file == null) return;
+    try {
+      await File(file.path).delete();
+    } on FileSystemException {
+      /* Временный файл уже удалён. */
+    }
+  }
+
+  Future<void> _manual({bool gallery = false}) async {
+    if (modal) return;
+    if (!gallery && scan.state == ScanMode.automatic) {
+      scan.shutter();
+      nextFrame = 0;
+      return;
+    }
+    frameSession++;
+    setState(() => modal = true);
     XFile? file;
     try {
       file = gallery
           ? await ImagePicker().pickImage(
               source: ImageSource.gallery,
-              maxWidth: 1800,
-              maxHeight: 1800,
+              maxWidth: 2000,
+              maxHeight: 2000,
             )
           : await camera?.takePicture();
-      if (file == null || !mounted) return;
-      final matches = await widget.model.recognize(file.path);
-      if (!mounted) return;
-      if (matches.isEmpty) {
-        note('Карта не найдена. Попробуйте другой ракурс.');
-        return;
-      }
-      final chosen = await panel<Edition>(
-        context,
-        ResultSheet(matches, file.path),
-      );
-      if (chosen != null) {
-        await widget.model.save(chosen);
-        note('В коллекции: ${chosen.name}');
-      }
-    } catch (e, stack) {
-      debugPrint('Сканирование: $e\n$stack');
-      note('Не удалось обработать снимок. Попробуйте ещё раз.');
+      if (file == null || !active) return;
+      await _confirm(file);
+    } catch (e) {
+      message('Не удалось обработать снимок');
     } finally {
-      if (!gallery && file != null) {
-        try {
-          await File(file.path).delete();
-        } on FileSystemException {
-          /* Снимок уже удалён. */
-        }
-      }
-      if (mounted) setState(() => taking = false);
+      if (!gallery) await _discard(file);
+      if (mounted) setState(() => modal = false);
     }
   }
 
-  Future<void> toggle() async {
-    final controller = camera;
-    if (controller == null) return;
+  Future<void> _edit(ScanEntry entry) async {
+    if (modal) return;
+    frameSession++;
+    modal = true;
     try {
-      await controller.setFlashMode(torch ? FlashMode.off : FlashMode.torch);
-      if (mounted && identical(controller, camera)) {
-        setState(() => torch = !torch);
-      }
-    } catch (_) {
-      note('Фонарь недоступен');
+      final variants = await library.catalog!.variants(entry.card);
+      if (!mounted || !active || variants.isEmpty) return;
+      final edition = await panel<Edition>(
+        context,
+        EditionPicker(variants, entry.card),
+      );
+      if (edition != null && active) await library.replace(entry, edition);
+    } catch (e) {
+      message('Не удалось изменить издание');
+    } finally {
+      modal = false;
     }
+  }
+
+  Future<void> _torch() async {
+    final c = camera;
+    if (c == null) return;
+    try {
+      await c.setFlashMode(torch ? FlashMode.off : FlashMode.torch);
+      if (mounted && identical(c, camera)) setState(() => torch = !torch);
+    } catch (_) {
+      message('Фонарь недоступен');
+    }
+  }
+
+  Widget _header(String title) => Row(
+    children: [
+      RoundAction(
+        Icons.arrow_back,
+        'К коллекции',
+        () => Navigator.maybePop(context),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: paper,
+            fontFamily: 'Nunito',
+            fontWeight: FontWeight.w900,
+            fontSize: 21,
+          ),
+        ),
+      ),
+      RoundAction(
+        torch ? Icons.flashlight_on : Icons.flashlight_off,
+        'Фонарь',
+        camera == null ? null : _torch,
+      ),
+    ],
+  );
+  Widget _controls(BuildContext context, ScanMode mode) => Frost(
+    radius: 28,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _DockAction(
+            Icons.photo_library_outlined,
+            'Из фото',
+            modal ? null : () => _manual(gallery: true),
+          ),
+          IconButton.filled(
+            tooltip: 'Добавить карту',
+            style: IconButton.styleFrom(
+              backgroundColor: butter,
+              foregroundColor: ink,
+              fixedSize: const Size.square(60),
+            ),
+            onPressed: camera == null || modal ? null : () => _manual(),
+            icon: modal
+                ? const CircularProgressIndicator()
+                : const Icon(Icons.center_focus_strong_rounded, size: 31),
+          ),
+          Semantics(
+            toggled: mode == ScanMode.automatic,
+            child: _DockAction(
+              mode == ScanMode.automatic
+                  ? Icons.pause_circle_filled
+                  : Icons.play_circle_outline,
+              mode == ScanMode.automatic ? 'Остановить' : 'Автоскан',
+              camera == null || modal ? null : _mode,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+  Widget _overlay(BuildContext context, BoxConstraints bounds) {
+    final state = library.state;
+    final insets = MediaQuery.paddingOf(context);
+    final header = insets.top + 62;
+    final strip = state.recent.isEmpty
+        ? 0.0
+        : math.min(84.0, bounds.maxHeight * .12);
+    final top = header + strip + 8;
+    final bottom = bounds.maxHeight - insets.bottom - 104;
+    final width = math.min(
+      bounds.maxWidth * .77,
+      math.max(20.0, (bottom - top) * 63 / 88),
+    );
+    final rect = Rect.fromCenter(
+      center: Offset(bounds.maxWidth / 2, (top + bottom) / 2),
+      width: width,
+      height: width * 88 / 63,
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (camera != null)
+          IgnorePointer(
+            child: ClipPath(
+              clipper: _Outside(rect),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: ColoredBox(color: Colors.black.withValues(alpha: .42)),
+              ),
+            ),
+          ),
+        IgnorePointer(child: CustomPaint(painter: _Corners(rect))),
+        Positioned(
+          left: 10,
+          right: 10,
+          top: insets.top + 4,
+          child: _header(state.title),
+        ),
+        if (strip > 0)
+          Positioned(
+            top: header,
+            height: strip,
+            left: 0,
+            right: 0,
+            child: ScanStrip(state.recent, _edit),
+          ),
+        if (camera == null)
+          Center(
+            child: TextButton(
+              onPressed: () => openCamera(true),
+              child: Text(
+                error ?? 'Открытие камеры…',
+                style: const TextStyle(color: paper),
+              ),
+            ),
+          ),
+        Positioned(
+          left: 12,
+          right: 12,
+          bottom: insets.bottom + 8,
+          child: BlocBuilder<ScanCubit, ScanMode>(
+            bloc: scan,
+            builder: _controls,
+          ),
+        ),
+      ],
+    );
   }
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.model,
-    builder: (context, _) {
-      final model = widget.model;
-      final ready = !model.busy && !taking && model.catalog != null;
-      return Scaffold(
-        backgroundColor: dark,
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (camera case final cam?) _CameraSurface(cam),
-            SafeArea(
-              child: LayoutBuilder(
-                builder: (context, box) {
-                  final w = math.min(
-                    box.maxWidth * .77,
-                    math.max(48.0, (box.maxHeight - 210) * .716),
-                  );
-                  final h = w * 88 / 63;
-                  final rect = Rect.fromCenter(
-                    center: Offset(box.maxWidth / 2, (box.maxHeight - 60) / 2),
-                    width: w,
-                    height: h,
-                  );
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (camera != null)
-                        IgnorePointer(
-                          child: CameraMaskBaseWithBackdropFilter(
-                            key: ValueKey(rect),
-                            mask: Mask(
-                              offset: rect.topLeft,
-                              size: rect.size,
-                              borderRadius: 18,
-                              border: Border.all(
-                                color: paper.withValues(alpha: .55),
-                              ),
-                            ),
-                          ),
-                        ),
-                      IgnorePointer(
-                        child: CustomPaint(painter: _Corners(rect)),
-                      ),
-                      Positioned(
-                        left: 18,
-                        right: 18,
-                        top: 8,
-                        child: Row(
-                          children: [
-                            const Mark(size: 38),
-                            const SizedBox(width: 7),
-                            const Text(
-                              'Картовед',
-                              style: TextStyle(
-                                fontFamily: 'Nunito',
-                                fontSize: 26,
-                                letterSpacing: -1.3,
-                                fontWeight: FontWeight.w900,
-                                color: paper,
-                              ),
-                            ),
-                            const Spacer(),
-                            RoundAction(
-                              Icons.storage_rounded,
-                              'База карт',
-                              ready
-                                  ? () => panel<void>(
-                                      context,
-                                      CatalogPanel(model),
-                                    )
-                                  : null,
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (camera == null ||
-                          model.initialError != null ||
-                          model.catalog == null)
-                        Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Mark(size: 64),
-                              const SizedBox(height: 12),
-                              Text(
-                                model.initialError ??
-                                    (model.catalog == null
-                                        ? 'Подготовка базы…'
-                                        : cameraError ?? 'Открытие камеры…'),
-                                style: const TextStyle(
-                                  color: paper,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              if (model.initialError != null ||
-                                  cameraError != null)
-                                TextButton(
-                                  onPressed: model.busy
-                                      ? null
-                                      : () => model.initialError != null
-                                            ? model.initialize()
-                                            : _scheduleCamera(true),
-                                  child: const Text(
-                                    'Повторить',
-                                    style: TextStyle(color: butter),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      Align(
-                        alignment: Alignment.bottomCenter,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (camera != null)
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: RoundAction(
-                                    torch
-                                        ? Icons.flashlight_on
-                                        : Icons.flashlight_off,
-                                    'Фонарь',
-                                    ready ? toggle : null,
-                                  ),
-                                ),
-                              const SizedBox(height: 8),
-                              Frost(
-                                radius: 32,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 10,
-                                    horizontal: 6,
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceAround,
-                                    children: [
-                                      _DockAction(
-                                        Icons.photo_library_outlined,
-                                        'Из фото',
-                                        ready
-                                            ? () => scan(gallery: true)
-                                            : null,
-                                      ),
-                                      Semantics(
-                                        button: true,
-                                        label: 'Распознать карту',
-                                        child: IconButton.filled(
-                                          style: IconButton.styleFrom(
-                                            backgroundColor: butter,
-                                            disabledBackgroundColor: muted,
-                                            foregroundColor: ink,
-                                            fixedSize: const Size.square(64),
-                                          ),
-                                          onPressed: ready && camera != null
-                                              ? () => scan()
-                                              : null,
-                                          icon: model.busy || taking
-                                              ? const SizedBox.square(
-                                                  dimension: 26,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                        strokeWidth: 3,
-                                                        color: paper,
-                                                      ),
-                                                )
-                                              : const Icon(
-                                                  Icons
-                                                      .center_focus_strong_rounded,
-                                                  size: 32,
-                                                ),
-                                        ),
-                                      ),
-                                      _DockAction(
-                                        Icons.style_outlined,
-                                        'Коллекция',
-                                        ready
-                                            ? () => Navigator.push(
-                                                context,
-                                                MaterialPageRoute<void>(
-                                                  builder: (_) =>
-                                                      CollectionPage(model),
-                                                ),
-                                              )
-                                            : null,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      );
-    },
+  Widget build(BuildContext context) => BlocBuilder<AppModel, LibraryState>(
+    builder: (context, state) => Scaffold(
+      backgroundColor: dark,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (camera case final c?) _CameraSurface(c),
+          LayoutBuilder(builder: _overlay),
+        ],
+      ),
+    ),
   );
+}
+
+class _Outside extends CustomClipper<Path> {
+  const _Outside(this.rect);
+  final Rect rect;
+  @override
+  Path getClip(Size size) => Path()
+    ..fillType = PathFillType.evenOdd
+    ..addRect(Offset.zero & size)
+    ..addPath(
+      Mask(
+        offset: rect.topLeft,
+        size: rect.size,
+        borderRadius: 16,
+        border: Border.all(),
+      ).toPath(),
+      Offset.zero,
+    );
+  @override
+  bool shouldReclip(_Outside old) => rect != old.rect;
 }
 
 class _CameraSurface extends StatelessWidget {
@@ -380,7 +468,8 @@ class _CameraSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final landscape = MediaQuery.orientationOf(context) == Orientation.landscape;
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
     final size = controller.value.previewSize!;
     return ClipRect(
       child: FittedBox(
