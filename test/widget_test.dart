@@ -4,6 +4,7 @@ import 'package:kartoved/data/catalog.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/ui/sheets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kartoved/ui/album.dart';
 import 'package:kartoved/ui/collections.dart';
 import 'package:kartoved/ui/style.dart';
 import 'package:kartoved/ui/scan_strip.dart';
@@ -89,7 +90,42 @@ void main() {
     final shelfWithInsets = tester.getRect(find.byType(ListView));
     expect(shelfWithInsets.left, 0);
     expect(shelfWithInsets.right, 320);
-    expect(tester.getRect(find.byKey(const ValueKey(1))).left, 24);
+    expect(tester.getRect(find.byKey(const ValueKey(1))).left, 16);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Обложка и недавние карты сохраняют одинаковые боковые поля', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.padding = const FakeViewPadding(left: 8, right: 20);
+    addTearDown(tester.view.reset);
+    final model = AppModel(
+      CatalogStore(),
+      History(),
+      initial: const LibraryState(
+        groups: [(id: 1, name: 'Моя коллекция', count: 0)],
+      ),
+    );
+    addTearDown(model.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: kartovedTheme(),
+        home: BlocProvider.value(value: model, child: const CollectionsPage()),
+      ),
+    );
+    final recent = find.ancestor(
+      of: find.text('Подтверждённые карты появятся здесь'),
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Material && widget.color == surface,
+      ),
+    );
+    for (final area in [find.byType(AlbumHeader), recent]) {
+      final rect = tester.getRect(area);
+      expect(rect.left, 16);
+      expect(rect.right, 374);
+    }
     expect(tester.takeException(), isNull);
   });
 

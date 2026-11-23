@@ -240,8 +240,7 @@ class _LibraryContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final safe = MediaQuery.paddingOf(context);
-    final sides = EdgeInsets.only(left: safe.left + 16, right: safe.right + 16);
+    const sides = EdgeInsets.symmetric(horizontal: 16);
     return CustomScrollView(
       slivers: [
         SliverPadding(
