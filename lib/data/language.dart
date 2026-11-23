@@ -134,7 +134,15 @@ class CardLanguage {
     return select(byNumber.isEmpty ? editions : byNumber, lang);
   }
 
-  static Edition select(List<Edition> options, String? language) =>
-      options.where((e) => e.language == language).firstOrNull ??
-      options.first.withLanguage('und');
+  static Edition select(List<Edition> options, String? language) {
+    final matching = options.where((e) => e.language == language).toList();
+    final possible = matching.isEmpty ? options : matching;
+    final selected = matching.isEmpty
+        ? options.first.withLanguage('und')
+        : matching.first;
+    if (selected.foil && possible.any((printing) => !printing.foil)) {
+      return selected.withFoil(false);
+    }
+    return selected;
+  }
 }

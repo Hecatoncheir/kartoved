@@ -12,10 +12,16 @@ class History {
   Future<void> open({String? path}) async {
     _db = await openDatabase(
       path ?? p.join(await getDatabasesPath(), 'collection.sqlite'),
-      version: 2,
+      version: 3,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys=ON'),
       onCreate: (db, _) => _create(db),
       onUpgrade: (db, oldVersion, _) async {
+        if (oldVersion == 2) {
+          await db.execute(
+            'ALTER TABLE scans ADD COLUMN foil INTEGER NOT NULL DEFAULT 0',
+          );
+          return;
+        }
         await _create(db);
         await db.execute(
           'INSERT INTO scans(folder,id,name,set_code,number,lang,qty) SELECT 1,id,name,set_code,number,lang,qty FROM cards ORDER BY touched,rowid',
@@ -31,7 +37,7 @@ class History {
     );
     await db.insert('folders', {'folder': 1, 'title': 'Моя коллекция'});
     await db.execute(
-      'CREATE TABLE scans(seq INTEGER PRIMARY KEY, folder INTEGER NOT NULL REFERENCES folders(folder), id TEXT NOT NULL, name TEXT NOT NULL, set_code TEXT NOT NULL, number TEXT NOT NULL, lang TEXT NOT NULL, qty INTEGER NOT NULL CHECK(qty>0))',
+      'CREATE TABLE scans(seq INTEGER PRIMARY KEY, folder INTEGER NOT NULL REFERENCES folders(folder), id TEXT NOT NULL, name TEXT NOT NULL, set_code TEXT NOT NULL, number TEXT NOT NULL, lang TEXT NOT NULL, foil INTEGER NOT NULL DEFAULT 0, qty INTEGER NOT NULL CHECK(qty>0))',
     );
     await db.execute('CREATE INDEX scans_by_folder ON scans(folder,seq)');
   }
@@ -91,7 +97,7 @@ class History {
 
   Future<List<CardCount>> list({int folder = 1}) async {
     final rows = await _db.rawQuery(
-      'SELECT id,name,set_code,number,lang,sum(qty) AS total FROM scans WHERE folder=? GROUP BY id,lang ORDER BY max(seq) DESC',
+      'SELECT id,name,set_code,number,lang,foil,sum(qty) AS total FROM scans WHERE folder=? GROUP BY id,lang,foil ORDER BY max(seq) DESC',
       [folder],
     );
     return rows

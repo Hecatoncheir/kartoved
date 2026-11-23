@@ -127,8 +127,9 @@ class AppModel extends Cubit<LibraryState> {
     final byPrinting = <String, CardCount>{};
     for (final row in rows) {
       final card = (await catalog!.front(row.card))
-          .withLanguage(row.card.language);
-      final key = "${card.id}/${card.language}";
+          .withLanguage(row.card.language)
+          .withFoil(row.card.foil);
+      final key = card.printingKey;
       final total = (byPrinting[key]?.quantity ?? 0) + row.quantity;
       byPrinting[key] = (card: card, quantity: total);
     }

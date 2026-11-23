@@ -38,7 +38,7 @@ String moxfieldCsv(List<CardCount> rows) {
         c.set.toUpperCase(),
         '',
         _languages[c.language] ?? c.language,
-        '',
+        c.foil ? 'foil' : '',
         c.number,
       ].map(quote).join(','),
     );

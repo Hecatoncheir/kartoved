@@ -11,28 +11,48 @@ class ScanStrip extends StatefulWidget {
   State<ScanStrip> createState() => _ScanStripState();
 }
 
-class _ScanStripState extends State<ScanStrip> {
+class _ScanStripState extends State<ScanStrip>
+    with SingleTickerProviderStateMixin {
+  static const duration = Duration(milliseconds: 220);
   final scroll = ScrollController();
+  late final insertion = AnimationController(
+    vsync: this,
+    duration: duration,
+    value: 1,
+  );
+  late final reveal = insertion.drive(CurveTween(curve: Curves.easeOutCubic));
+
   @override
   void didUpdateWidget(ScanStrip old) {
     super.didUpdateWidget(old);
-    if (old.entries.firstOrNull?.sequence ==
-        widget.entries.firstOrNull?.sequence) {
+    final newest = widget.entries.firstOrNull?.sequence;
+    if (newest == null || newest <= (old.entries.firstOrNull?.sequence ?? 0)) {
       return;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && scroll.hasClients) {
-        scroll.animateTo(
-          0,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+    if (!MediaQuery.disableAnimationsOf(context)) insertion.forward(from: 0);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showNewest());
+  }
+
+  void _showNewest() {
+    if (!mounted || !scroll.hasClients || scroll.offset == 0) return;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      scroll.jumpTo(0);
+      return;
+    }
+    scroll.animateTo(0, duration: duration, curve: Curves.easeOutCubic);
+  }
+
+  int? _indexFor(Key key) {
+    final sequence = (key as ValueKey<int>).value;
+    final index = widget.entries.indexWhere(
+      (entry) => entry.sequence == sequence,
+    );
+    return index < 0 ? null : index;
   }
 
   @override
   void dispose() {
+    insertion.dispose();
     scroll.dispose();
     super.dispose();
   }
@@ -43,15 +63,27 @@ class _ScanStripState extends State<ScanStrip> {
     scrollDirection: Axis.horizontal,
     controller: scroll,
     itemCount: widget.entries.length,
+    findItemIndexCallback: _indexFor,
     separatorBuilder: (_, _) => const SizedBox(width: 6),
     itemBuilder: (c, i) {
       final entry = widget.entries[i];
-      return AspectRatio(
-        aspectRatio: 63 / 88,
-        child: InkWell(
-          key: ValueKey(entry.sequence),
-          onTap: () => widget.edit(entry),
-          child: CardPicture(entry.card),
+      final animation = i == 0 && !MediaQuery.disableAnimationsOf(c)
+          ? reveal
+          : kAlwaysCompleteAnimation;
+      return SizeTransition(
+        key: ValueKey(entry.sequence),
+        axis: Axis.horizontal,
+        alignment: Alignment.centerRight,
+        sizeFactor: animation,
+        child: FadeTransition(
+          opacity: animation,
+          child: AspectRatio(
+            aspectRatio: 63 / 88,
+            child: InkWell(
+              onTap: () => widget.edit(entry),
+              child: CardPicture(entry.card, slot: entry.sequence),
+            ),
+          ),
         ),
       );
     },

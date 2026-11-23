@@ -12,24 +12,35 @@ Future<T?> panel<T>(BuildContext context, Widget child) =>
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
-      backgroundColor: paper,
-      showDragHandle: true,
+      backgroundColor: Colors.transparent,
+      clipBehavior: Clip.antiAlias,
+      showDragHandle: false,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
       ),
-      builder: (c) => SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
-          child: child,
+      builder: (c) => Frost(
+        light: true,
+        radius: 0,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
+            child: child,
+          ),
         ),
       ),
     );
 
 class ResultSheet extends StatefulWidget {
-  const ResultSheet(this.matches, this.initial, {super.key});
+  const ResultSheet(
+    this.matches,
+    this.initial, {
+    super.key,
+    this.action = 'В коллекцию',
+  });
   final List<Match> matches;
   final Edition initial;
+  final String action;
   @override
   State<ResultSheet> createState() => _ResultSheetState();
 }
@@ -104,10 +115,17 @@ class _ResultSheetState extends State<ResultSheet> {
             ],
           ),
         const SizedBox(height: 12),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.auto_awesome_outlined),
+          title: const Text('Фольга'),
+          value: card.foil,
+          onChanged: (value) => setState(() => card = card.withFoil(value)),
+        ),
         FilledButton.icon(
           onPressed: () => Navigator.pop(context, card),
-          icon: const Icon(Icons.add),
-          label: const Text('В коллекцию'),
+          icon: const Icon(Icons.check),
+          label: Text(widget.action),
         ),
       ],
     ),

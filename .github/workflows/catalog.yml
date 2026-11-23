@@ -20,7 +20,7 @@ jobs:
           tag=$(gh api 'repos/cfbender/manavault/releases?per_page=100' --jq '[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith("scanner-bundle-")))] | first.tag_name')
           [[ "$tag" =~ ^scanner-bundle-([a-zA-Z0-9._-]+)$ ]]
           version="${BASH_REMATCH[1]}"
-          if [[ "$version" != "$(jq -r .version assets/oracle/catalog.json)" ]]; then
+          if [[ "$version" != "$(jq -r '.upstreamVersion // .version' assets/oracle/catalog.json)" ]]; then
             echo "version=$version" >> "$GITHUB_OUTPUT"
           fi
       - if: steps.source.outputs.version != ''

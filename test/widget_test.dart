@@ -9,6 +9,47 @@ import 'package:kartoved/ui/style.dart';
 import 'package:kartoved/ui/scan_strip.dart';
 
 void main() {
+  testWidgets('Список коллекций появляется с учётом настроек движения', (
+    tester,
+  ) async {
+    final model = AppModel(
+      CatalogStore(),
+      History(),
+      initial: const LibraryState(
+        groups: [(id: 1, name: 'На обмен', count: 3)],
+      ),
+    );
+    addTearDown(model.close);
+    Future<void> open() => tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider.value(
+          value: model,
+          child: CollectionsPage(key: UniqueKey()),
+        ),
+      ),
+    );
+    double opacity() => tester
+        .widget<Opacity>(
+          find.ancestor(
+            of: find.byType(ListView),
+            matching: find.byType(Opacity),
+          ),
+        )
+        .opacity;
+
+    await open();
+    expect(opacity(), 0);
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(opacity(), inExclusiveRange(0, 1));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(opacity(), 1);
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await open();
+    expect(opacity(), 1);
+  });
+
   testWidgets('Выбор языка и выпуска работает без подключения', (tester) async {
     const en = Edition('a', 'Counterspell', 'lea', '54', 'en');
     const ru = Edition('b', 'Counterspell', '7ed', '67', 'ru');
@@ -75,5 +116,82 @@ void main() {
       ),
     );
     expect(find.text('Сканировать карту'), findsOneWidget);
+  });
+
+  testWidgets('При быстрой съёмке каждая новая карта занимает первое место', (
+    tester,
+  ) async {
+    const card = Edition('fixture', 'Opt', 'eld', '59', 'en');
+    int? edited;
+    Future<void> show(List<int> ids) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 80,
+            child: ScanStrip([
+              for (final id in ids) (sequence: id, card: card, quantity: 1),
+            ], (entry) => edited = entry.sequence),
+          ),
+        ),
+      ),
+    );
+    double width(int id) =>
+        tester.getSize(find.byKey(ValueKey(id), skipOffstage: false)).width;
+
+    await show([]);
+    await show([1]);
+    await tester.pump(const Duration(milliseconds: 50));
+    final entering = width(1);
+    await show([2, 1]);
+    expect(entering, greaterThan(0));
+    expect(entering, lessThan(width(1)));
+    expect(width(2), 0);
+    await tester.pump(const Duration(milliseconds: 60));
+    final secondWidth = width(2);
+    await show([2, 1]);
+    expect(width(2), secondWidth);
+    await tester.pumpAndSettle();
+    expect(width(2), width(1));
+    expect(
+      tester.getCenter(find.byKey(const ValueKey(2))).dx,
+      lessThan(tester.getCenter(find.byKey(const ValueKey(1))).dx),
+    );
+    await tester.tap(find.byKey(const ValueKey(2)));
+    expect(edited, 2);
+  });
+
+  testWidgets('При отключённых анимациях новая карта сразу видна целиком', (
+    tester,
+  ) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    const card = Edition('fixture', 'Opt', 'eld', '59', 'en');
+    Future<void> show(int newest) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 250,
+            height: 80,
+            child: ScanStrip([
+              for (var id = newest; id > 0; id--)
+                (sequence: id, card: card, quantity: 1),
+            ], (_) {}),
+          ),
+        ),
+      ),
+    );
+    await show(20);
+    final fullWidth = tester.getSize(find.byKey(const ValueKey(20))).width;
+    await tester.drag(find.byType(ListView), const Offset(-300, 0));
+    await tester.pumpAndSettle();
+    final position = tester
+        .state<ScrollableState>(find.byType(Scrollable))
+        .position;
+    expect(position.pixels, greaterThan(0));
+    await show(21);
+    expect(position.pixels, 0);
+    await tester.pump();
+    expect(tester.getSize(find.byKey(const ValueKey(21))).width, fullWidth);
   });
 }

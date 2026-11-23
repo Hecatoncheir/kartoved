@@ -86,9 +86,15 @@ class _Mark extends CustomPainter {
 }
 
 class Frost extends StatelessWidget {
-  const Frost({super.key, required this.child, this.radius = 26});
+  const Frost({
+    super.key,
+    required this.child,
+    this.radius = 26,
+    this.light = false,
+  });
   final Widget child;
   final double radius;
+  final bool light;
   @override
   Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(radius),
@@ -96,9 +102,15 @@ class Frost extends StatelessWidget {
       filter: ui.ImageFilter.blur(sigmaX: 17, sigmaY: 17),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: dark.withValues(alpha: .72),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: light
+                ? const [Color(0xf8fff5d7), Color(0xe8eadcb4)]
+                : const [Color(0xb25b5549), Color(0xcc282a27)],
+          ),
           borderRadius: BorderRadius.circular(radius),
-          border: Border.all(color: paper.withValues(alpha: .20)),
+          border: Border.all(color: paper.withValues(alpha: light ? .8 : .36)),
         ),
         child: child,
       ),

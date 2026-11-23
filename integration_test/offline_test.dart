@@ -34,6 +34,14 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
       final english = cards.first.editions.firstWhere(
         (e) => e.language == 'en',
       );
+      final catalog = model.catalog!;
+      expect((await catalog.searchNames('солнечное кольцо')).first, 'Sol Ring');
+      expect((await catalog.searchNames('sol ring')).first, 'Sol Ring');
+      final rings = await catalog.byName('Sol Ring');
+      expect(
+        rings.firstWhere((e) => e.set == 'mps' && e.number == '24').foil,
+        isTrue,
+      );
       expect(english.set, 'snc');
       expect(english.number, '135');
       await model.save(english);
@@ -129,6 +137,31 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
     await history.open(path: path);
     expect((await history.list()).single.quantity, 3);
     expect((await history.folders()).single.count, 3);
+  });
+
+  testWidgets('Миграция обычных карт и раздельный учёт фольги', (_) async {
+    final path = p.join(await getDatabasesPath(), 'foil-migration.sqlite');
+    final old = await openDatabase(
+      path,
+      version: 2,
+      onCreate: (db, _) async {
+        await db.execute(
+          'CREATE TABLE scans(seq INTEGER PRIMARY KEY, folder INTEGER, id TEXT, name TEXT, set_code TEXT, number TEXT, lang TEXT, qty INTEGER)',
+        );
+        await db.execute(
+          "INSERT INTO scans VALUES (1,1,'opt','Opt','eld','59','en',3)",
+        );
+      },
+    );
+    await old.close();
+    final history = History();
+    await history.open(path: path);
+    final plain = (await history.list()).single;
+    expect(plain.card.foil, isFalse);
+    await history.add(plain.card.withFoil(true));
+    final rows = await history.list();
+    expect(rows.where((r) => r.card.foil).single.quantity, 1);
+    expect(rows.where((r) => !r.card.foil).single.quantity, 3);
   });
 }
 

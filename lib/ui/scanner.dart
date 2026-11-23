@@ -281,7 +281,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       if (!mounted || !active || variants.isEmpty) return;
       final edition = await panel<Edition>(
         context,
-        EditionPicker(variants, entry.card),
+        ResultSheet([Match(variants)], entry.card, action: 'Сохранить'),
       );
       if (edition != null && active) await library.replace(entry, edition);
     } catch (e) {
@@ -371,11 +371,9 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   Widget _overlay(BuildContext context, BoxConstraints bounds) {
     final state = library.state;
     final insets = MediaQuery.paddingOf(context);
-    final header = insets.top + 62;
-    final strip = state.recent.isEmpty
-        ? 0.0
-        : math.min(84.0, bounds.maxHeight * .12);
-    final top = header + strip + 8;
+    final stripTop = insets.top + 70;
+    final strip = math.min(84.0, bounds.maxHeight * .12);
+    final top = stripTop + strip + 8;
     final bottom = bounds.maxHeight - insets.bottom - 104;
     final width = math.min(
       bounds.maxWidth * .77,
@@ -406,14 +404,13 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
           top: insets.top + 4,
           child: _header(state.title),
         ),
-        if (strip > 0)
-          Positioned(
-            top: header,
-            height: strip,
-            left: 0,
-            right: 0,
-            child: ScanStrip(state.recent, _edit),
-          ),
+        Positioned(
+          top: stripTop,
+          height: strip,
+          left: 0,
+          right: 0,
+          child: ScanStrip(state.recent, _edit),
+        ),
         if (camera == null)
           Center(
             child: TextButton(

@@ -1,6 +1,9 @@
 {
   "schema": 1,
-  "version": "retrain-20261117T065312257582Z",
+  "version": "retrain-20261117T065312257582Z-p1",
+  "upstreamVersion": "retrain-20261117T065312257582Z",
+  "printingMetadata": true,
+  "scryfallSnapshot": "all-cards-20261122222215.jsonl.gz",
   "created": "2026-11-17T07:12:24+00:00",
   "count": 52419,
   "constants": {
@@ -50,8 +53,8 @@
       "sha256": "b9588e133dd18ebd47b28daab327c75f528abddac6c6aff2c3ba406cf469dc06"
     },
     "cards.sqlite.pack": {
-      "bytes": 21822493,
-      "sha256": "256c9cc514c62181ccdc402a8015b8601e46d9d99eabe62a37f2f140dbc29c6e"
+      "bytes": 25832175,
+      "sha256": "ed408ae1cc8b80b3afba71ec3bb39d9302614a450855ccdc2db77f269299bc4e"
     }
   }
 }

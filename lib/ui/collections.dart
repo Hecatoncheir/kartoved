@@ -8,6 +8,8 @@ import 'scanner.dart';
 import 'style.dart';
 import 'sheets.dart';
 import 'picture.dart';
+import 'album.dart';
+import 'catalog_search.dart';
 
 class CollectionsPage extends StatelessWidget {
   const CollectionsPage({super.key});
@@ -52,7 +54,17 @@ class CollectionsPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SheetHeading('Коллекции'),
+                AlbumHeader(
+                  total: state.groups.fold(0, (sum, g) => sum + g.count),
+                  search: state.catalog == null
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => CatalogSearchPage(state.catalog!),
+                          ),
+                        ),
+                ),
                 const SizedBox(height: 16),
                 if (state.error != null)
                   TextButton(
@@ -62,29 +74,27 @@ class CollectionsPage extends StatelessWidget {
                 if (state.catalog == null && state.error == null)
                   const LinearProgressIndicator(),
                 Expanded(
-                  child: ListView.separated(
-                    itemCount: state.groups.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (c, i) {
-                      final group = state.groups[i];
-                      return Card(
-                        color: cream,
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 8,
-                          ),
-                          leading: const Icon(Icons.style_outlined),
-                          title: Text(group.name),
-                          subtitle: Text('Карт: ${group.count}'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () async {
-                            await model.select(group.id);
-                            if (context.mounted) await _open(context);
-                          },
-                        ),
-                      );
-                    },
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: state.groups.isEmpty ? 0 : 1),
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 240),
+                    curve: Curves.easeOutCubic,
+                    builder: (_, value, child) => Transform.translate(
+                      offset: Offset(0, 10 * (1 - value)),
+                      child: Opacity(opacity: value, child: child),
+                    ),
+                    child: ListView.separated(
+                      itemCount: state.groups.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (c, i) {
+                        final group = state.groups[i];
+                        return AlbumTile(group, () async {
+                          await model.select(group.id);
+                          if (context.mounted) await _open(context);
+                        });
+                      },
+                    ),
                   ),
                 ),
                 FilledButton.icon(
@@ -161,7 +171,7 @@ class CollectionPage extends StatelessWidget {
     builder: (context, state) {
       final rows = <String, CardCount>{};
       for (final r in state.recent) {
-        final key = '${r.card.id}/${r.card.language}';
+        final key = r.card.printingKey;
         rows[key] = (
           card: r.card,
           quantity: (rows[key]?.quantity ?? 0) + r.quantity,
@@ -184,6 +194,35 @@ class CollectionPage extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
             child: Column(
               children: [
+                if (items.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Frost(
+                      light: true,
+                      radius: 16,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 14,
+                        ),
+                        child: Wrap(
+                          spacing: 14,
+                          runSpacing: 4,
+                          children: [
+                            Text(
+                              'Карт · ${items.fold<int>(0, (a, b) => a + b.quantity)}',
+                            ),
+                            Text(
+                              'Названий · ${items.map((r) => r.card.name).toSet().length}',
+                            ),
+                            Text(
+                              'Фольга · ${items.where((r) => r.card.foil).fold<int>(0, (a, b) => a + b.quantity)}',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 Expanded(
                   child: items.isEmpty
                       ? const Center(
@@ -200,10 +239,15 @@ class CollectionPage extends StatelessWidget {
                             return ListTile(
                               leading: SizedBox(
                                 width: 38,
-                                child: CardPicture(row.card),
+                                child: CardPicture(row.card, slot: i),
                               ),
                               title: Text(row.card.name),
-                              subtitle: Text(row.card.detail),
+                              subtitle: Text(
+                                [
+                                  row.card.detail,
+                                  if (row.card.foil) 'Фольга',
+                                ].join('  ·  '),
+                              ),
                               trailing: Text('×${row.quantity}'),
                             );
                           },

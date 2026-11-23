@@ -69,4 +69,19 @@ void main() {
     const id = '63ba8eef-b834-4031-b0a1-0f8505d53813';
     expect(Pictures.address('$id-1').path, '/small/back/6/3/$id.jpg');
   });
+  test(
+    'Фольга определяется только при однозначном покрытии и попадает в CSV',
+    () {
+      final foil = en.withFoil(true);
+      expect(CardLanguage.select([foil], 'en').foil, isTrue);
+      expect(CardLanguage.select([foil, en], 'en').foil, isFalse);
+      expect(foil.printingKey, isNot(en.printingKey));
+      final csv = moxfieldCsv([
+        (card: foil, quantity: 2),
+        (card: en, quantity: 1),
+      ]);
+      expect(csv, contains('"English","foil","135"'));
+      expect(csv, contains('"English","","135"'));
+    },
+  );
 }

@@ -34,6 +34,12 @@ class CatalogSpec {
   }
   final Map<String, dynamic> raw;
   String get version => raw['version'] as String;
+  bool get printingMetadata => raw['printingMetadata'] == true;
+  bool supersedes(CatalogSpec other) =>
+      created.isAfter(other.created) ||
+      (created.isAtSameMomentAs(other.created) &&
+          printingMetadata &&
+          !other.printingMetadata);
   int get count => raw['count'] as int;
   DateTime get created => DateTime.parse(raw['created'] as String);
   String hash(String name) => raw['files'][name]['sha256'] as String;
@@ -46,6 +52,45 @@ class Catalog {
   const Catalog(this.directory, this.spec);
   final Directory directory;
   final CatalogSpec spec;
+  Future<List<Map<String, Object?>>> _query(
+    String sql,
+    List<Object?> args,
+  ) async {
+    final db = await openReadOnlyDatabase(
+      p.join(directory.path, 'cards.sqlite'),
+      singleInstance: false,
+    );
+    try {
+      return await db.rawQuery(sql, args);
+    } finally {
+      await db.close();
+    }
+  }
+
+  Future<List<String>> searchNames(String input) async {
+    final term = input.trim().toLowerCase().replaceAll('’', "'");
+    if (term.isEmpty) return [];
+    final names = spec.printingMetadata
+        ? 'search_names'
+        : '(SELECT DISTINCT name, lower(name) AS term FROM editions)';
+    final rows = await _query(
+      '''
+      SELECT name FROM $names WHERE instr(term, ?) > 0 GROUP BY name
+      ORDER BY MIN(CASE WHEN term=? THEN 0 WHEN instr(term,?)=1 THEN 1 ELSE 2 END), name COLLATE NOCASE
+      LIMIT 61''',
+      [term, term, term],
+    );
+    return rows.map((r) => r['name'] as String).toList();
+  }
+
+  Future<List<Edition>> byName(String name) async {
+    final rows = await _query(
+      'SELECT * FROM editions WHERE name=? GROUP BY id ORDER BY lang != ?, lang != ?, set_code, number',
+      [name, 'ru', 'en'],
+    );
+    return rows.map(Edition.fromRow).toList();
+  }
+
   Future<Edition> front(Edition card) async {
     if (!card.id.endsWith('-1')) return card;
     final id = card.id.substring(0, card.id.length - 2);
@@ -119,9 +164,21 @@ class Catalog {
 }
 
 class Edition {
-  const Edition(this.id, this.name, this.set, this.number, this.language);
+  const Edition(
+    this.id,
+    this.name,
+    this.set,
+    this.number,
+    this.language, {
+    this.foil = false,
+  });
   final String id, name, set, number, language;
-  Edition withLanguage(String lang) => Edition(id, name, set, number, lang);
+  final bool foil;
+  Edition withLanguage(String lang) =>
+      Edition(id, name, set, number, lang, foil: foil);
+  Edition withFoil(bool value) =>
+      Edition(id, name, set, number, language, foil: value);
+  String get printingKey => '$id/$language/$foil';
   String get detail =>
       '${set.toUpperCase()}  ·  № $number  ·  ${language == 'und' ? 'язык не определён' : language.toUpperCase()}';
   factory Edition.fromRow(Map<String, Object?> row) => Edition(
@@ -130,6 +187,7 @@ class Edition {
     row['set_code'] as String,
     row['number'] as String,
     row['lang'] as String,
+    foil: row['foil'] == 1,
   );
   Map<String, Object?> get row => {
     'id': id,
@@ -137,6 +195,7 @@ class Edition {
     'set_code': set,
     'number': number,
     'lang': language,
+    'foil': foil ? 1 : 0,
   };
 }
 
@@ -160,7 +219,7 @@ class CatalogStore {
         final saved = File(p.join(folder.path, 'catalog.json'));
         if (await saved.exists()) {
           final spec = CatalogSpec.parse(await saved.readAsString());
-          if (!spec.created.isBefore(seed.created)) {
+          if (!seed.supersedes(spec)) {
             return Catalog(folder, spec);
           }
         }
@@ -226,7 +285,7 @@ class CatalogStore {
     CatalogSpec spec,
     Future<Stream<List<int>>> Function(String name) source,
   ) async {
-    if (!spec.created.isAfter(current.spec.created)) return current;
+    if (!spec.supersedes(current.spec)) return current;
     return _install(spec, current, source);
   }
 
