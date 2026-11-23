@@ -567,8 +567,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (kIsWeb && scan.state.showGuide && camera != null)
-          BrowserGlass(rect, bounds.biggest),
+        if (kIsWeb && camera != null)
+          BrowserGlass(rect, bounds.biggest, visible: scan.state.showGuide),
         if (scan.state.showGuide)
           ScanFrame(window: rect, hasPreview: !kIsWeb && camera != null),
         Positioned(
@@ -678,8 +678,10 @@ class _CameraSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // В браузере видео уже заполняет область через object-fit: cover.
+    if (kIsWeb) return controller.buildPreview();
     final landscape =
-        kIsWeb || MediaQuery.orientationOf(context) == Orientation.landscape;
+        MediaQuery.orientationOf(context) == Orientation.landscape;
     final size = controller.value.previewSize!;
     return ClipRect(
       child: FittedBox(

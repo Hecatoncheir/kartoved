@@ -2,10 +2,16 @@ import 'package:flutter/widgets.dart';
 import 'package:web/web.dart' as web;
 
 class BrowserGlass extends StatefulWidget {
-  const BrowserGlass(this.window, this.viewport, {super.key});
+  const BrowserGlass(
+    this.window,
+    this.viewport, {
+    required this.visible,
+    super.key,
+  });
 
   final Rect window;
   final Size viewport;
+  final bool visible;
 
   @override
   State<BrowserGlass> createState() => _BrowserGlassState();
@@ -17,6 +23,7 @@ class _BrowserGlassState extends State<BrowserGlass> {
   @override
   void didUpdateWidget(BrowserGlass oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.visible != oldWidget.visible) _updateVisibility();
     if (widget.window != oldWidget.window ||
         widget.viewport != oldWidget.viewport) {
       _updatePath();
@@ -33,7 +40,12 @@ class _BrowserGlassState extends State<BrowserGlass> {
       ..backgroundImage = 'linear-gradient(140deg, #5049454d, #1d20218f)'
       ..setProperty('backdrop-filter', 'blur(15px)')
       ..setProperty('-webkit-backdrop-filter', 'blur(15px)');
+    _updateVisibility();
     _updatePath();
+  }
+
+  void _updateVisibility() {
+    _glass?.style.visibility = widget.visible ? 'visible' : 'hidden';
   }
 
   void _updatePath() {
