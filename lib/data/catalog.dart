@@ -67,7 +67,7 @@ class Catalog {
     }
   }
 
-  Future<List<String>> searchNames(String input) async {
+  Future<List<String>> searchNames(String input, {int limit = 61}) async {
     final term = input.trim().toLowerCase().replaceAll('’', "'");
     if (term.isEmpty) return [];
     final names = spec.printingMetadata
@@ -77,8 +77,8 @@ class Catalog {
       '''
       SELECT name FROM $names WHERE instr(term, ?) > 0 GROUP BY name
       ORDER BY MIN(CASE WHEN term=? THEN 0 WHEN instr(term,?)=1 THEN 1 ELSE 2 END), name COLLATE NOCASE
-      LIMIT 61''',
-      [term, term, term],
+      LIMIT ?''',
+      [term, term, term, limit],
     );
     return rows.map((r) => r['name'] as String).toList();
   }

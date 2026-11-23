@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 
-import '../data/catalog.dart';
+import '../collection_rows.dart';
 import 'picture.dart';
 import 'style.dart';
 
@@ -18,12 +18,13 @@ class CollectionCard extends StatefulWidget {
     required this.select,
     required this.flag,
     required this.remove,
+    required this.open,
   });
-  final CardCount item;
+  final CollectionRow item;
   final int slot;
   final bool flagged, selected;
   final ValueChanged<bool> select;
-  final VoidCallback flag, remove;
+  final VoidCallback flag, remove, open;
 
   @override
   State<CollectionCard> createState() => _CollectionCardState();
@@ -71,7 +72,9 @@ class _CollectionCardState extends State<CollectionCard>
         widget.item,
         widget.slot,
         flagged: widget.flagged,
-        toggle: () => _settle(slide.value < .5),
+        toggle: widget.item.multiple
+            ? widget.open
+            : () => _settle(slide.value < .5),
       );
       return ClipRRect(
         borderRadius: corners,
@@ -89,93 +92,105 @@ class _CollectionCardState extends State<CollectionCard>
               color: widget.flagged ? butter : const Color(0x668d886e),
             ),
           ),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onHorizontalDragStart: (_) {
-              slide.stop();
-              widget.select(true);
-            },
-            onHorizontalDragUpdate: (d) {
-              slide.value -= d.delta.dx / width;
-            },
-            onHorizontalDragEnd: (d) {
-              final speed = d.velocity.pixelsPerSecond.dx;
-              _settle(speed.abs() > 400 ? speed < 0 : slide.value > .45);
-            },
-            onHorizontalDragCancel: () => _settle(slide.value > .5),
-            child: AnimatedBuilder(
-              animation: slide,
-              child: face,
-              builder: (_, front) => Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (slide.value > 0)
-                    Positioned(
-                      right: width * (slide.value - 1),
-                      top: 0,
-                      bottom: 0,
-                      width: width + 32,
-                      child: DecoratedBox(
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Color(0x00494735),
-                              Color(0xdf494735),
-                              Color(0xf5584538),
-                              Color(0xff654039),
-                            ],
-                            stops: [0, .37, .70, 1],
-                          ),
-                        ),
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: SizedBox(
-                            width: width,
-                            height: double.infinity,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _Action(
-                                  icon: widget.flagged
-                                      ? Icons.flag_outlined
-                                      : Icons.flag_rounded,
-                                  label: widget.flagged ? 'Снять' : 'Флажок',
-                                  tooltip: widget.flagged
-                                      ? 'Снять флажок'
-                                      : 'Поставить флажок',
-                                  accent: butter,
-                                  onTap: () {
-                                    _settle(false);
-                                    widget.flag();
-                                  },
+          child: widget.item.multiple
+              ? GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.open,
+                  child: face,
+                )
+              : GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragStart: (_) {
+                    slide.stop();
+                    widget.select(true);
+                  },
+                  onHorizontalDragUpdate: (d) {
+                    slide.value -= d.delta.dx / width;
+                  },
+                  onHorizontalDragEnd: (d) {
+                    final speed = d.velocity.pixelsPerSecond.dx;
+                    _settle(speed.abs() > 400 ? speed < 0 : slide.value > .45);
+                  },
+                  onHorizontalDragCancel: () => _settle(slide.value > .5),
+                  child: AnimatedBuilder(
+                    animation: slide,
+                    child: face,
+                    builder: (_, front) => Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (slide.value > 0)
+                          Positioned(
+                            right: width * (slide.value - 1),
+                            top: 0,
+                            bottom: 0,
+                            width: width + 32,
+                            child: DecoratedBox(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Color(0x00494735),
+                                    Color(0xdf494735),
+                                    Color(0xf5584538),
+                                    Color(0xff654039),
+                                  ],
+                                  stops: [0, .37, .70, 1],
                                 ),
-                                _Action(
-                                  icon: Icons.delete_outline_rounded,
-                                  label: 'Убрать',
-                                  tooltip: 'Убрать из коллекции',
-                                  accent: const Color(0xfffbcec0),
-                                  onTap: () {
-                                    _settle(false);
-                                    widget.remove();
-                                  },
+                              ),
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: SizedBox(
+                                  width: width,
+                                  height: double.infinity,
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      _Action(
+                                        icon: widget.flagged
+                                            ? Icons.flag_outlined
+                                            : Icons.flag_rounded,
+                                        label: widget.flagged
+                                            ? 'Снять'
+                                            : 'Флажок',
+                                        tooltip: widget.flagged
+                                            ? 'Снять флажок'
+                                            : 'Поставить флажок',
+                                        accent: butter,
+                                        onTap: () {
+                                          _settle(false);
+                                          widget.flag();
+                                        },
+                                      ),
+                                      _Action(
+                                        icon: Icons.delete_outline_rounded,
+                                        label: 'Убрать',
+                                        tooltip: 'Убрать из коллекции',
+                                        accent: const Color(0xfffbcec0),
+                                        onTap: () {
+                                          _settle(false);
+                                          widget.remove();
+                                        },
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ],
+                              ),
                             ),
                           ),
+                        Transform.translate(
+                          offset: Offset(-width * slide.value, 0),
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: slide.value > 0
+                                ? () => _settle(false)
+                                : widget.open,
+                            child: front,
+                          ),
                         ),
-                      ),
-                    ),
-                  Transform.translate(
-                    offset: Offset(-width * slide.value, 0),
-                    child: GestureDetector(
-                      onTap: slide.value > 0 ? () => _settle(false) : null,
-                      child: front,
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
+                ),
         ),
       );
     },
@@ -230,7 +245,7 @@ class _Face extends StatelessWidget {
     required this.flagged,
     required this.toggle,
   });
-  final CardCount item;
+  final CollectionRow item;
   final int slot;
   final bool flagged;
   final VoidCallback toggle;
@@ -238,6 +253,10 @@ class _Face extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final card = item.card;
+    final action = item.multiple ? 'Выбрать вариант' : 'Действия с картой';
+    final mark = item.multiple
+        ? 'есть отмеченные варианты'
+        : 'отмечена флажком';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
@@ -245,7 +264,12 @@ class _Face extends StatelessWidget {
           SizedBox(
             width: 52,
             height: 74,
-            child: ExcludeSemantics(child: CardPicture(card, slot: slot)),
+            child: ExcludeSemantics(
+              child: Hero(
+                tag: item.key,
+                child: CardPicture(card, slot: slot),
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -267,7 +291,9 @@ class _Face extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  [card.detail, if (card.foil) 'Фольга'].join('  ·  '),
+                  item.multiple
+                      ? 'Варианты · ${item.variants.length}'
+                      : [card.detail, if (card.foil) 'Фольга'].join('  ·  '),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -285,7 +311,7 @@ class _Face extends StatelessWidget {
             button: true,
             onTap: toggle,
             label:
-                'Действия с картой ${card.name}, ×${item.quantity}${flagged ? ', отмечена флажком' : ''}',
+                '$action ${card.name}, ×${item.quantity}${flagged ? ', $mark' : ''}',
             child: ExcludeSemantics(
               child: TextButton(
                 style: TextButton.styleFrom(
@@ -306,8 +332,8 @@ class _Face extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const Icon(
-                      Icons.more_horiz,
+                    Icon(
+                      item.multiple ? Icons.layers_outlined : Icons.more_horiz,
                       size: 18,
                       color: Color(0xffbdae93),
                     ),

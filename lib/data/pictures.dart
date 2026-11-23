@@ -8,7 +8,7 @@ class Pictures {
   final Map<String, Future<File>> _pending = {};
   Future<Directory>? _root;
 
-  static Uri address(String id) {
+  static Uri address(String id, {bool large = false}) {
     final matched = RegExp(
       r'^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(-1)?$',
     ).firstMatch(id);
@@ -19,23 +19,26 @@ class Pictures {
     final side = matched[2] == null ? 'front' : 'back';
     return Uri.https(
       'cards.scryfall.io',
-      '/small/$side/${uuid[0]}/${uuid[1]}/$uuid.jpg',
+      '/${large ? 'normal' : 'small'}/$side/${uuid[0]}/${uuid[1]}/$uuid.jpg',
     );
   }
 
-  Future<File> get(String id) => _pending.putIfAbsent(
-    id,
-    () => _load(id).whenComplete(() {
-      _pending.remove(id);
-    }),
-  );
+  Future<File> get(String id, {bool large = false}) {
+    final key = large ? '$id.normal' : id;
+    return _pending.putIfAbsent(
+      key,
+      () => _load(id, key, large).whenComplete(() {
+        _pending.remove(key);
+      }),
+    );
+  }
 
-  Future<File> _load(String id) async {
-    final url = address(id);
+  Future<File> _load(String id, String key, bool large) async {
+    final url = address(id, large: large);
     final root = await (_root ??= getApplicationSupportDirectory().then(
       (d) => Directory(p.join(d.path, 'pictures')).create(recursive: true),
     ));
-    final file = File(p.join(root.path, '$id.jpg'));
+    final file = File(p.join(root.path, '$key.jpg'));
     if (await file.exists()) return file;
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 6)

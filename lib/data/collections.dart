@@ -125,6 +125,30 @@ class History {
         );
       });
 
+  Future<void> takeOne(int folder, Edition card) => _db.transaction((db) async {
+    final rows = await db.query(
+      'scans',
+      columns: ['seq', 'qty'],
+      where: _printing,
+      whereArgs: _printingArgs(folder, card),
+      orderBy: 'seq DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    final id = [rows.single['seq']];
+    final quantity = rows.single['qty'] as int;
+    if (quantity == 1) {
+      await db.delete('scans', where: 'seq=?', whereArgs: id);
+    } else {
+      await db.update(
+        'scans',
+        {'qty': quantity - 1},
+        where: 'seq=?',
+        whereArgs: id,
+      );
+    }
+  });
+
   Future<Set<String>> flags(int folder) async {
     final rows = await _db.query(
       'scans',
@@ -220,9 +244,13 @@ class History {
         .toList();
   }
 
-  Future<List<CardCount>> list({int folder = 1}) async {
+  Future<List<CardCount>> list({
+    int folder = 1,
+    bool flaggedOnly = false,
+  }) async {
+    final flagFilter = flaggedOnly ? 'AND flagged=1' : '';
     final rows = await _db.rawQuery(
-      'SELECT id,name,set_code,number,lang,foil,sum(qty) AS total FROM scans WHERE folder=? GROUP BY id,lang,foil ORDER BY max(seq) DESC',
+      'SELECT id,name,set_code,number,lang,foil,sum(qty) AS total FROM scans WHERE folder=? $flagFilter GROUP BY id,lang,foil ORDER BY max(seq) DESC',
       [folder],
     );
     return rows

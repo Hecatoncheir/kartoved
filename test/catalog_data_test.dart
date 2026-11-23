@@ -32,6 +32,12 @@ void main() {
         'Sol Ring',
       );
       expect((await catalog.searchNames('sol ring')).first, 'Sol Ring');
+      expect(await catalog.searchNames('ВЫБОР', limit: -1), contains('Opt'));
+      expect((await catalog.searchNames('a')).length, 61);
+      expect(
+        (await catalog.searchNames('a', limit: -1)).length,
+        greaterThan(61),
+      );
       expect(await catalog.searchNames('%'), isNot(contains('Sol Ring')));
       final rings = await catalog.byName('Sol Ring');
       expect(

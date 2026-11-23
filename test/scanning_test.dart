@@ -68,6 +68,10 @@ void main() {
   test('У оборотной стороны отдельная миниатюра', () {
     const id = '63ba8eef-b834-4031-b0a1-0f8505d53813';
     expect(Pictures.address('$id-1').path, '/small/back/6/3/$id.jpg');
+    expect(
+      Pictures.address('$id-1', large: true).path,
+      '/normal/back/6/3/$id.jpg',
+    );
   });
   test(
     'Фольга определяется только при однозначном покрытии и попадает в CSV',

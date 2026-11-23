@@ -33,6 +33,18 @@ class LibraryState {
   final List<ScanEntry> recent;
   final Set<String> flags;
   final String? error;
+  List<CardCount> get printings {
+    final rows = <String, CardCount>{};
+    for (final entry in recent) {
+      final key = entry.card.printingKey;
+      rows[key] = (
+        card: entry.card,
+        quantity: (rows[key]?.quantity ?? 0) + entry.quantity,
+      );
+    }
+    return rows.values.toList();
+  }
+
   String get title =>
       groups.where((g) => g.id == folder).firstOrNull?.name ?? 'Моя коллекция';
 }
@@ -159,11 +171,20 @@ class AppModel extends Cubit<LibraryState> {
     await _refresh();
   }
 
-  Future<String> export() async {
-    final rows = await history.list(folder: state.folder);
+  Future<void> takeOne(Edition card) async {
+    await history.takeOne(state.folder, card);
+    await _refresh();
+  }
+
+  Future<String> export({bool flaggedOnly = false}) async {
+    final base = catalog;
+    final rows = await history.list(
+      folder: state.folder,
+      flaggedOnly: flaggedOnly,
+    );
     final byPrinting = <String, CardCount>{};
     for (final row in rows) {
-      final card = (await catalog!.front(row.card))
+      final card = (await base!.front(row.card))
           .withLanguage(row.card.language)
           .withFoil(row.card.foil);
       final key = card.printingKey;

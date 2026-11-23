@@ -9,7 +9,7 @@ import 'package:material_ui/material_ui.dart';
 class _Catalog extends Fake implements Catalog {
   final early = Completer<List<String>>();
   @override
-  Future<List<String>> searchNames(String text) async =>
+  Future<List<String>> searchNames(String text, {int limit = 61}) async =>
       text == 'к' ? early.future : ['Sol Ring'];
 
   @override

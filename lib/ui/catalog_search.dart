@@ -9,8 +9,8 @@ import 'sheets.dart';
 import 'style.dart';
 
 class NameSearch extends Cubit<AsyncSnapshot<List<String>>> {
-  NameSearch(this.catalog) : super(const AsyncSnapshot.nothing());
-  final Catalog catalog;
+  NameSearch(this.lookup) : super(const AsyncSnapshot.nothing());
+  final Future<List<String>> Function(String) lookup;
   Timer? timer;
   String query = '';
 
@@ -28,7 +28,7 @@ class NameSearch extends Cubit<AsyncSnapshot<List<String>>> {
 
   Future<void> _read(String term) async {
     try {
-      final rows = await catalog.searchNames(term);
+      final rows = await lookup(term);
       if (!isClosed && query == term) {
         emit(AsyncSnapshot.withData(ConnectionState.done, rows));
       }
@@ -55,7 +55,7 @@ class CatalogSearchPage extends StatefulWidget {
 
 class _CatalogSearchPageState extends State<CatalogSearchPage> {
   final text = TextEditingController();
-  late final search = NameSearch(widget.catalog);
+  late final search = NameSearch(widget.catalog.searchNames);
   @override
   void dispose() {
     text.dispose();

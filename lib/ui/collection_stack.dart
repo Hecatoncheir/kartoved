@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:material_ui/material_ui.dart';
 
 import '../data/catalog.dart';
+import '../collection_rows.dart';
 import 'collection_card.dart';
 
 class CollectionStack extends StatefulWidget {
@@ -13,11 +14,13 @@ class CollectionStack extends StatefulWidget {
     required this.flags,
     required this.onFlag,
     required this.onRemove,
+    required this.onOpen,
   });
-  final List<CardCount> items;
+  final List<CollectionRow> items;
   final Set<String> flags;
   final void Function(Edition, bool) onFlag;
   final ValueChanged<Edition> onRemove;
+  final ValueChanged<CollectionRow> onOpen;
   @override
   State<CollectionStack> createState() => _CollectionStackState();
 }
@@ -137,8 +140,10 @@ class _CollectionStackState extends State<CollectionStack> {
     bool tucked,
   ) {
     final item = widget.items[i];
-    final key = item.card.printingKey;
-    final flagged = widget.flags.contains(key);
+    final key = item.key;
+    final flagged = item.variants.any(
+      (v) => widget.flags.contains(v.card.printingKey),
+    );
     return Positioned(
       key: ValueKey(key),
       top: y,
@@ -154,6 +159,7 @@ class _CollectionStackState extends State<CollectionStack> {
             clipper: _StackEdge(exposed, overhang),
             child: CollectionCard(
               item: item,
+              open: () => widget.onOpen(item),
               slot: i,
               flagged: flagged,
               selected: menu == key,

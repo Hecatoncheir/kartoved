@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -7,10 +5,11 @@ import '../data/android.dart';
 import '../data/catalog.dart';
 import '../model.dart';
 import 'scanner.dart';
+import 'scan_glass.dart';
 import 'style.dart';
 import 'sheets.dart';
 import 'collection_light.dart';
-import 'collection_stack.dart';
+import 'collection_browser.dart';
 import 'album.dart';
 import 'catalog_search.dart';
 
@@ -199,9 +198,39 @@ class CollectionPage extends StatelessWidget {
   Future<void> _export(BuildContext context) async {
     final model = context.read<AppModel>();
     try {
-      final csv = await model.export();
+      final folder = model.state.folder;
+      final flaggedOnly = model.state.flags.isEmpty
+          ? false
+          : await panel<bool>(
+              context,
+              Builder(
+                builder: (sheet) => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SheetHeading('Экспорт для Moxfield'),
+                    ListTile(
+                      leading: const Icon(Icons.collections_bookmark_outlined),
+                      title: const Text('Вся коллекция'),
+                      onTap: () => Navigator.pop(sheet, false),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.flag_outlined),
+                      title: const Text('Только отмеченные'),
+                      onTap: () => Navigator.pop(sheet, true),
+                    ),
+                  ],
+                ),
+              ),
+            );
+      if (flaggedOnly == null ||
+          model.state.folder != folder ||
+          !context.mounted) {
+        return;
+      }
       final name = model.state.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-      await AndroidActions.saveCsv('${name}_Moxfield.csv', csv);
+      final suffix = flaggedOnly ? '_Отмеченные' : '';
+      final csv = await model.export(flaggedOnly: flaggedOnly);
+      await AndroidActions.saveCsv('$name${suffix}_Moxfield.csv', csv);
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -214,15 +243,8 @@ class CollectionPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => BlocBuilder<AppModel, LibraryState>(
     builder: (context, state) {
-      final rows = <String, CardCount>{};
-      for (final r in state.recent) {
-        final key = r.card.printingKey;
-        rows[key] = (
-          card: r.card,
-          quantity: (rows[key]?.quantity ?? 0) + r.quantity,
-        );
-      }
-      final items = rows.values.toList();
+      final items = state.printings;
+      final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
       return CollectionLight(
         child: Scaffold(
           backgroundColor: Colors.transparent,
@@ -252,7 +274,7 @@ class CollectionPage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
               child: Column(
                 children: [
-                  if (items.isNotEmpty)
+                  if (items.isNotEmpty && !keyboard)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Frost(
@@ -305,8 +327,9 @@ class CollectionPage extends StatelessWidget {
                               ),
                             ),
                           )
-                        : CollectionStack(
+                        : CollectionBrowser(
                             key: ValueKey(state.folder),
+                            catalog: state.catalog,
                             items: items,
                             flags: state.flags,
                             onFlag: (card, value) =>
@@ -318,7 +341,7 @@ class CollectionPage extends StatelessWidget {
               ),
             ),
           ),
-          bottomNavigationBar: const _ScanButton(),
+          bottomNavigationBar: keyboard ? null : const _ScanButton(),
         ),
       );
     },
@@ -327,6 +350,7 @@ class CollectionPage extends StatelessWidget {
 
 class _ScanButton extends StatelessWidget {
   const _ScanButton();
+  static const corners = BorderRadius.all(Radius.circular(12));
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -334,27 +358,30 @@ class _ScanButton extends StatelessWidget {
     child: Padding(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(100),
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+        borderRadius: corners,
+        child: ScanGlass(
           child: DecoratedBox(
             decoration: const ShapeDecoration(
-              shape: StadiumBorder(side: BorderSide(color: Color(0xadffe6a3))),
+              shape: RoundedRectangleBorder(
+                borderRadius: corners,
+                side: BorderSide(color: Color(0x99ffda91)),
+              ),
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Color(0xb3ffe6a3),
-                  Color(0x99ffcc54),
-                  Color(0x8cfabd2f),
-                  Color(0x9afabd2f),
+                  Color(0x80ffcf78),
+                  Color(0x92ffbf55),
+                  Color(0xa2efa244),
+                  Color(0x84ffbc58),
                 ],
-                stops: [0, .12, .65, 1],
+                stops: [0, .20, .54, 1],
               ),
             ),
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.transparent,
+                shape: const RoundedRectangleBorder(borderRadius: corners),
                 foregroundColor: const Color(0xff090a07),
                 elevation: 0,
               ),
