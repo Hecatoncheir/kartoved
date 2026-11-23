@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "version": "retrain-20261117T065312257582Z",
+  "created": "2026-11-17T07:12:24+00:00",
+  "count": 52419,
+  "constants": {
+    "scene": 640,
+    "det_input": 256,
+    "rotations": 4,
+    "refine_fill": 0.6,
+    "refine_min_side": 64.0,
+    "card_aspect": 1.3968253968253967,
+    "card_size": [
+      250,
+      350
+    ],
+    "input_size": 128,
+    "frame_names": [
+      "modern",
+      "old",
+      "extended",
+      "tall",
+      "right",
+      "left",
+      "room_0",
+      "room_1",
+      "split_0",
+      "split_1",
+      "aftermath_0",
+      "aftermath_1",
+      "flip_0",
+      "flip_1",
+      "token",
+      "token_tall",
+      "emblem"
+    ]
+  },
+  "searchMask": true,
+  "files": {
+    "detector.onnx": {
+      "bytes": 12576317,
+      "sha256": "c2fe9778735637d6f461ebf69694800d75e04a260da9f341e419346af8b7d834"
+    },
+    "embed.onnx": {
+      "bytes": 5118408,
+      "sha256": "684d77185736298aee1c1edcd14dc297e767d88ba28ba69320043a57251a9677"
+    },
+    "search.onnx": {
+      "bytes": 14259378,
+      "sha256": "b9588e133dd18ebd47b28daab327c75f528abddac6c6aff2c3ba406cf469dc06"
+    },
+    "cards.sqlite.gz": {
+      "bytes": 21822493,
+      "sha256": "256c9cc514c62181ccdc402a8015b8601e46d9d99eabe62a37f2f140dbc29c6e"
+    }
+  }
+}
