@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:kartoved/data/catalog.dart';
@@ -30,6 +32,31 @@ void main() {
       await model.save(english);
       final saved = await model.history.list();
       expect(saved.first.card.id, english.id);
+      final old = model.catalog!;
+      final next = CatalogSpec({
+        ...old.spec.raw,
+        'version': 'acceptance-update',
+        'created': old.spec.created
+            .add(const Duration(days: 1))
+            .toIso8601String(),
+      });
+      await expectLater(
+        model.store.installUpdate(old, next, (_) async => Stream.value([0])),
+        throwsFormatException,
+      );
+      expect((await model.store.initialize()).spec.version, old.spec.version);
+      final updated = await model.store.installUpdate(old, next, (name) async {
+        expect(name, 'cards.sqlite.gz');
+        final bytes = await rootBundle.load('assets/oracle/$name');
+        return Stream.value(
+          bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
+        );
+      });
+      expect(
+        (await model.store.initialize()).spec.version,
+        updated.spec.version,
+      );
+      expect((await model.history.list()).first.card.id, english.id);
     } finally {
       await temp.delete(recursive: true);
     }

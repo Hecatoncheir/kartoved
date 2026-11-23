@@ -262,11 +262,12 @@ class _CatalogPanelState extends State<CatalogPanel> {
       debugPrint('Обновление: $e');
       result = 'Не удалось обновить. Сохранённая база доступна.';
     }
-    if (mounted)
+    if (mounted) {
       setState(() {
         message = result;
         loading = false;
       });
+    }
   }
 
   @override

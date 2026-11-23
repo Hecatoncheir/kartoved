@@ -104,8 +104,9 @@ class CatalogStore {
         final saved = File(p.join(folder.path, 'catalog.json'));
         if (await saved.exists()) {
           final spec = CatalogSpec.parse(await saved.readAsString());
-          if (!spec.created.isBefore(seed.created))
+          if (!spec.created.isBefore(seed.created)) {
             return Catalog(folder, spec);
+          }
         }
       }
     }
@@ -124,8 +125,9 @@ class CatalogStore {
     Future<HttpClientResponse> request(Uri url) async {
       final req = await http.getUrl(url).timeout(const Duration(seconds: 20));
       final response = await req.close().timeout(const Duration(seconds: 30));
-      if (response.statusCode != 200)
+      if (response.statusCode != 200) {
         throw HttpException('HTTP ${response.statusCode}', uri: url);
+      }
       return response;
     }
 
@@ -143,17 +145,17 @@ class CatalogStore {
         ),
       ) as List;
       final sha = commits.first['sha'] as String;
-      if (!RegExp(r'^[a-f0-9]{40}$').hasMatch(sha))
+      if (!RegExp(r'^[a-f0-9]{40}$').hasMatch(sha)) {
         throw const FormatException('Некорректная версия');
+      }
       final base = Uri.https(
         'raw.githubusercontent.com',
         '/$_repo/$sha/assets/oracle/',
       );
       final spec = CatalogSpec.parse(await read(base.resolve('catalog.json')));
-      if (!spec.created.isAfter(current.spec.created)) return current;
-      return await _install(
-        spec,
+      return await installUpdate(
         current,
+        spec,
         (name) async =>
             (await request(base.resolve(name)))
                 .timeout(const Duration(seconds: 45)),
@@ -161,6 +163,15 @@ class CatalogStore {
     } finally {
       http.close(force: true);
     }
+  }
+
+  Future<Catalog> installUpdate(
+    Catalog current,
+    CatalogSpec spec,
+    Future<Stream<List<int>>> Function(String name) source,
+  ) async {
+    if (!spec.created.isAfter(current.spec.created)) return current;
+    return _install(spec, current, source);
   }
 
   Future<Catalog> _install(
@@ -182,8 +193,9 @@ class CatalogStore {
           await (await source(name))
               .map((chunk) {
                 bytes += chunk.length;
-                if (bytes > spec.size(name))
+                if (bytes > spec.size(name)) {
                   throw const FormatException('Превышен размер файла');
+                }
                 return chunk;
               })
               .pipe(file.openWrite());
@@ -209,8 +221,9 @@ class CatalogStore {
         final count = Sqflite.firstIntValue(
           await db.rawQuery('SELECT count(*) FROM arts'),
         );
-        if (count != spec.count)
+        if (count != spec.count) {
           throw const FormatException('Неполный каталог');
+        }
       } finally {
         await db.close();
       }

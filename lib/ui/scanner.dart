@@ -67,13 +67,14 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
             });
           } catch (e) {
             await next?.dispose();
-            if (mounted && token == generation)
+            if (mounted && token == generation) {
               setState(
                 () => cameraError =
                     e is CameraException && e.code.contains('Access')
                     ? 'Разрешите доступ к камере'
                     : 'Камера недоступна',
               );
+            }
           }
         })
         .catchError((Object e) {
@@ -100,10 +101,11 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   }
 
   void note(String text) {
-    if (mounted)
+    if (mounted) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(text)));
+    }
   }
 
   Future<void> scan({bool gallery = false}) async {
@@ -153,8 +155,9 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     if (controller == null) return;
     try {
       await controller.setFlashMode(torch ? FlashMode.off : FlashMode.torch);
-      if (mounted && identical(controller, camera))
+      if (mounted && identical(controller, camera)) {
         setState(() => torch = !torch);
+      }
     } catch (_) {
       note('Фонарь недоступен');
     }
@@ -171,7 +174,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            if (camera case final cam?) Center(child: CameraPreview(cam)),
+            if (camera case final cam?) _CameraSurface(cam),
             SafeArea(
               child: LayoutBuilder(
                 builder: (context, box) {
@@ -369,6 +372,27 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       );
     },
   );
+}
+
+class _CameraSurface extends StatelessWidget {
+  const _CameraSurface(this.controller);
+  final CameraController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final landscape = MediaQuery.orientationOf(context) == Orientation.landscape;
+    final size = controller.value.previewSize!;
+    return ClipRect(
+      child: FittedBox(
+        fit: BoxFit.cover,
+        child: SizedBox(
+          width: landscape ? size.width : size.height,
+          height: landscape ? size.height : size.width,
+          child: CameraPreview(controller),
+        ),
+      ),
+    );
+  }
 }
 
 class _DockAction extends StatelessWidget {

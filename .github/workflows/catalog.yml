@@ -1,0 +1,53 @@
+name: Обновить каталог Oracle
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '28 4 * * *'
+permissions:
+  contents: write
+concurrency:
+  group: catalog
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Проверить выпуски ManaVault
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api 'repos/cfbender/manavault/releases?per_page=100' --jq '[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith("scanner-bundle-")))] | first.tag_name')
+          [[ "$tag" =~ ^scanner-bundle-([a-zA-Z0-9._-]+)$ ]]
+          version="${BASH_REMATCH[1]}"
+          if [[ "$version" != "$(jq -r .version assets/oracle/catalog.json)" ]]; then
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.source.outputs.version != ''
+        env:
+          VERSION: ${{ steps.source.outputs.version }}
+        run: python tool/prepare_catalog.py "$VERSION"
+      - if: steps.source.outputs.version != ''
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.0'
+          cache: true
+      - name: Проверить распознавание перед публикацией
+        if: steps.source.outputs.version != ''
+        env:
+          VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          flutter pub get
+          curl --fail --retry 3 -L 'https://cards.scryfall.io/normal/front/5/4/54772e15-d99d-4eec-ba8d-b9202a7e318b.jpg' -o .dart_tool/card.jpg
+          index=$(jq 'map(.id) | index("54772e15-d99d-4eec-ba8d-b9202a7e318b")' ".dart_tool/$VERSION/arts.json")
+          dart run tool/check_photo.dart assets/oracle .dart_tool/card.jpg "$index"
+      - name: Опубликовать только файлы каталога
+        if: steps.source.outputs.version != ''
+        env:
+          VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/oracle/
+          git commit -m "Обновить каталог Oracle до $VERSION"
+          git push origin HEAD:main

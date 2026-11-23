@@ -74,8 +74,9 @@ List<Hit> identify(String directory, String photo) {
       refine,
     );
     if (fine.vote / (constants['rotations'] as int) < 0.5 ||
-        fine.short < side * 0.09)
+        fine.short < side * 0.09) {
       return [];
+    }
     final embed = open('embed');
     final features = _run(embed, {
       'scene': _pixels(bytes, side),
