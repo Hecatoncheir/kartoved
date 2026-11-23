@@ -51,9 +51,14 @@ jobs:
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
+          apk="kartoved-$tag-arm64.apk"
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --draft --verify-tag --title "Картовед ${tag#v}" --notes-file "$RUNNER_TEMP/notes.md"
           fi
           test "$(gh release view "$tag" --json isDraft --jq .isDraft)" = true
-          gh release upload "$tag" "kartoved-$tag-arm64.apk" --clobber
+          gh release upload "$tag" "$apk" --clobber
+          release_id=$(gh release view "$tag" --json databaseId --jq .databaseId)
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" > "$RUNNER_TEMP/assets.json"
+          digest=$(jq -er --arg apk "$apk" '.[] | select(.name == $apk and .state == "uploaded") | .digest' "$RUNNER_TEMP/assets.json")
+          test "$digest" = "sha256:$(sha256sum "$apk" | cut -d' ' -f1)"
           gh release edit "$tag" --notes-file "$RUNNER_TEMP/notes.md" --draft=false
