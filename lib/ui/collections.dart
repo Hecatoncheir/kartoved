@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -7,7 +9,8 @@ import '../model.dart';
 import 'scanner.dart';
 import 'style.dart';
 import 'sheets.dart';
-import 'picture.dart';
+import 'collection_light.dart';
+import 'collection_stack.dart';
 import 'album.dart';
 import 'catalog_search.dart';
 
@@ -151,6 +154,48 @@ class _NameDialogState extends State<_NameDialog> {
 
 class CollectionPage extends StatelessWidget {
   const CollectionPage({super.key});
+  Future<void> _flag(BuildContext context, Edition card, bool value) async {
+    try {
+      await context.read<AppModel>().setFlag(card, value);
+    } catch (_) {
+      if (context.mounted) _message(context, 'Не удалось сохранить флажок');
+    }
+  }
+
+  void _message(BuildContext context, String text, [SnackBarAction? action]) {
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.removeCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(content: Text(text), action: action));
+  }
+
+  Future<void> _remove(BuildContext context, Edition card) async {
+    final model = context.read<AppModel>();
+    try {
+      final removed = await model.remove(card);
+      if (!context.mounted || removed.scans.isEmpty) return;
+      final count = removed.scans.fold(0, (n, scan) => n + scan.quantity);
+      _message(
+        context,
+        'Убрано: ${card.name} ×$count',
+        SnackBarAction(
+          label: 'Отменить',
+          onPressed: () async {
+            try {
+              await model.restore(removed);
+            } catch (_) {
+              if (context.mounted) {
+                _message(context, 'Не удалось вернуть карту');
+              }
+            }
+          },
+        ),
+      );
+    } catch (_) {
+      if (context.mounted) _message(context, 'Не удалось убрать карту');
+    }
+  }
+
   Future<void> _export(BuildContext context) async {
     final model = context.read<AppModel>();
     try {
@@ -178,97 +223,151 @@ class CollectionPage extends StatelessWidget {
         );
       }
       final items = rows.values.toList();
-      return Scaffold(
-        appBar: AppBar(
-          title: Text(state.title),
-          actions: [
-            IconButton(
-              tooltip: 'Экспорт для Moxfield',
-              onPressed: items.isEmpty ? null : () => _export(context),
-              icon: const Icon(Icons.ios_share_outlined),
+      return CollectionLight(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          extendBody: true,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            foregroundColor: paper,
+            titleTextStyle: const TextStyle(
+              color: paper,
+              fontFamily: 'Nunito',
+              fontWeight: FontWeight.w900,
+              fontSize: 25,
             ),
-          ],
-        ),
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
-            child: Column(
-              children: [
-                if (items.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Frost(
-                      light: true,
-                      radius: 16,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 14,
-                        ),
-                        child: Wrap(
-                          spacing: 14,
-                          runSpacing: 4,
-                          children: [
-                            Text(
-                              'Карт · ${items.fold<int>(0, (a, b) => a + b.quantity)}',
+            title: Text(state.title),
+            actions: [
+              IconButton(
+                tooltip: 'Экспорт для Moxfield',
+                onPressed: items.isEmpty ? null : () => _export(context),
+                icon: const Icon(Icons.ios_share_outlined),
+              ),
+            ],
+          ),
+          body: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+              child: Column(
+                children: [
+                  if (items.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Frost(
+                        radius: 16,
+                        child: DefaultTextStyle(
+                          style: const TextStyle(
+                            color: paper,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Nunito Sans',
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 14,
                             ),
-                            Text(
-                              'Названий · ${items.map((r) => r.card.name).toSet().length}',
+                            child: Wrap(
+                              spacing: 14,
+                              runSpacing: 4,
+                              children: [
+                                Text(
+                                  'Карт · ${items.fold<int>(0, (a, b) => a + b.quantity)}',
+                                ),
+                                Text(
+                                  'Названий · ${items.map((r) => r.card.name).toSet().length}',
+                                ),
+                                Text(
+                                  'Фольга · ${items.where((r) => r.card.foil).fold<int>(0, (a, b) => a + b.quantity)}',
+                                ),
+                              ],
                             ),
-                            Text(
-                              'Фольга · ${items.where((r) => r.card.foil).fold<int>(0, (a, b) => a + b.quantity)}',
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                Expanded(
-                  child: items.isEmpty
-                      ? const Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [Folio(), Text('Пока нет карт')],
+                  Expanded(
+                    child: items.isEmpty
+                        ? const SafeArea(
+                            top: false,
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Folio(),
+                                  Text(
+                                    'Пока нет карт',
+                                    style: TextStyle(color: paper),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : CollectionStack(
+                            key: ValueKey(state.folder),
+                            items: items,
+                            flags: state.flags,
+                            onFlag: (card, value) =>
+                                _flag(context, card, value),
+                            onRemove: (card) => _remove(context, card),
                           ),
-                        )
-                      : ListView.separated(
-                          itemCount: items.length,
-                          separatorBuilder: (_, _) => const Divider(),
-                          itemBuilder: (_, i) {
-                            final row = items[i];
-                            return ListTile(
-                              leading: SizedBox(
-                                width: 38,
-                                child: CardPicture(row.card, slot: i),
-                              ),
-                              title: Text(row.card.name),
-                              subtitle: Text(
-                                [
-                                  row.card.detail,
-                                  if (row.card.foil) 'Фольга',
-                                ].join('  ·  '),
-                              ),
-                              trailing: Text('×${row.quantity}'),
-                            );
-                          },
-                        ),
-                ),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(builder: (_) => const Scanner()),
-                    ),
-                    icon: const Icon(Icons.center_focus_strong),
-                    label: const Text('Сканировать карту'),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
+          bottomNavigationBar: const _ScanButton(),
         ),
       );
     },
+  );
+}
+
+class _ScanButton extends StatelessWidget {
+  const _ScanButton();
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(100),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+          child: DecoratedBox(
+            decoration: const ShapeDecoration(
+              shape: StadiumBorder(side: BorderSide(color: Color(0xadffe6a3))),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xb3ffe6a3),
+                  Color(0x99ffcc54),
+                  Color(0x8cfabd2f),
+                  Color(0x9afabd2f),
+                ],
+                stops: [0, .12, .65, 1],
+              ),
+            ),
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                foregroundColor: const Color(0xff090a07),
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(builder: (_) => const Scanner()),
+              ),
+              icon: const Icon(Icons.center_focus_strong),
+              label: const Text('Сканировать карту'),
+            ),
+          ),
+        ),
+      ),
+    ),
   );
 }

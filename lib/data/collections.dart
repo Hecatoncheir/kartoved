@@ -6,27 +6,47 @@ import 'catalog.dart' show Edition;
 typedef CardGroup = ({int id, String name, int count});
 typedef ScanEntry = ({int sequence, Edition card, int quantity});
 typedef CardCount = ({Edition card, int quantity});
+typedef RemovedPrinting = ({
+  int folder,
+  Edition card,
+  List<({int sequence, int quantity})> scans,
+  bool flagged,
+});
+
+const _printing = 'folder=? AND id=? AND lang=? AND foil=?';
+List<Object> _printingArgs(int folder, Edition card) => [
+  folder,
+  card.id,
+  card.language,
+  card.foil ? 1 : 0,
+];
 
 class History {
   late Database _db;
   Future<void> open({String? path}) async {
     _db = await openDatabase(
       path ?? p.join(await getDatabasesPath(), 'collection.sqlite'),
-      version: 3,
+      version: 4,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys=ON'),
       onCreate: (db, _) => _create(db),
       onUpgrade: (db, oldVersion, _) async {
+        if (oldVersion == 1) {
+          await _create(db);
+          await db.execute(
+            'INSERT INTO scans(folder,id,name,set_code,number,lang,qty) SELECT 1,id,name,set_code,number,lang,qty FROM cards ORDER BY touched,rowid',
+          );
+          await db.execute('DROP TABLE cards');
+          return;
+        }
         if (oldVersion == 2) {
           await db.execute(
             'ALTER TABLE scans ADD COLUMN foil INTEGER NOT NULL DEFAULT 0',
           );
-          return;
         }
-        await _create(db);
         await db.execute(
-          'INSERT INTO scans(folder,id,name,set_code,number,lang,qty) SELECT 1,id,name,set_code,number,lang,qty FROM cards ORDER BY touched,rowid',
+          'ALTER TABLE scans ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0',
         );
-        await db.execute('DROP TABLE cards');
+        await _indexPrintings(db);
       },
     );
   }
@@ -37,10 +57,15 @@ class History {
     );
     await db.insert('folders', {'folder': 1, 'title': 'Моя коллекция'});
     await db.execute(
-      'CREATE TABLE scans(seq INTEGER PRIMARY KEY, folder INTEGER NOT NULL REFERENCES folders(folder), id TEXT NOT NULL, name TEXT NOT NULL, set_code TEXT NOT NULL, number TEXT NOT NULL, lang TEXT NOT NULL, foil INTEGER NOT NULL DEFAULT 0, qty INTEGER NOT NULL CHECK(qty>0))',
+      'CREATE TABLE scans(seq INTEGER PRIMARY KEY, folder INTEGER NOT NULL REFERENCES folders(folder), id TEXT NOT NULL, name TEXT NOT NULL, set_code TEXT NOT NULL, number TEXT NOT NULL, lang TEXT NOT NULL, foil INTEGER NOT NULL DEFAULT 0, qty INTEGER NOT NULL CHECK(qty>0), flagged INTEGER NOT NULL DEFAULT 0)',
     );
     await db.execute('CREATE INDEX scans_by_folder ON scans(folder,seq)');
+    await _indexPrintings(db);
   }
+
+  static Future<void> _indexPrintings(Database db) => db.execute(
+    'CREATE INDEX scans_by_printing ON scans(folder,id,lang,foil)',
+  );
 
   Future<int> create(String name) {
     final title = name.trim();
@@ -65,17 +90,117 @@ class History {
         .toList();
   }
 
-  Future<int> add(Edition card, {int folder = 1}) =>
-      _db.insert('scans', {...card.row, 'folder': folder, 'qty': 1});
+  Future<int> _flag(
+    DatabaseExecutor db,
+    int folder,
+    Edition card, {
+    bool fallback = false,
+  }) async {
+    final rows = await db.query(
+      'scans',
+      columns: ['flagged'],
+      where: _printing,
+      whereArgs: _printingArgs(folder, card),
+      limit: 1,
+    );
+    return rows.firstOrNull?['flagged'] as int? ?? (fallback ? 1 : 0);
+  }
 
-  Future<void> replace(int folder, int seq, Edition card) async {
+  Future<int> add(Edition card, {int folder = 1}) => _db.transaction(
+    (db) async => db.insert('scans', {
+      ...card.row,
+      'folder': folder,
+      'qty': 1,
+      'flagged': await _flag(db, folder, card),
+    }),
+  );
+
+  Future<void> replace(int folder, int seq, Edition card) =>
+      _db.transaction((db) async {
+        await db.update(
+          'scans',
+          {...card.row, 'flagged': await _flag(db, folder, card)},
+          where: 'folder=? AND seq=?',
+          whereArgs: [folder, seq],
+        );
+      });
+
+  Future<Set<String>> flags(int folder) async {
+    final rows = await _db.query(
+      'scans',
+      distinct: true,
+      columns: ['id', 'lang', 'foil'],
+      where: 'folder=? AND flagged=1',
+      whereArgs: [folder],
+    );
+    return {
+      for (final r in rows)
+        Edition.keyOf(r['id'] as String, r['lang'] as String, r['foil'] == 1),
+    };
+  }
+
+  Future<void> setFlag(int folder, Edition card, bool value) async {
     await _db.update(
       'scans',
-      card.row,
-      where: 'folder=? AND seq=?',
-      whereArgs: [folder, seq],
+      {'flagged': value ? 1 : 0},
+      where: _printing,
+      whereArgs: _printingArgs(folder, card),
     );
   }
+
+  Future<RemovedPrinting> remove(int folder, Edition card) =>
+      _db.transaction((db) async {
+        final args = _printingArgs(folder, card);
+        final rows = await db.query(
+          'scans',
+          columns: ['seq', 'qty', 'flagged'],
+          where: _printing,
+          whereArgs: args,
+          orderBy: 'seq DESC',
+        );
+        await db.delete('scans', where: _printing, whereArgs: args);
+        return (
+          folder: folder,
+          card: card,
+          flagged: rows.firstOrNull?['flagged'] == 1,
+          scans: [
+            for (final row in rows)
+              (sequence: row['seq'] as int, quantity: row['qty'] as int),
+          ],
+        );
+      });
+
+  Future<void> restore(RemovedPrinting removed) => _db.transaction((db) async {
+    final card = removed.card;
+    final flagged = await _flag(
+      db,
+      removed.folder,
+      card,
+      fallback: removed.flagged,
+    );
+    final batch = db.batch();
+    for (final scan in removed.scans) {
+      // Если номер уже занял новый скан, SQLite выдаст свободный номер.
+      batch.rawInsert(
+        '''INSERT INTO scans(seq,folder,id,name,set_code,number,lang,foil,qty,flagged)
+          VALUES ((SELECT ? WHERE NOT EXISTS(SELECT 1 FROM scans WHERE seq=?)),?,?,?,?,?,?,?,?,?)''',
+        [
+          scan.sequence,
+          scan.sequence,
+          removed.folder,
+          card.id,
+          card.name,
+          card.set,
+          card.number,
+          card.language,
+          card.foil ? 1 : 0,
+          scan.quantity,
+          flagged,
+        ],
+      );
+    }
+    await batch.commit(noResult: true);
+  });
 
   Future<List<ScanEntry>> recent(int folder) async {
     final rows = await _db.query(

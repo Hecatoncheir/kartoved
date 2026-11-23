@@ -24,12 +24,14 @@ class LibraryState {
     this.groups = const [],
     this.folder = 1,
     this.recent = const [],
+    this.flags = const {},
     this.error,
   });
   final Catalog? catalog;
   final List<CardGroup> groups;
   final int folder;
   final List<ScanEntry> recent;
+  final Set<String> flags;
   final String? error;
   String get title =>
       groups.where((g) => g.id == folder).firstOrNull?.name ?? 'Моя коллекция';
@@ -40,31 +42,44 @@ class AppModel extends Cubit<LibraryState> {
     this.store,
     this.history, {
     LibraryState initial = const LibraryState(),
-  }) : super(initial);
+  }) : _folder = initial.folder,
+       _base = initial.catalog,
+       super(initial);
   final CatalogStore store;
   final History history;
+  int _folder;
+  int _revision = 0;
+  int _loadedRevision = 0;
+  Catalog? _base;
   Catalog? get catalog => state.catalog;
   String? get initialError => state.error;
 
   Future<void> initialize() async {
     try {
       await history.open();
-      await _refresh(1, await store.initialize());
+      _base = await store.initialize();
+      await _refresh();
     } catch (e, stack) {
       debugPrint('Подготовка каталога: $e\n$stack');
       emit(const LibraryState(error: 'Не удалось подготовить базу карт'));
     }
   }
 
-  Future<void> _refresh(int folder, Catalog? base) async {
+  Future<void> _refresh() async {
+    final folder = _folder;
+    final revision = ++_revision;
     final groups = await history.folders();
     final recent = await history.recent(folder);
+    final flags = await history.flags(folder);
+    if (revision != _revision || isClosed) return;
+    _loadedRevision = revision;
     emit(
       LibraryState(
-        catalog: base,
+        catalog: _base,
         groups: groups,
         folder: folder,
         recent: recent,
+        flags: flags,
       ),
     );
   }
@@ -73,7 +88,8 @@ class AppModel extends Cubit<LibraryState> {
   Future<void> select(int folder) async {
     // Дождаться смены каталога раньше, чем камера начнёт читать модели.
     await _updating?.catchError((Object _) => false);
-    await _refresh(folder, catalog);
+    _folder = folder;
+    await _refresh();
   }
 
   Future<void> create(String title) async =>
@@ -100,17 +116,22 @@ class AppModel extends Cubit<LibraryState> {
 
   Future<void> save(Edition card) async {
     final folder = state.folder;
+    final revision = _loadedRevision;
     final seq = await history.add(card, folder: folder);
-    if (state.folder != folder) return;
-    final groups = [
-      for (final g in state.groups)
-        g.id == folder ? (id: g.id, name: g.name, count: g.count + 1) : g,
-    ];
+    if (isClosed) return;
+    if (folder != _folder || revision != _revision || state.groups.isEmpty) {
+      await _refresh();
+      return;
+    }
     emit(
       LibraryState(
         catalog: catalog,
         folder: folder,
-        groups: groups,
+        flags: state.flags,
+        groups: [
+          for (final g in state.groups)
+            g.id == folder ? (id: g.id, name: g.name, count: g.count + 1) : g,
+        ],
         recent: [(sequence: seq, card: card, quantity: 1), ...state.recent],
       ),
     );
@@ -119,7 +140,23 @@ class AppModel extends Cubit<LibraryState> {
   Future<void> replace(ScanEntry entry, Edition card) async {
     final folder = state.folder;
     await history.replace(folder, entry.sequence, card);
-    await select(folder);
+    await _refresh();
+  }
+
+  Future<void> setFlag(Edition card, bool value) async {
+    await history.setFlag(state.folder, card, value);
+    await _refresh();
+  }
+
+  Future<RemovedPrinting> remove(Edition card) async {
+    final removed = await history.remove(state.folder, card);
+    await _refresh();
+    return removed;
+  }
+
+  Future<void> restore(RemovedPrinting removed) async {
+    await history.restore(removed);
+    await _refresh();
   }
 
   Future<String> export() async {
@@ -143,7 +180,8 @@ class AppModel extends Cubit<LibraryState> {
     final old = catalog!;
     final next = await store.update(old);
     if (old.spec.version == next.spec.version) return false;
-    await _refresh(state.folder, next);
+    _base = next;
+    await _refresh();
     return true;
   }
 }

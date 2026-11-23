@@ -178,7 +178,9 @@ class Edition {
       Edition(id, name, set, number, lang, foil: foil);
   Edition withFoil(bool value) =>
       Edition(id, name, set, number, language, foil: value);
-  String get printingKey => '$id/$language/$foil';
+  static String keyOf(String id, String language, bool foil) =>
+      '$id/$language/$foil';
+  String get printingKey => keyOf(id, language, foil);
   String get detail =>
       '${set.toUpperCase()}  ·  № $number  ·  ${language == 'und' ? 'язык не определён' : language.toUpperCase()}';
   factory Edition.fromRow(Map<String, Object?> row) => Edition(
