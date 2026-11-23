@@ -46,7 +46,7 @@ void main() {
       );
       expect((await model.store.initialize()).spec.version, old.spec.version);
       final updated = await model.store.installUpdate(old, next, (name) async {
-        expect(name, 'cards.sqlite.gz');
+        expect(name, 'cards.sqlite.pack');
         final bytes = await rootBundle.load('assets/oracle/$name');
         return Stream.value(
           bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),

@@ -11,7 +11,7 @@ const _files = [
   'detector.onnx',
   'embed.onnx',
   'search.onnx',
-  'cards.sqlite.gz',
+  'cards.sqlite.pack',
 ];
 const _repo = 'Hecatoncheir/kartoved';
 
@@ -185,7 +185,7 @@ class CatalogStore {
       for (final name in _files) {
         final file = File(p.join(staging.path, name));
         if (previous != null &&
-            name != 'cards.sqlite.gz' &&
+            name != 'cards.sqlite.pack' &&
             previous.spec.hash(name) == spec.hash(name)) {
           await File(p.join(previous.directory.path, name)).copy(file.path);
         } else {
@@ -206,7 +206,7 @@ class CatalogStore {
           throw const FormatException('Не совпала контрольная сумма');
         }
       }
-      final packed = File(p.join(staging.path, 'cards.sqlite.gz'));
+      final packed = File(p.join(staging.path, 'cards.sqlite.pack'));
       final database = File(p.join(staging.path, 'cards.sqlite'));
       await packed
           .openRead()

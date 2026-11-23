@@ -43,4 +43,6 @@ jobs:
             adb shell svc wifi disable
             adb shell svc data disable
             flutter test integration_test/offline_test.dart -d emulator-5554 --dart-define-from-file=.dart_tool/fixture.json --timeout 10m
+      - name: Проверить автономный каталог внутри APK
+        run: python tool/verify_apk.py build/app/outputs/flutter-apk/app-debug.apk
 

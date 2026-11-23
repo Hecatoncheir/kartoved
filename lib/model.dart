@@ -1,9 +1,10 @@
-import 'dart:isolate';
-
 import 'package:flutter/foundation.dart';
 
 import 'data/catalog.dart';
 import 'data/oracle.dart';
+
+List<Hit> _identifyPhoto(({String directory, String file}) input) =>
+    identify(input.directory, input.file);
 
 class Match {
   const Match(this.editions);
@@ -47,7 +48,10 @@ class AppModel extends ChangeNotifier {
   Future<List<Match>> recognize(String file) => work(() async {
     final current = catalog!;
     final directory = current.directory.path;
-    final hits = await Isolate.run(() => identify(directory, file));
+    final hits = await compute(_identifyPhoto, (
+      directory: directory,
+      file: file,
+    ));
     final result = <Match>[];
     for (final hit in hits) {
       final editions = await current.editions(hit.index);

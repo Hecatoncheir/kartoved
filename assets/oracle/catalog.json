@@ -49,7 +49,7 @@
       "bytes": 14259378,
       "sha256": "b9588e133dd18ebd47b28daab327c75f528abddac6c6aff2c3ba406cf469dc06"
     },
-    "cards.sqlite.gz": {
+    "cards.sqlite.pack": {
       "bytes": 21822493,
       "sha256": "256c9cc514c62181ccdc402a8015b8601e46d9d99eabe62a37f2f140dbc29c6e"
     }

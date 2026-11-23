@@ -60,13 +60,13 @@ def prepare(version, source, destination):
     with tempfile.TemporaryDirectory() as temp:
         db_path = Path(temp) / "cards.sqlite"
         prepare_database(db_path, arts, json.loads(fetch("printings.json").read_bytes()))
-        with db_path.open("rb") as src, (destination / "cards.sqlite.gz").open("wb") as packed:
+        with db_path.open("rb") as src, (destination / "cards.sqlite.pack").open("wb") as packed:
             with gzip.GzipFile(fileobj=packed, filename="", mtime=0, mode="wb", compresslevel=6) as out:
                 shutil.copyfileobj(src, out)
     for name in MODELS:
         shutil.copyfile(source / name, destination / name)
     files = {name: {"bytes": (destination / name).stat().st_size, "sha256": digest(destination / name)}
-             for name in (*MODELS, "cards.sqlite.gz")}
+             for name in (*MODELS, "cards.sqlite.pack")}
     catalog = dict(schema=1, version=version, created=meta["created"], count=len(arts),
                    constants=meta["constants"], searchMask=meta["search_mask"], files=files)
     (destination / "catalog.json").write_text(json.dumps(catalog, indent=2) + "\n", encoding="utf-8")
