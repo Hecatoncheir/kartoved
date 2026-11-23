@@ -283,6 +283,7 @@ class _LibraryContent extends StatelessWidget {
                   foregroundColor: aqua,
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   textStyle: const TextStyle(
+                    fontFamily: bodyFont,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),
