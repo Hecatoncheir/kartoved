@@ -47,7 +47,7 @@ flutter test test
 dart run tool/check_photo.dart assets/oracle путь/к/снимку.jpg
 ```
 
-Android-тест в GitHub Actions отключает сеть эмулятора и проверяет распознавание контрольной карты, поиск её выпуска и запись в коллекцию.
+Android-тест в GitHub Actions отключает сеть эмулятора и проверяет распознавание контрольной карты, поиск её выпуска, запись в коллекцию и установку обновления. Для воспроизводимости уменьшенный контрольный снимок хранится в тестах. [Bouncer’s Beatdown, художник Mathias Kollros](https://scryfall.com/card/snc/135/bouncers-beatdown).
 
 ## Источники
 

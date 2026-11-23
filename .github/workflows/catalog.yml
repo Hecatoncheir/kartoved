@@ -38,9 +38,8 @@ jobs:
           VERSION: ${{ steps.source.outputs.version }}
         run: |
           flutter pub get
-          curl --fail --retry 3 -L 'https://cards.scryfall.io/normal/front/5/4/54772e15-d99d-4eec-ba8d-b9202a7e318b.jpg' -o .dart_tool/card.jpg
           index=$(jq 'map(.id) | index("54772e15-d99d-4eec-ba8d-b9202a7e318b")' ".dart_tool/$VERSION/arts.json")
-          dart run tool/check_photo.dart assets/oracle .dart_tool/card.jpg "$index"
+          dart run tool/check_photo.dart assets/oracle test/fixtures/bouncers-beatdown.jpg "$index"
       - name: Опубликовать только файлы каталога
         if: steps.source.outputs.version != ''
         env:
