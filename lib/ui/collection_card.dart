@@ -283,7 +283,7 @@ class _Face extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: paper,
-                    fontFamily: 'Nunito',
+                    fontFamily: headingFont,
                     fontSize: 18,
                     height: 1.1,
                     fontWeight: FontWeight.w900,
@@ -296,8 +296,9 @@ class _Face extends StatelessWidget {
                       : [card.detail, if (card.foil) 'Фольга'].join('  ·  '),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xffebdbb2),
+                  style: TextStyle(
+                    color: cream,
+                    fontFamily: item.multiple ? bodyFont : monoFont,
                     fontSize: 13,
                     height: 1.18,
                     fontWeight: FontWeight.w600,
@@ -328,6 +329,7 @@ class _Face extends StatelessWidget {
                       '×${item.quantity}',
                       style: const TextStyle(
                         color: paper,
+                        fontFamily: monoFont,
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
                       ),
@@ -335,7 +337,7 @@ class _Face extends StatelessWidget {
                     Icon(
                       item.multiple ? Icons.layers_outlined : Icons.more_horiz,
                       size: 18,
-                      color: Color(0xffbdae93),
+                      color: muted,
                     ),
                   ],
                 ),

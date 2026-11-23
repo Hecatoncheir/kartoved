@@ -2,34 +2,93 @@ import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
 
-const ink = Color(0xff282828),
-    paper = Color(0xfffbf1c7),
-    cream = Color(0xfff2e5bc);
-const butter = Color(0xfffabd2f),
-    muted = Color(0xff665c54),
-    dark = Color(0xff1d2021);
+const ink = Color(0xff282828);
+const dark = Color(0xff1d2021);
+const surface = Color(0xff32302f);
+const raised = Color(0xff3c3836);
+const outline = Color(0xff504945);
+const strongOutline = Color(0xff7c6f64);
+const paper = Color(0xfffbf1c7);
+const cream = Color(0xffebdbb2);
+const muted = Color(0xffbdae93);
+const butter = Color(0xfffabd2f);
+const amberSurface = Color(0xff443a27);
+const aqua = Color(0xff8ec07c);
+const blue = Color(0xff83a598);
+const red = Color(0xfffb8a67);
+
+const headingFont = 'Nunito';
+const bodyFont = 'Nunito Sans';
+const monoFont = 'JetBrains Mono';
+const codeText = TextStyle(fontFamily: monoFont, color: muted);
+
 ThemeData kartovedTheme() {
-  final scheme = ColorScheme.fromSeed(seedColor: butter).copyWith(
-    primary: ink,
-    onPrimary: paper,
-    surface: paper,
-    onSurface: ink,
-    secondary: butter,
-    outline: muted,
-  );
-  return ThemeData(
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: butter,
+        brightness: Brightness.dark,
+      ).copyWith(
+        primary: butter,
+        onPrimary: ink,
+        primaryContainer: amberSurface,
+        onPrimaryContainer: butter,
+        secondary: aqua,
+        onSecondary: ink,
+        secondaryContainer: amberSurface,
+        onSecondaryContainer: butter,
+        tertiary: blue,
+        onTertiary: ink,
+        error: red,
+        onError: ink,
+        surface: surface,
+        onSurface: paper,
+        onSurfaceVariant: muted,
+        surfaceDim: dark,
+        surfaceBright: outline,
+        surfaceContainerLowest: dark,
+        surfaceContainerLow: ink,
+        surfaceContainer: surface,
+        surfaceContainerHigh: raised,
+        surfaceContainerHighest: outline,
+        surfaceTint: Colors.transparent,
+        outline: strongOutline,
+        outlineVariant: outline,
+        inverseSurface: paper,
+        onInverseSurface: ink,
+      );
+  final theme = ThemeData(
     colorScheme: scheme,
-    fontFamily: 'Nunito Sans',
-    scaffoldBackgroundColor: paper,
+    fontFamily: bodyFont,
+    scaffoldBackgroundColor: ink,
+    appBarTheme: const AppBarThemeData(
+      backgroundColor: ink,
+      foregroundColor: paper,
+      surfaceTintColor: Colors.transparent,
+    ),
+    navigationBarTheme: const NavigationBarThemeData(
+      backgroundColor: dark,
+      indicatorColor: amberSurface,
+      surfaceTintColor: Colors.transparent,
+    ),
+    focusColor: blue.withValues(alpha: .28),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size(48, 50),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito Sans',
+          fontFamily: bodyFont,
           fontSize: 16,
           fontWeight: FontWeight.w800,
         ),
       ),
+    ),
+  );
+  final text = theme.textTheme;
+  return theme.copyWith(
+    textTheme: text.copyWith(
+      headlineLarge: text.headlineLarge?.copyWith(fontFamily: headingFont),
+      headlineMedium: text.headlineMedium?.copyWith(fontFamily: headingFont),
+      headlineSmall: text.headlineSmall?.copyWith(fontFamily: headingFont),
+      titleLarge: text.titleLarge?.copyWith(fontFamily: headingFont),
     ),
   );
 }
@@ -86,15 +145,9 @@ class _Mark extends CustomPainter {
 }
 
 class Frost extends StatelessWidget {
-  const Frost({
-    super.key,
-    required this.child,
-    this.radius = 26,
-    this.light = false,
-  });
+  const Frost({super.key, required this.child, this.radius = 26});
   final Widget child;
   final double radius;
-  final bool light;
   @override
   Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(radius),
@@ -105,12 +158,13 @@ class Frost extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: light
-                ? const [Color(0xf8fff5d7), Color(0xe8eadcb4)]
-                : const [Color(0xb25b5549), Color(0xcc282a27)],
+            colors: [
+              raised.withValues(alpha: .86),
+              surface.withValues(alpha: .94),
+            ],
           ),
           borderRadius: BorderRadius.circular(radius),
-          border: Border.all(color: paper.withValues(alpha: light ? .8 : .36)),
+          border: Border.all(color: strongOutline),
         ),
         child: child,
       ),
@@ -141,7 +195,7 @@ class SheetHeading extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     title,
     style: const TextStyle(
-      fontFamily: 'Nunito',
+      fontFamily: headingFont,
       fontSize: 30,
       height: 1.15,
       fontWeight: FontWeight.w900,

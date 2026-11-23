@@ -162,7 +162,7 @@ class _ChoiceSheetState extends State<_ChoiceSheet> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: selected ? ink : muted,
+                        color: selected ? butter : strongOutline,
                         width: selected ? 2 : .5,
                       ),
                     ),
@@ -186,7 +186,7 @@ class _ChoiceSheetState extends State<_ChoiceSheet> {
                                     alignment: Alignment.topRight,
                                     child: Icon(
                                       Icons.check_circle,
-                                      color: ink,
+                                      color: butter,
                                       size: 19,
                                     ),
                                   ),
@@ -201,7 +201,7 @@ class _ChoiceSheetState extends State<_ChoiceSheet> {
                           Text(
                             card.foil ? '${card.detail} · Фольга' : card.detail,
                             textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodySmall,
+                            style: codeText,
                           ),
                         ],
                       ),

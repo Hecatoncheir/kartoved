@@ -162,7 +162,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
               Text(
                 '${selected.detail}  ·  ${selected.foil ? 'Фольга' : 'Обычная'}',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: cream),
+                style: codeText,
               ),
               const SizedBox(height: 12),
               Center(
@@ -188,6 +188,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                             '$quantity',
                             style: const TextStyle(
                               fontSize: 21,
+                              fontFamily: monoFont,
                               fontWeight: FontWeight.w800,
                               color: paper,
                             ),
@@ -227,8 +228,12 @@ class _CollectionDetailState extends State<CollectionDetail> {
                     ),
                     title: Text(
                       '${v.card.detail}  ·  ${v.card.foil ? 'Фольга' : 'Обычная'}',
+                      style: codeText,
                     ),
-                    trailing: Text('×${counts[v.card.printingKey] ?? 0}'),
+                    trailing: Text(
+                      '×${counts[v.card.printingKey] ?? 0}',
+                      style: codeText,
+                    ),
                     onTap: saving ? null : () => _select(v.card),
                   ),
               ],

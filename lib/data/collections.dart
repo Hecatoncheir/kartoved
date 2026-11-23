@@ -10,6 +10,7 @@ part 'move.dart';
 
 typedef CardGroup = ({int id, String name, int count});
 typedef ScanEntry = ({int sequence, Edition card, int quantity});
+typedef LibraryAddition = ({int folder, Edition card, int quantity});
 typedef CardCount = ({Edition card, int quantity});
 typedef Holdings = Map<String, Map<int, int>>;
 typedef RemovedPrinting = ({
@@ -335,6 +336,23 @@ class History {
 
   Future<List<ScanEntry>> recent(int folder) async =>
       (await timeline(folder)).recent;
+
+  Future<List<LibraryAddition>> latestAdditions() async {
+    final rows = await _db.query(
+      'scans',
+      where: 'review IS NULL',
+      orderBy: 'seq DESC',
+      limit: 3,
+    );
+    return [
+      for (final row in rows)
+        (
+          folder: row['folder'] as int,
+          card: Edition.fromRow(row),
+          quantity: row['qty'] as int,
+        ),
+    ];
+  }
 
   Future<List<CardCount>> list({
     int folder = 1,

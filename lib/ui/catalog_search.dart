@@ -9,6 +9,7 @@ import 'collections.dart';
 import 'card_destination.dart';
 import 'picture.dart';
 import 'sheets.dart';
+import 'style.dart';
 
 class NameSearch extends Cubit<AsyncSnapshot<List<String>>> {
   NameSearch(this.lookup) : super(const AsyncSnapshot.nothing());
@@ -54,16 +55,22 @@ class NameSearch extends Cubit<AsyncSnapshot<List<String>>> {
 }
 
 class CatalogSearchPage extends StatefulWidget {
-  const CatalogSearchPage(this.catalog, this.model, {super.key});
+  const CatalogSearchPage(
+    this.catalog,
+    this.model, {
+    super.key,
+    this.initialMine = false,
+  });
   final Catalog catalog;
   final AppModel model;
+  final bool initialMine;
   @override
   State<CatalogSearchPage> createState() => _CatalogSearchPageState();
 }
 
 class _CatalogSearchPageState extends State<CatalogSearchPage> {
   final text = TextEditingController();
-  bool mine = false;
+  late bool mine = widget.initialMine;
   late final search = NameSearch(
     (term) => widget.catalog.searchNames(term, limit: mine ? -1 : 61),
   );
@@ -79,7 +86,7 @@ class _CatalogSearchPageState extends State<CatalogSearchPage> {
     appBar: AppBar(
       title: TextField(
         controller: text,
-        autofocus: true,
+        autofocus: !widget.initialMine,
         onChanged: search.search,
         textInputAction: TextInputAction.search,
         decoration: const InputDecoration(
@@ -227,7 +234,7 @@ class _OwnedResults extends StatelessWidget {
           final places = state.holdings[name]!;
           return ListTile(
             title: Text(name),
-            trailing: Text('×${state.owned(name)}'),
+            trailing: Text('×${state.owned(name)}', style: codeText),
             subtitle: Wrap(
               spacing: 6,
               children: [
@@ -338,7 +345,7 @@ class _PrintingsState extends State<_Printings> {
                         width: 40,
                         child: CardPicture(card, slot: i),
                       ),
-                      title: Text(card.detail),
+                      title: Text(card.detail, style: codeText),
                       subtitle: card.foil ? const Text('Только фольга') : null,
                       trailing: const Icon(Icons.add_rounded),
                       onTap: () => _add(card),

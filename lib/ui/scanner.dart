@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
-import 'package:camera_view_mask/mask/mask.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -18,6 +16,7 @@ import '../model.dart';
 import '../scan_cubit.dart';
 import '../scan_decision.dart';
 import 'batch_settings.dart';
+import 'scan_frame.dart';
 import 'scan_reviews.dart';
 import 'sheets.dart';
 import 'scan_strip.dart';
@@ -363,7 +362,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: paper,
-                fontFamily: 'Nunito',
+                fontFamily: headingFont,
                 fontWeight: FontWeight.w900,
                 fontSize: 21,
               ),
@@ -461,27 +460,17 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         (state.reviews.isEmpty ? 0 : 48);
     final width = math.min(
       bounds.maxWidth * .77,
-      math.max(20.0, (bottom - top) * 63 / 88),
+      math.max(20.0, (bottom - top) * ScanFrame.aspectRatio),
     );
     final rect = Rect.fromCenter(
       center: Offset(bounds.maxWidth / 2, (top + bottom) / 2),
       width: width,
-      height: width * 88 / 63,
+      height: width / ScanFrame.aspectRatio,
     );
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (camera != null)
-          IgnorePointer(
-            child: ClipPath(
-              clipper: _Outside(rect),
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                child: ColoredBox(color: Colors.black.withValues(alpha: .42)),
-              ),
-            ),
-          ),
-        IgnorePointer(child: CustomPaint(painter: _Corners(rect))),
+        ScanFrame(window: rect, hasPreview: camera != null),
         Positioned(
           left: 10,
           right: 10,
@@ -583,26 +572,6 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   );
 }
 
-class _Outside extends CustomClipper<Path> {
-  const _Outside(this.rect);
-  final Rect rect;
-  @override
-  Path getClip(Size size) => Path()
-    ..fillType = PathFillType.evenOdd
-    ..addRect(Offset.zero & size)
-    ..addPath(
-      Mask(
-        offset: rect.topLeft,
-        size: rect.size,
-        borderRadius: 16,
-        border: Border.all(),
-      ).toPath(),
-      Offset.zero,
-    );
-  @override
-  bool shouldReclip(_Outside old) => rect != old.rect;
-}
-
 class _CameraSurface extends StatelessWidget {
   const _CameraSurface(this.controller);
   final CameraController controller;
@@ -649,40 +618,4 @@ class _DockAction extends StatelessWidget {
       ],
     ),
   );
-}
-
-class _Corners extends CustomPainter {
-  const _Corners(this.rect);
-  final Rect rect;
-  @override
-  void paint(Canvas c, Size size) {
-    final pen = Paint()
-      ..color = butter
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 3;
-    for (var i = 0; i < 4; i++) {
-      final corner = [
-        rect.topLeft,
-        rect.topRight,
-        rect.bottomRight,
-        rect.bottomLeft,
-      ][i];
-      c.save();
-      c.translate(corner.dx, corner.dy);
-      c.rotate(i * math.pi / 2);
-      c.drawPath(
-        Path()
-          ..moveTo(0, 29)
-          ..lineTo(0, 16)
-          ..quadraticBezierTo(0, 0, 16, 0)
-          ..lineTo(29, 0),
-        pen,
-      );
-      c.restore();
-    }
-  }
-
-  @override
-  bool shouldRepaint(_Corners old) => old.rect != rect;
 }

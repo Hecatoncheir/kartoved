@@ -28,14 +28,8 @@ void main() {
         ),
       ),
     );
-    double opacity() => tester
-        .widget<Opacity>(
-          find.ancestor(
-            of: find.byType(ListView),
-            matching: find.byType(Opacity),
-          ),
-        )
-        .opacity;
+    double opacity() =>
+        tester.widget<SliverOpacity>(find.byType(SliverOpacity)).opacity;
 
     await open();
     expect(opacity(), 0);
@@ -48,6 +42,44 @@ void main() {
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
     await open();
     expect(opacity(), 1);
+  });
+
+  testWidgets('Библиотека помещается на узком экране с крупным текстом', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 680);
+    addTearDown(tester.view.reset);
+    final model = AppModel(
+      CatalogStore(),
+      History(),
+      initial: const LibraryState(
+        groups: [(id: 1, name: 'Основная коллекция', count: 426)],
+      ),
+    );
+    addTearDown(model.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: kartovedTheme(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(1.6)),
+          child: child!,
+        ),
+        home: BlocProvider.value(value: model, child: const CollectionsPage()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    final heading = find.text('Мои коллекции');
+    final album = find.text('Основная коллекция');
+    expect(heading, findsOneWidget);
+    await tester.scrollUntilVisible(
+      album,
+      120,
+      scrollable: find.ancestor(of: heading, matching: find.byType(Scrollable)),
+    );
+    expect(album, findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Выбор языка и выпуска работает без подключения', (tester) async {

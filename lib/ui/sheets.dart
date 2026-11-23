@@ -19,7 +19,6 @@ Future<T?> panel<T>(BuildContext context, Widget child) =>
         borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
       ),
       builder: (c) => Frost(
-        light: true,
         radius: 0,
         child: SafeArea(
           top: false,
@@ -72,12 +71,12 @@ class _ResultSheetState extends State<ResultSheet> {
                   Text(
                     card.name,
                     style: const TextStyle(
-                      fontFamily: 'Nunito',
+                      fontFamily: headingFont,
                       fontSize: 23,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  Text(card.detail, style: const TextStyle(color: muted)),
+                  Text(card.detail, style: codeText),
                   if (widget.owned case final count?)
                     Text('В коллекциях · ${count(card.name)}'),
                 ],
@@ -110,7 +109,10 @@ class _ResultSheetState extends State<ResultSheet> {
                 if (i != selected)
                   ListTile(
                     title: Text(match.editions.first.name),
-                    subtitle: Text(match.editions.first.detail),
+                    subtitle: Text(
+                      match.editions.first.detail,
+                      style: codeText,
+                    ),
                     onTap: () => setState(() {
                       selected = i;
                       card = match.editions.first;
@@ -169,7 +171,7 @@ class _EditionPickerState extends State<EditionPicker> {
             child: ListView.builder(
               itemCount: options.length,
               itemBuilder: (c, i) => ListTile(
-                title: Text(options[i].detail),
+                title: Text(options[i].detail, style: codeText),
                 trailing: options[i].id == widget.selected.id
                     ? const Icon(Icons.check)
                     : null,
@@ -227,7 +229,7 @@ class _CatalogPanelState extends State<CatalogPanel> {
         const SizedBox(height: 18),
         DecoratedBox(
           decoration: BoxDecoration(
-            color: cream,
+            color: raised,
             borderRadius: BorderRadius.circular(16),
           ),
           child: Padding(

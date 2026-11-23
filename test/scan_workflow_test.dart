@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kartoved/data/catalog.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/ui/collections.dart';
+import 'package:kartoved/ui/style.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -82,7 +83,10 @@ void main() {
       await tester.pumpWidget(
         BlocProvider<AppModel>.value(
           value: model,
-          child: const MaterialApp(home: CollectionPage()),
+          child: MaterialApp(
+            theme: kartovedTheme(),
+            home: const CollectionsPage(),
+          ),
         ),
       );
       Future<void> waitFor(bool Function() ready, [String? reason]) async {
@@ -106,10 +110,18 @@ void main() {
       }
 
       await tap(find.text('Сканировать карту'));
+      await tap(find.widgetWithText(ListTile, 'На обмен'));
+      await waitFor(() => find.byTooltip('Меню сканера').evaluate().isNotEmpty);
+      expect(model.state.title, 'На обмен');
+      await tap(find.byTooltip('К коллекции'));
+      await tap(find.text('Моя коллекция'));
+      await waitFor(() => find.byType(CollectionPage).evaluate().isNotEmpty);
+      await tap(find.text('Сканировать карту'));
       await tap(find.text('Из фото'));
       await waitFor(
         () => find.text('В коллекциях: 3 · Opt').evaluate().isNotEmpty,
       );
+      expect(model.state.additions.length, 2);
       await tap(find.text('Проверить · 1'));
       await tap(find.widgetWithText(ListTile, 'Opt'));
       await tap(find.text(ru.detail));

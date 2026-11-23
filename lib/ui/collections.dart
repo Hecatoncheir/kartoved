@@ -14,9 +14,15 @@ import 'collection_browser.dart';
 import 'album.dart';
 import 'backup_panel.dart';
 import 'catalog_search.dart';
+import 'picture.dart';
+
+Future<void> _openScanner(BuildContext context) =>
+    Navigator.of(context)
+        .push<void>(MaterialPageRoute(builder: (_) => const Scanner()));
 
 class CollectionsPage extends StatelessWidget {
   const CollectionsPage({super.key});
+
   Future<void> _create(BuildContext context) async {
     final title = await showDialog<String>(
       context: context,
@@ -27,22 +33,82 @@ class CollectionsPage extends StatelessWidget {
     if (context.mounted) await _open(context);
   }
 
-  Future<void> _open(BuildContext context) => Navigator.of(context)
-      .push<void>(MaterialPageRoute(builder: (_) => const CollectionPage()));
+  Future<void> _open(BuildContext context, {String? initialName}) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => CollectionPage(initialName: initialName),
+        ),
+      );
+
+  Future<void> _openAlbum(BuildContext context, int id, {String? name}) async {
+    final model = context.read<AppModel>();
+    await model.select(id);
+    if (context.mounted &&
+        model.state.folder == id &&
+        ModalRoute.isCurrentOf(context) == true) {
+      await _open(context, initialName: name);
+    }
+  }
+
+  Future<void> _scan(BuildContext context) async {
+    final model = context.read<AppModel>();
+    final groups = model.state.groups;
+    if (groups.isEmpty) return;
+    final folder = groups.length == 1
+        ? groups.single.id
+        : await panel<int>(context, _ScanDestination(groups));
+    if (!context.mounted || folder == null) return;
+    await model.select(folder);
+    if (context.mounted &&
+        model.state.folder == folder &&
+        ModalRoute.isCurrentOf(context) == true) {
+      await _openScanner(context);
+    }
+  }
+
+  Future<void> _catalog(BuildContext context, {bool mine = false}) async {
+    final model = context.read<AppModel>();
+    final catalog = model.state.catalog;
+    if (catalog == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => CatalogSearchPage(catalog, model, initialMine: mine),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => BlocBuilder<AppModel, LibraryState>(
     builder: (context, state) {
       final model = context.read<AppModel>();
+      final ready = state.catalog != null;
+      final scan = ready && state.groups.isNotEmpty
+          ? () => _scan(context)
+          : null;
+      final search = ready ? () => _catalog(context) : null;
       return Scaffold(
         appBar: AppBar(
           title: const Row(
             children: [
-              Mark(size: 32, color: ink),
-              SizedBox(width: 8),
-              Text('Картовед'),
+              _BrandMark(),
+              SizedBox(width: 9),
+              Flexible(
+                child: Text('Картовед', overflow: TextOverflow.ellipsis),
+              ),
             ],
           ),
+          titleTextStyle: const TextStyle(
+            color: paper,
+            fontFamily: headingFont,
+            fontSize: 23,
+            fontWeight: FontWeight.w900,
+          ),
           actions: [
+            IconButton(
+              tooltip: 'Найти карту по названию',
+              onPressed: search,
+              icon: const Icon(Icons.search_rounded),
+            ),
             IconButton(
               tooltip: 'Резервная копия',
               onPressed: state.groups.isEmpty
@@ -52,7 +118,7 @@ class CollectionsPage extends StatelessWidget {
             ),
             IconButton(
               tooltip: 'База карт',
-              onPressed: state.catalog == null
+              onPressed: !ready
                   ? null
                   : () => panel<void>(context, CatalogPanel(model)),
               icon: const Icon(Icons.storage_rounded),
@@ -60,68 +126,292 @@ class CollectionsPage extends StatelessWidget {
           ],
         ),
         body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                AlbumHeader(
-                  total: state.groups.fold(0, (sum, g) => sum + g.count),
-                  search: state.catalog == null
-                      ? null
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute<void>(
-                            builder: (_) =>
-                                CatalogSearchPage(state.catalog!, model),
-                          ),
-                        ),
-                ),
-                const SizedBox(height: 16),
-                if (state.error != null)
-                  TextButton(
-                    onPressed: model.initialize,
-                    child: Text('${state.error}. Повторить'),
-                  ),
-                if (state.catalog == null && state.error == null)
-                  const LinearProgressIndicator(),
-                Expanded(
-                  child: TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0, end: state.groups.isEmpty ? 0 : 1),
-                    duration: MediaQuery.disableAnimationsOf(context)
-                        ? Duration.zero
-                        : const Duration(milliseconds: 240),
-                    curve: Curves.easeOutCubic,
-                    builder: (_, value, child) => Transform.translate(
-                      offset: Offset(0, 10 * (1 - value)),
-                      child: Opacity(opacity: value, child: child),
-                    ),
-                    child: ListView.separated(
-                      itemCount: state.groups.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (c, i) {
-                        final group = state.groups[i];
-                        return AlbumTile(group, () async {
-                          await model.select(group.id);
-                          if (context.mounted) await _open(context);
-                        });
-                      },
-                    ),
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: state.catalog == null
-                      ? null
-                      : () => _create(context),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Создать коллекцию'),
-                ),
-              ],
+          bottom: false,
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1080),
+              child: _LibraryContent(
+                state: state,
+                onRetry: model.initialize,
+                onScan: scan,
+                onCreate: ready ? () => _create(context) : null,
+                onOpenAlbum: (id) => _openAlbum(context, id),
+                onBrowse: ready ? () => _catalog(context, mine: true) : null,
+                onOpenRecent: (entry) =>
+                    _openAlbum(context, entry.folder, name: entry.card.name),
+              ),
             ),
           ),
         ),
+        bottomNavigationBar: _LibraryNavigation(
+          onScan: scan,
+          onCatalog: search,
+        ),
       );
     },
+  );
+}
+
+class _BrandMark extends StatelessWidget {
+  const _BrandMark();
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: butter,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: const Padding(
+      padding: EdgeInsets.all(5),
+      child: Mark(size: 24, color: ink),
+    ),
+  );
+}
+
+class _LibraryNavigation extends StatelessWidget {
+  const _LibraryNavigation({required this.onScan, required this.onCatalog});
+
+  final VoidCallback? onScan;
+  final VoidCallback? onCatalog;
+
+  @override
+  Widget build(BuildContext context) => NavigationBar(
+    height: 68,
+    destinations: [
+      const NavigationDestination(
+        icon: Icon(Icons.collections_bookmark_outlined, color: butter),
+        label: 'Коллекции',
+      ),
+      NavigationDestination(
+        enabled: onScan != null,
+        icon: DecoratedBox(
+          decoration: BoxDecoration(
+            color: onScan == null ? raised : butter,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 12),
+            child: Icon(
+              Icons.center_focus_strong,
+              color: onScan == null ? muted : ink,
+            ),
+          ),
+        ),
+        label: 'Сканер',
+      ),
+      NavigationDestination(
+        enabled: onCatalog != null,
+        icon: const Icon(Icons.grid_view_rounded),
+        label: 'Каталог',
+      ),
+    ],
+    onDestinationSelected: (index) {
+      switch (index) {
+        case 1:
+          onScan?.call();
+        case 2:
+          onCatalog?.call();
+      }
+    },
+  );
+}
+
+class _LibraryContent extends StatelessWidget {
+  const _LibraryContent({
+    required this.state,
+    required this.onRetry,
+    required this.onScan,
+    required this.onCreate,
+    required this.onOpenAlbum,
+    required this.onBrowse,
+    required this.onOpenRecent,
+  });
+
+  final LibraryState state;
+  final VoidCallback onRetry;
+  final VoidCallback? onScan;
+  final VoidCallback? onCreate;
+  final ValueChanged<int> onOpenAlbum;
+  final VoidCallback? onBrowse;
+  final ValueChanged<LibraryAddition> onOpenRecent;
+
+  @override
+  Widget build(BuildContext context) => CustomScrollView(
+    slivers: [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+        sliver: SliverList.list(
+          children: [
+            AlbumHeader(
+              albums: state.groups.length,
+              cards: state.groups.fold(0, (sum, group) => sum + group.count),
+              onScan: onScan,
+            ),
+            if (state.error case final error?)
+              TextButton(onPressed: onRetry, child: Text('$error. Повторить'))
+            else if (state.catalog == null)
+              const LinearProgressIndicator(),
+            const SizedBox(height: 16),
+            _LibrarySection(
+              'Альбомы',
+              OutlinedButton.icon(
+                onPressed: onCreate,
+                icon: const Icon(Icons.add),
+                label: const Text('Создать коллекцию'),
+              ),
+            ),
+          ],
+        ),
+      ),
+      if (state.groups.isNotEmpty)
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          sliver: AlbumShelf(state.groups, onOpenAlbum),
+        ),
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 22),
+        sliver: SliverList.list(
+          children: [
+            _LibrarySection(
+              'Недавно добавленные',
+              TextButton.icon(
+                onPressed: onBrowse,
+                icon: const Icon(Icons.arrow_forward, size: 16),
+                iconAlignment: IconAlignment.end,
+                style: TextButton.styleFrom(
+                  foregroundColor: aqua,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                label: const Text('Все карты'),
+              ),
+            ),
+            const SizedBox(height: 6),
+            _RecentAdditions(state, onOpenRecent),
+          ],
+        ),
+      ),
+    ],
+  );
+}
+
+class _LibrarySection extends StatelessWidget {
+  const _LibrarySection(this.title, this.action);
+
+  final String title;
+  final Widget action;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    alignment: WrapAlignment.spaceBetween,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    spacing: 8,
+    children: [
+      Text(
+        title,
+        style: const TextStyle(
+          fontFamily: headingFont,
+          fontSize: 21,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+      action,
+    ],
+  );
+}
+
+class _RecentAdditions extends StatelessWidget {
+  const _RecentAdditions(this.state, this.onOpen);
+
+  final LibraryState state;
+  final ValueChanged<LibraryAddition> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final albums = {for (final group in state.groups) group.id: group.name};
+    return Material(
+      color: surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        side: const BorderSide(color: outline),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: state.additions.isEmpty
+          ? const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Подтверждённые карты появятся здесь',
+                style: TextStyle(color: muted),
+              ),
+            )
+          : Column(
+              children: [
+                for (final (index, entry) in state.additions.indexed) ...[
+                  if (index > 0) const Divider(height: 1),
+                  ListTile(
+                    leading: SizedBox(
+                      width: 34,
+                      height: 48,
+                      child: ExcludeSemantics(child: CardPicture(entry.card)),
+                    ),
+                    title: Text(
+                      entry.card.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(text: entry.card.detail, style: codeText),
+                          if (albums[entry.folder] case final album?)
+                            TextSpan(text: ' · $album'),
+                        ],
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Text('×${entry.quantity}', style: codeText),
+                    onTap: () => onOpen(entry),
+                  ),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+class _ScanDestination extends StatelessWidget {
+  const _ScanDestination(this.groups);
+
+  final List<CardGroup> groups;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const SheetHeading('В какой альбом сканировать?'),
+      const SizedBox(height: 12),
+      Flexible(
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: groups.length,
+          itemBuilder: (_, index) {
+            final group = groups[index];
+            return ListTile(
+              leading: const Icon(Icons.collections_bookmark_outlined),
+              title: Text(group.name),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.pop(context, group.id),
+            );
+          },
+        ),
+      ),
+    ],
   );
 }
 
@@ -410,10 +700,7 @@ class _ScanButton extends StatelessWidget {
                 foregroundColor: const Color(0xff090a07),
                 elevation: 0,
               ),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(builder: (_) => const Scanner()),
-              ),
+              onPressed: () => _openScanner(context),
               icon: const Icon(Icons.center_focus_strong),
               label: const Text('Сканировать карту'),
             ),

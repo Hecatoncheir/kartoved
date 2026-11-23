@@ -66,7 +66,7 @@ class _CardDestinationState extends State<CardDestination> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SheetHeading(widget.card.name),
-                      Text(widget.card.detail),
+                      Text(widget.card.detail, style: codeText),
                       if (moving) Text(foil ? 'Фольга' : 'Обычная'),
                     ],
                   ),
@@ -92,6 +92,7 @@ class _CardDestinationState extends State<CardDestination> {
             const SizedBox(height: 12),
             TextField(
               controller: copies,
+              style: const TextStyle(fontFamily: monoFont),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: InputDecoration(

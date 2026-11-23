@@ -28,6 +28,7 @@ class LibraryState {
     this.holdings = const {},
     this.folder = 1,
     this.recent = const [],
+    this.additions = const [],
     this.flags = const {},
     this.reviews = const {},
     this.error,
@@ -39,6 +40,7 @@ class LibraryState {
       holdings[name]?.values.fold<int>(0, (n, qty) => n + qty) ?? 0;
   final int folder;
   final List<ScanEntry> recent;
+  final List<LibraryAddition> additions;
   final Set<String> flags;
   final Map<int, ScanReview> reviews;
   final String? error;
@@ -92,6 +94,7 @@ class AppModel extends Cubit<LibraryState> {
     final revision = ++_revision;
     final groups = await history.folders();
     final timeline = await history.timeline(folder);
+    final additions = await history.latestAdditions();
     final flags = await history.flags(folder);
     final holdings = await history.holdings();
     if (revision != _revision || isClosed) return;
@@ -103,6 +106,7 @@ class AppModel extends Cubit<LibraryState> {
         holdings: holdings,
         folder: folder,
         recent: timeline.recent,
+        additions: additions,
         reviews: timeline.reviews,
         flags: flags,
       ),
@@ -187,6 +191,12 @@ class AppModel extends Cubit<LibraryState> {
                 : g,
         ],
         recent: [(sequence: seq, card: card, quantity: 1), ...state.recent],
+        additions: review == null
+            ? [
+                (folder: folder, card: card, quantity: 1),
+                ...state.additions.take(2),
+              ]
+            : state.additions,
       ),
     );
     return seq;
