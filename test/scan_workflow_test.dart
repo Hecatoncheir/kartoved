@@ -61,7 +61,7 @@ void main() {
   testWidgets(
     'Скан сохраняется сразу со звуком и фото даже при скрытой рамке',
     (tester) async {
-      tester.view.physicalSize = const Size(390, 780);
+      tester.view.physicalSize = const Size(390, 620);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       sqfliteFfiInit();
@@ -169,7 +169,8 @@ void main() {
       await tap(find.text('Моя коллекция'));
       await waitFor(() => find.byType(CollectionPage).evaluate().isNotEmpty);
       await tap(find.text('Сканировать карту'));
-      expect(find.byType(ScanFrame), findsOneWidget);
+      final frame = find.byType(ScanFrame);
+      final initialWindow = tester.widget<ScanFrame>(frame).window;
       await tap(find.byTooltip('Меню сканера'));
       await tap(find.text('Скрыть рамку и стекло'));
       expect(find.byType(ScanFrame), findsNothing);
@@ -193,12 +194,17 @@ void main() {
       );
       await waitFor(() => thumbnail.evaluate().isNotEmpty);
       expect(scanPhoto(en).readAsBytesSync(), photo);
+      await tap(find.byTooltip('Меню сканера'));
+      await tap(find.text('Показать рамку и стекло'));
+      expect(tester.widget<ScanFrame>(frame).window, initialWindow);
+      await tap(find.byTooltip('Меню сканера'));
+      await tap(find.text('Скрыть рамку и стекло'));
       await tap(find.byTooltip('К коллекции'));
       await tap(find.text('Сканировать карту'));
       expect(find.byType(ScanFrame), findsNothing);
       await tap(find.byTooltip('Меню сканера'));
       await tap(find.text('Показать рамку и стекло'));
-      expect(find.byType(ScanFrame), findsOneWidget);
+      expect(tester.widget<ScanFrame>(frame).window, initialWindow);
       await tap(find.byTooltip('Меню сканера'));
       await tap(find.text('Настройки стопки'));
       await tap(find.text('Язык'));

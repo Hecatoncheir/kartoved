@@ -548,20 +548,21 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         ? null
         : state.recent.where((e) => e.sequence == sequence).firstOrNull;
     final top = stripTop + strip + 8;
-    final bottom =
-        bounds.maxHeight -
-        insets.bottom -
-        104 -
-        (last == null ? 0 : 36) -
-        (state.reviews.isEmpty ? 0 : 48);
+    final bottom = bounds.maxHeight - insets.bottom - 104;
+    // Статус скана и кнопка проверки могут появиться над нижней панелью.
+    final frameBottom = bottom - 36 - 48;
     final width = math.min(
       bounds.maxWidth * .77,
-      math.max(20.0, (bottom - top) * ScanFrame.aspectRatio),
+      math.max(20.0, (frameBottom - top) * ScanFrame.aspectRatio),
     );
+    final height = width / ScanFrame.aspectRatio;
     final rect = Rect.fromCenter(
-      center: Offset(bounds.maxWidth / 2, (top + bottom) / 2),
+      center: Offset(
+        bounds.maxWidth / 2,
+        math.min((top + bottom) / 2, frameBottom - height / 2),
+      ),
       width: width,
-      height: width / ScanFrame.aspectRatio,
+      height: height,
     );
     return Stack(
       fit: StackFit.expand,
