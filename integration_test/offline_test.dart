@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:kartoved/data/frame.dart';
@@ -24,11 +25,13 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets('Холодный старт и добавление карты без сети', (tester) async {
     final model = AppModel(CatalogStore(), History());
+    debugPrint('Автономная проверка: загрузка каталога');
     await model.initialize();
     expect(model.initialError, isNull);
     expect(model.catalog!.spec.count, greaterThan(50000));
     final temp = await Directory.systemTemp.createTemp('kartoved-test');
     try {
+      debugPrint('Автономная проверка: распознавание контрольного фото');
       final photo = File(p.join(temp.path, 'sample.jpg'));
       await photo.writeAsBytes(base64Decode(englishPhoto));
       final cards = await model.recognize(photo.path);
@@ -67,6 +70,7 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
         options: candidates,
       );
       expect(ru.language, 'ru');
+      debugPrint('Автономная проверка: распознавание кадра NV21');
       final frame = _cameraFrame(await russian.readAsBytes());
       final liveMatches = await model.recognizeFrame(frame);
       final scan = ScanCubit()..toggle();
@@ -98,8 +102,10 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
       final seq = await model.save(conflict.card, review: conflict.review);
       expect(model.state.reviews[seq]?.batchLabel, 'ELD');
       final russianFolder = model.state.folder;
+      debugPrint('Автономная проверка: системный диалог сохранения');
       expect(await model.saveBackup(), isTrue);
       await model.create('После копирования');
+      debugPrint('Автономная проверка: системный диалог восстановления');
       final backup = await model.openBackup();
       expect(backup?.pending, 1);
       await model.restoreBackup(backup!);
@@ -133,6 +139,7 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
       await model.select(1);
       expect(model.state.recent.single.card.id, english.id);
       final old = model.catalog!;
+      debugPrint('Автономная проверка: обновление каталога');
       final next = CatalogSpec({
         ...old.spec.raw,
         'version': 'acceptance-update',

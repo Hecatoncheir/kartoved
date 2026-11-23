@@ -79,6 +79,10 @@ void main() {
       scrollable: find.ancestor(of: heading, matching: find.byType(Scrollable)),
     );
     expect(album, findsOneWidget);
+    final shelf = tester.getRect(find.byType(ListView));
+    expect(shelf.left, 0);
+    expect(shelf.right, 320);
+    expect(tester.getRect(find.byKey(const ValueKey(1))).left, 16);
     expect(tester.takeException(), isNull);
   });
 

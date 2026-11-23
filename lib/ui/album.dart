@@ -192,6 +192,7 @@ class _Lamp extends CustomPainter {
 class AlbumShelf extends StatelessWidget {
   const AlbumShelf(this.groups, this.onOpen, {super.key});
 
+  static const gutter = 16.0;
   final List<CardGroup> groups;
   final ValueChanged<int> onOpen;
 
@@ -199,30 +200,36 @@ class AlbumShelf extends StatelessWidget {
   Widget build(BuildContext context) => SliverLayoutBuilder(
     builder: (context, constraints) {
       final height = 131 + 3 * MediaQuery.textScalerOf(context).scale(16);
-      final shelf = constraints.crossAxisExtent < 600
+      final contentWidth = constraints.crossAxisExtent - 2 * gutter;
+      const padding = EdgeInsets.symmetric(horizontal: gutter);
+      final shelf = contentWidth < 600
           ? SliverToBoxAdapter(
               child: SizedBox(
                 height: height,
                 child: ListView.separated(
+                  padding: padding,
                   scrollDirection: Axis.horizontal,
                   itemCount: groups.length,
                   separatorBuilder: (_, _) => const SizedBox(width: 10),
                   itemBuilder: (context, index) => SizedBox(
-                    width: (constraints.crossAxisExtent * .41).clamp(143, 220),
+                    width: (contentWidth * .41).clamp(143, 220),
                     child: _tile(index),
                   ),
                 ),
               ),
             )
-          : SliverGrid.builder(
-              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 340,
-                mainAxisExtent: height + 40,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
+          : SliverPadding(
+              padding: padding,
+              sliver: SliverGrid.builder(
+                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 340,
+                  mainAxisExtent: height + 40,
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 14,
+                ),
+                itemCount: groups.length,
+                itemBuilder: (_, index) => _tile(index),
               ),
-              itemCount: groups.length,
-              itemBuilder: (_, index) => _tile(index),
             );
       return TweenAnimationBuilder<double>(
         tween: Tween(begin: 0, end: 1),

@@ -264,11 +264,7 @@ class _LibraryContent extends StatelessWidget {
           ],
         ),
       ),
-      if (state.groups.isNotEmpty)
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          sliver: AlbumShelf(state.groups, onOpenAlbum),
-        ),
+      if (state.groups.isNotEmpty) AlbumShelf(state.groups, onOpenAlbum),
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 22),
         sliver: SliverList.list(
