@@ -37,10 +37,12 @@ class ResultSheet extends StatefulWidget {
     this.initial, {
     super.key,
     this.action = 'В коллекцию',
+    this.owned,
   });
   final List<Match> matches;
   final Edition initial;
   final String action;
+  final int Function(String name)? owned;
   @override
   State<ResultSheet> createState() => _ResultSheetState();
 }
@@ -76,6 +78,8 @@ class _ResultSheetState extends State<ResultSheet> {
                     ),
                   ),
                   Text(card.detail, style: const TextStyle(color: muted)),
+                  if (widget.owned case final count?)
+                    Text('В коллекциях · ${count(card.name)}'),
                 ],
               ),
             ),

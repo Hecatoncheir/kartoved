@@ -6,9 +6,12 @@ import 'backup.dart';
 import 'catalog.dart' show Edition;
 import 'review.dart';
 
+part 'move.dart';
+
 typedef CardGroup = ({int id, String name, int count});
 typedef ScanEntry = ({int sequence, Edition card, int quantity});
 typedef CardCount = ({Edition card, int quantity});
+typedef Holdings = Map<String, Map<int, int>>;
 typedef RemovedPrinting = ({
   int folder,
   Edition card,
@@ -137,16 +140,41 @@ class History {
     return rows.firstOrNull?['flagged'] as int? ?? (fallback ? 1 : 0);
   }
 
-  Future<int> add(Edition card, {int folder = 1, ScanReview? review}) =>
-      _db.transaction(
-        (db) async => db.insert('scans', {
-          ...card.row,
-          'folder': folder,
-          'qty': 1,
-          'flagged': review == null ? await _flag(db, folder, card) : 0,
-          'review': review?.encode(),
-        }),
-      );
+  Future<Holdings> holdings() async {
+    final rows = await _db.rawQuery(
+      'SELECT name,folder,SUM(qty) AS total FROM scans WHERE review IS NULL GROUP BY name,folder',
+    );
+    final result = <String, Map<int, int>>{};
+    for (final row in rows) {
+      final locations = result.putIfAbsent(row['name'] as String, () => {});
+      locations[row['folder'] as int] = row['total'] as int;
+    }
+    return result;
+  }
+
+  Future<int> add(
+    Edition card, {
+    int folder = 1,
+    ScanReview? review,
+    int quantity = 1,
+  }) => _db.transaction((db) async {
+    // Суммы в SQLite и файле резервной копии должны помещаться в 64 бита.
+    final total =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT SUM(qty) FROM scans'),
+        ) ??
+        0;
+    if (quantity < 1 || quantity > 0x7fffffffffffffff - total) {
+      throw RangeError('Проверьте количество экземпляров');
+    }
+    return db.insert('scans', {
+      ...card.row,
+      'folder': folder,
+      'qty': quantity,
+      'flagged': review == null ? await _flag(db, folder, card) : 0,
+      'review': review?.encode(),
+    });
+  });
 
   Future<void> confirm(int folder, int seq, Edition card) => _db.transaction((
     db,

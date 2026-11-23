@@ -25,6 +25,7 @@ class LibraryState {
   const LibraryState({
     this.catalog,
     this.groups = const [],
+    this.holdings = const {},
     this.folder = 1,
     this.recent = const [],
     this.flags = const {},
@@ -33,6 +34,9 @@ class LibraryState {
   });
   final Catalog? catalog;
   final List<CardGroup> groups;
+  final Holdings holdings;
+  int owned(String name) =>
+      holdings[name]?.values.fold<int>(0, (n, qty) => n + qty) ?? 0;
   final int folder;
   final List<ScanEntry> recent;
   final Set<String> flags;
@@ -89,12 +93,14 @@ class AppModel extends Cubit<LibraryState> {
     final groups = await history.folders();
     final timeline = await history.timeline(folder);
     final flags = await history.flags(folder);
+    final holdings = await history.holdings();
     if (revision != _revision || isClosed) return;
     _loadedRevision = revision;
     emit(
       LibraryState(
         catalog: _base,
         groups: groups,
+        holdings: holdings,
         folder: folder,
         recent: timeline.recent,
         reviews: timeline.reviews,
@@ -126,6 +132,7 @@ class AppModel extends Cubit<LibraryState> {
       });
 
   Future<void> restoreBackup(LibraryBackup backup) async {
+    _undoable = null;
     await history.restoreBackup(backup);
     await select(1);
   }
@@ -158,10 +165,17 @@ class AppModel extends Cubit<LibraryState> {
       await _refresh();
       return seq;
     }
+    final locations = state.holdings[card.name] ?? const <int, int>{};
     emit(
       LibraryState(
         catalog: catalog,
         folder: folder,
+        holdings: review != null
+            ? state.holdings
+            : {
+                ...state.holdings,
+                card.name: {...locations, folder: (locations[folder] ?? 0) + 1},
+              },
         flags: state.flags,
         reviews: review == null
             ? state.reviews
@@ -178,17 +192,39 @@ class AppModel extends Cubit<LibraryState> {
     return seq;
   }
 
+  Future<void> addFromCatalog(int folder, Edition card, int quantity) async {
+    await history.add(card, folder: folder, quantity: quantity);
+    await _refresh();
+  }
+
+  Future<CardMove> moveCards(int to, Edition card, int quantity) async {
+    final move = await history.moveCards(state.folder, to, card, quantity);
+    await _refresh();
+    _undoable = move;
+    return move;
+  }
+
+  CardMove? _undoable;
+  Future<void> undoMove(CardMove move) async {
+    if (_undoable != move) throw StateError('Коллекция уже изменилась');
+    _undoable = null;
+    await history.undoMove(move);
+    await _refresh();
+  }
+
   Future<void> confirmReview(int seq, Edition card) async {
     await history.confirm(state.folder, seq, card);
     await _refresh();
   }
 
   Future<void> discardScan(int seq, {bool pendingOnly = false}) async {
+    if (!pendingOnly) _undoable = null;
     await history.discard(state.folder, seq, pendingOnly: pendingOnly);
     await _refresh();
   }
 
   Future<void> replace(ScanEntry entry, Edition card) async {
+    _undoable = null;
     final folder = state.folder;
     await history.replace(folder, entry.sequence, card);
     await _refresh();
@@ -200,6 +236,7 @@ class AppModel extends Cubit<LibraryState> {
   }
 
   Future<RemovedPrinting> remove(Edition card) async {
+    _undoable = null;
     final removed = await history.remove(state.folder, card);
     await _refresh();
     return removed;
@@ -211,6 +248,7 @@ class AppModel extends Cubit<LibraryState> {
   }
 
   Future<void> takeOne(Edition card) async {
+    _undoable = null;
     await history.takeOne(state.folder, card);
     await _refresh();
   }

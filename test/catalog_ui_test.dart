@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kartoved/data/catalog.dart';
+import 'package:kartoved/model.dart';
 import 'package:kartoved/ui/card_tilt.dart';
 import 'package:kartoved/ui/catalog_search.dart';
 import 'package:material_ui/material_ui.dart';
@@ -23,7 +24,11 @@ void main() {
     tester,
   ) async {
     final catalog = _Catalog();
-    await tester.pumpWidget(MaterialApp(home: CatalogSearchPage(catalog)));
+    final model = AppModel(CatalogStore(), History());
+    addTearDown(model.close);
+    await tester.pumpWidget(
+      MaterialApp(home: CatalogSearchPage(catalog, model)),
+    );
     final field = find.byType(TextField);
     await tester.enterText(field, 'к');
     await tester.pump(const Duration(milliseconds: 180));

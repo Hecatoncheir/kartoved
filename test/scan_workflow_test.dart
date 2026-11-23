@@ -57,6 +57,11 @@ void main() {
       final db = (await tester.runAsync(() async {
         final path = p.join(directory.path, 'test.sqlite');
         await history.open(path: path);
+        await history.add(
+          en,
+          folder: await history.create('На обмен'),
+          quantity: 2,
+        );
         await model.save(ru);
         return openDatabase(path);
       }))!;
@@ -102,6 +107,9 @@ void main() {
 
       await tap(find.text('Сканировать карту'));
       await tap(find.text('Из фото'));
+      await waitFor(
+        () => find.text('В коллекциях: 3 · Opt').evaluate().isNotEmpty,
+      );
       await tap(find.text('Проверить · 1'));
       await tap(find.widgetWithText(ListTile, 'Opt'));
       await tap(find.text(ru.detail));
@@ -121,8 +129,12 @@ void main() {
       await tap(find.text('Применить'));
       expect(find.text('ELD · RU'), findsOneWidget);
       await tap(find.text('Из фото'));
+      await waitFor(() => find.text('В коллекциях · 3').evaluate().isNotEmpty);
       await tap(find.text('В коллекцию'));
       await waitFor(() => model.state.printings.single.quantity == 2);
+      await waitFor(
+        () => find.text('В коллекциях: 4 · Opt').evaluate().isNotEmpty,
+      );
       expect(model.state.reviews, isEmpty);
       model.matches = const [
         Match([en]),

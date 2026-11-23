@@ -72,7 +72,8 @@ class CollectionsPage extends StatelessWidget {
                       : () => Navigator.push(
                           context,
                           MaterialPageRoute<void>(
-                            builder: (_) => CatalogSearchPage(state.catalog!),
+                            builder: (_) =>
+                                CatalogSearchPage(state.catalog!, model),
                           ),
                         ),
                 ),
@@ -161,7 +162,8 @@ class _NameDialogState extends State<_NameDialog> {
 }
 
 class CollectionPage extends StatelessWidget {
-  const CollectionPage({super.key});
+  const CollectionPage({super.key, this.initialName});
+  final String? initialName;
   Future<void> _flag(BuildContext context, Edition card, bool value) async {
     try {
       await context.read<AppModel>().setFlag(card, value);
@@ -350,6 +352,7 @@ class CollectionPage extends StatelessWidget {
                             ),
                           )
                         : CollectionBrowser(
+                            initialName: initialName,
                             key: ValueKey(state.folder),
                             catalog: state.catalog,
                             items: items,

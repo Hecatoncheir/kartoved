@@ -247,7 +247,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     }
     final card = await panel<Edition>(
       context,
-      ResultSheet(matches, decision.card),
+      ResultSheet(matches, decision.card, owned: library.state.owned),
     );
     if (card != null && active) {
       await _save((card: card, review: null), matches);
@@ -448,11 +448,16 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     final insets = MediaQuery.paddingOf(context);
     final stripTop = insets.top + 70;
     final strip = math.min(84.0, bounds.maxHeight * .12);
+    final sequence = scan.state.lastScan;
+    final last = sequence == null
+        ? null
+        : state.recent.where((e) => e.sequence == sequence).firstOrNull;
     final top = stripTop + strip + 8;
     final bottom =
         bounds.maxHeight -
         insets.bottom -
         104 -
+        (last == null ? 0 : 36) -
         (state.reviews.isEmpty ? 0 : 48);
     final width = math.min(
       bounds.maxWidth * .77,
@@ -497,14 +502,13 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                   pending: state.reviews.keys.toSet(),
                 ),
               ),
-              if (scan.state.lastScan case final seq?
-                  when state.recent.any((e) => e.sequence == seq))
+              if (last != null)
                 Padding(
                   padding: const EdgeInsets.only(right: 10),
                   child: RoundAction(
                     Icons.undo_rounded,
                     'Отменить последнее добавление',
-                    modal || writing ? null : () => _undo(seq),
+                    modal || writing ? null : () => _undo(last.sequence),
                   ),
                 ),
             ],
@@ -527,6 +531,25 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (last != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Frost(
+                    radius: 12,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 5,
+                      ),
+                      child: Text(
+                        'В коллекциях: ${state.owned(last.card.name)} · ${last.card.name}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: paper),
+                      ),
+                    ),
+                  ),
+                ),
               if (state.reviews.isNotEmpty)
                 ReviewButton(
                   state.reviews.length,

@@ -8,6 +8,8 @@ import '../data/catalog.dart';
 import '../model.dart';
 import 'picture.dart';
 import 'style.dart';
+import 'card_destination.dart';
+import 'sheets.dart';
 
 class CollectionDetail extends StatefulWidget {
   const CollectionDetail(this.row, {super.key});
@@ -55,6 +57,57 @@ class _CollectionDetailState extends State<CollectionDetail> {
     } finally {
       if (mounted) setState(() => saving = false);
     }
+  }
+
+  Future<void> _move(AppModel model, int available) async {
+    final others = model.state.groups
+        .where((g) => g.id != model.state.folder)
+        .toList();
+    final messenger = ScaffoldMessenger.of(context);
+    if (others.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Сначала создайте вторую коллекцию')),
+      );
+      return;
+    }
+    final result = await panel<CardSelection>(
+      context,
+      CardDestination(
+        card: selected,
+        groups: others,
+        initialFolder: others.first.id,
+        available: available,
+      ),
+    );
+    if (result == null || !mounted) return;
+    final receipt = await model.moveCards(
+      result.folder.id,
+      result.card,
+      result.quantity,
+    );
+    if (!mounted) return;
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('В «${result.folder.name}» · ${result.quantity}'),
+        action: SnackBarAction(
+          label: 'Отменить',
+          onPressed: () async {
+            try {
+              await model.undoMove(receipt);
+            } catch (_) {
+              if (messenger.mounted) {
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Не удалось отменить перемещение'),
+                  ),
+                );
+              }
+            }
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -152,6 +205,14 @@ class _CollectionDetailState extends State<CollectionDetail> {
                     ],
                   ),
                 ),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(foregroundColor: butter),
+                onPressed: saving || quantity == 0
+                    ? null
+                    : () => _write(() => _move(model, quantity)),
+                icon: const Icon(Icons.drive_file_move_outline),
+                label: const Text('Переместить'),
               ),
               if (widget.row.multiple) ...[
                 const SizedBox(height: 20),

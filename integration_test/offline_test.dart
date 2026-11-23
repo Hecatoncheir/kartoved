@@ -111,6 +111,7 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
       await model.select(russianFolder);
       expect(model.state.reviews[seq]?.batchLabel, 'ELD');
       expect(await model.export(), isNot(contains("Bouncer's Beatdown")));
+      expect(model.state.owned(english.name), 1);
       await model.confirmReview(seq, live);
       expect(model.state.printings.single.card.language, 'ru');
       await model.discardScan(seq);
@@ -122,6 +123,13 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
         await model.export(),
         contains('"2","Bouncer\'s Beatdown","SNC","","Russian","","135"'),
       );
+      final ring = rings.firstWhere((e) => e.set == 'mps' && e.number == '24');
+      await model.addFromCatalog(russianFolder, ring, 4);
+      final move = await model.moveCards(1, ring, 2);
+      expect(model.state.holdings['Sol Ring'], {russianFolder: 2, 1: 2});
+      expect(model.state.owned(english.name), 3);
+      await model.undoMove(move);
+      expect(model.state.holdings['Sol Ring'], {russianFolder: 4});
       await model.select(1);
       expect(model.state.recent.single.card.id, english.id);
       final old = model.catalog!;

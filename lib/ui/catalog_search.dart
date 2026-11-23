@@ -4,18 +4,22 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../data/catalog.dart';
+import '../model.dart';
+import 'collections.dart';
+import 'card_destination.dart';
 import 'picture.dart';
 import 'sheets.dart';
-import 'style.dart';
 
 class NameSearch extends Cubit<AsyncSnapshot<List<String>>> {
   NameSearch(this.lookup) : super(const AsyncSnapshot.nothing());
   final Future<List<String>> Function(String) lookup;
   Timer? timer;
   String query = '';
+  int revision = 0;
 
   void search(String text) {
     timer?.cancel();
+    final request = ++revision;
     query = text.trim();
     if (query.isEmpty) {
       emit(const AsyncSnapshot.nothing());
@@ -23,17 +27,20 @@ class NameSearch extends Cubit<AsyncSnapshot<List<String>>> {
     }
     emit(const AsyncSnapshot.waiting());
     final term = query;
-    timer = Timer(const Duration(milliseconds: 160), () => _read(term));
+    timer = Timer(
+      const Duration(milliseconds: 160),
+      () => _read(term, request),
+    );
   }
 
-  Future<void> _read(String term) async {
+  Future<void> _read(String term, int request) async {
     try {
       final rows = await lookup(term);
-      if (!isClosed && query == term) {
+      if (!isClosed && revision == request) {
         emit(AsyncSnapshot.withData(ConnectionState.done, rows));
       }
     } catch (error) {
-      if (!isClosed && query == term) {
+      if (!isClosed && revision == request) {
         emit(AsyncSnapshot.withError(ConnectionState.done, error));
       }
     }
@@ -47,15 +54,19 @@ class NameSearch extends Cubit<AsyncSnapshot<List<String>>> {
 }
 
 class CatalogSearchPage extends StatefulWidget {
-  const CatalogSearchPage(this.catalog, {super.key});
+  const CatalogSearchPage(this.catalog, this.model, {super.key});
   final Catalog catalog;
+  final AppModel model;
   @override
   State<CatalogSearchPage> createState() => _CatalogSearchPageState();
 }
 
 class _CatalogSearchPageState extends State<CatalogSearchPage> {
   final text = TextEditingController();
-  late final search = NameSearch(widget.catalog.searchNames);
+  bool mine = false;
+  late final search = NameSearch(
+    (term) => widget.catalog.searchNames(term, limit: mine ? -1 : 61),
+  );
   @override
   void dispose() {
     text.dispose();
@@ -93,66 +104,192 @@ class _CatalogSearchPageState extends State<CatalogSearchPage> {
       ],
     ),
     body: SafeArea(
-      child: BlocBuilder<NameSearch, AsyncSnapshot<List<String>>>(
-        bloc: search,
-        builder: (context, state) {
-          if (state.hasError) {
-            return Center(
-              child: TextButton(
-                onPressed: () => search.search(text.text),
-                child: const Text('Повторить поиск'),
-              ),
-            );
-          }
-          if (state.connectionState == ConnectionState.waiting) {
-            return const Align(
-              alignment: Alignment.topCenter,
-              child: LinearProgressIndicator(),
-            );
-          }
-          if (!state.hasData) {
-            return const Center(child: Text('Введите название карты'));
-          }
-          final names = state.requireData;
-          if (names.isEmpty) return const Center(child: Text('Совпадений нет'));
-          return ListView.separated(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            itemCount: names.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (context, i) {
-              if (i == 60) {
-                return const ListTile(
-                  subtitle: Text('Уточните название, чтобы сузить поиск'),
-                );
-              }
-              return ListTile(
-                title: Text(names[i]),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => _Printings(widget.catalog, names[i]),
-                  ),
-                ),
-              );
+      child: Column(
+        children: [
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: false, label: Text('Каталог')),
+              ButtonSegment(value: true, label: Text('Мои карты')),
+            ],
+            selected: {mine},
+            onSelectionChanged: (choice) {
+              setState(() => mine = choice.single);
+              search.search(text.text);
             },
-          );
-        },
+          ),
+          Expanded(
+            child: BlocBuilder<NameSearch, AsyncSnapshot<List<String>>>(
+              bloc: search,
+              builder: _results,
+            ),
+          ),
+        ],
       ),
     ),
+  );
+
+  Widget _results(BuildContext context, AsyncSnapshot<List<String>> state) {
+    if (state.hasError) {
+      return Center(
+        child: TextButton(
+          onPressed: () => search.search(text.text),
+          child: const Text('Повторить поиск'),
+        ),
+      );
+    }
+    if (state.connectionState == ConnectionState.waiting) {
+      return const Align(
+        alignment: Alignment.topCenter,
+        child: LinearProgressIndicator(),
+      );
+    }
+    if (mine) {
+      return _OwnedResults(widget.model, search.query, state.data ?? const []);
+    }
+    if (!state.hasData) {
+      return const Center(child: Text('Введите название карты'));
+    }
+    final names = state.requireData;
+    if (names.isEmpty) {
+      return const Center(child: Text('Совпадений нет'));
+    }
+    return _catalogNames(names);
+  }
+
+  Widget _catalogNames(List<String> names) => ListView.separated(
+    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+    itemCount: names.length,
+    separatorBuilder: (_, _) => const Divider(height: 1),
+    itemBuilder: (context, i) {
+      if (i == 60) {
+        return const ListTile(
+          subtitle: Text('Уточните название, чтобы сузить поиск'),
+        );
+      }
+      return ListTile(
+        title: Text(names[i]),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => _Printings(widget.catalog, names[i], widget.model),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _OwnedResults extends StatelessWidget {
+  const _OwnedResults(this.model, this.query, this.aliases);
+  final AppModel model;
+  final String query;
+  final List<String> aliases;
+
+  Future<void> _open(BuildContext context, int folder, String name) async {
+    FocusScope.of(context).unfocus();
+    await model.select(folder);
+    if (!context.mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => BlocProvider.value(
+          value: model,
+          child: CollectionPage(initialName: name),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => BlocBuilder<AppModel, LibraryState>(
+    bloc: model,
+    builder: (_, state) {
+      final matches = aliases.toSet();
+      final term = query.toLowerCase().replaceAll('’', "'");
+      final names =
+          state.holdings.keys
+              .where(
+                (name) =>
+                    matches.contains(name) ||
+                    name.toLowerCase().replaceAll('’', "'").contains(term),
+              )
+              .toList()
+            ..sort();
+      if (names.isEmpty) {
+        return const Center(child: Text('В коллекциях совпадений нет'));
+      }
+      return ListView.builder(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        itemCount: names.length,
+        itemBuilder: (context, index) {
+          final name = names[index];
+          final places = state.holdings[name]!;
+          return ListTile(
+            title: Text(name),
+            trailing: Text('×${state.owned(name)}'),
+            subtitle: Wrap(
+              spacing: 6,
+              children: [
+                for (final group in state.groups)
+                  if (places[group.id] case final count?)
+                    ActionChip(
+                      label: Text('${group.name} · $count'),
+                      onPressed: () => _open(context, group.id, name),
+                    ),
+              ],
+            ),
+          );
+        },
+      );
+    },
   );
 }
 
 class _Printings extends StatefulWidget {
-  const _Printings(this.catalog, this.name);
+  const _Printings(this.catalog, this.name, this.model);
   final Catalog catalog;
   final String name;
+  final AppModel model;
   @override
   State<_Printings> createState() => _PrintingsState();
 }
 
 class _PrintingsState extends State<_Printings> {
   late Future<List<Edition>> editions = widget.catalog.byName(widget.name);
+  String filter = '';
+  Future<void> _add(Edition card) async {
+    final model = widget.model;
+    final result = await panel<CardSelection>(
+      context,
+      CardDestination(
+        card: card,
+        groups: model.state.groups,
+        initialFolder: model.state.folder,
+      ),
+    );
+    if (result == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await model.addFromCatalog(
+        result.folder.id,
+        result.card,
+        result.quantity,
+      );
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Добавлено в «${result.folder.name}» · ${result.quantity}',
+          ),
+        ),
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Не удалось добавить карту')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(widget.name)),
@@ -173,37 +310,43 @@ class _PrintingsState extends State<_Printings> {
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final cards = snap.requireData;
-          return ListView.builder(
-            itemCount: cards.length,
-            itemBuilder: (context, i) {
-              final card = cards[i];
-              return ListTile(
-                leading: SizedBox(width: 40, child: CardPicture(card, slot: i)),
-                title: Text(card.detail),
-                subtitle: card.foil ? const Text('Только фольга') : null,
-                onTap: () => panel<void>(
-                  context,
-                  SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        FractionallySizedBox(
-                          widthFactor: .55,
-                          child: AspectRatio(
-                            aspectRatio: 63 / 88,
-                            child: CardPicture(card),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        SheetHeading(card.name),
-                        Text(card.detail),
-                      ],
-                    ),
+          final terms = filter.split(RegExp(r'\s+'));
+          final cards = snap.requireData
+              .where((c) => terms.every(c.detail.toLowerCase().contains))
+              .toList();
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.filter_list),
+                    hintText: 'Издание, номер или код языка',
                   ),
+                  onChanged: (value) =>
+                      setState(() => filter = value.toLowerCase().trim()),
                 ),
-              );
-            },
+              ),
+              if (cards.isEmpty) const Text('Совпадений нет'),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: cards.length,
+                  itemBuilder: (context, i) {
+                    final card = cards[i];
+                    return ListTile(
+                      leading: SizedBox(
+                        width: 40,
+                        child: CardPicture(card, slot: i),
+                      ),
+                      title: Text(card.detail),
+                      subtitle: card.foil ? const Text('Только фольга') : null,
+                      trailing: const Icon(Icons.add_rounded),
+                      onTap: () => _add(card),
+                    );
+                  },
+                ),
+              ),
+            ],
           );
         },
       ),

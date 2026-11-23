@@ -17,8 +17,10 @@ class CollectionBrowser extends StatefulWidget {
     required this.catalog,
     required this.onFlag,
     required this.onRemove,
+    this.initialName,
   });
   final List<CardCount> items;
+  final String? initialName;
   final Set<String> flags;
   final Catalog? catalog;
   final void Function(Edition, bool) onFlag;
@@ -34,6 +36,7 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
         Future.value(<String>[]),
   );
   bool editing = false, flagsOnly = false, grouped = false;
+  late String? focusName = widget.initialName;
 
   @override
   void didUpdateWidget(CollectionBrowser old) {
@@ -121,6 +124,15 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
   Widget build(BuildContext context) => Column(
     children: [
       _toolbar(),
+      if (focusName case final name?)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: InputChip(
+            label: Text(name, overflow: TextOverflow.ellipsis),
+            deleteButtonTooltipMessage: 'Показать все карты',
+            onDeleted: () => setState(() => focusName = null),
+          ),
+        ),
       const SizedBox(height: 8),
       Expanded(
         child: BlocBuilder<NameSearch, AsyncSnapshot<List<String>>>(
@@ -129,6 +141,9 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
             final term = search.query.toLowerCase().replaceAll('’', "'");
             final names = result.data?.toSet() ?? const <String>{};
             final visible = widget.items.where((item) {
+              if (focusName != null && item.card.name != focusName) {
+                return false;
+              }
               if (flagsOnly && !widget.flags.contains(item.card.printingKey)) {
                 return false;
               }
