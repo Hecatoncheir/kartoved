@@ -1,28 +1,34 @@
 package dev.hecatoncheir.kartoved
 
 import android.content.Intent
-import android.media.MediaPlayer
+import android.media.AudioManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val textReader by lazy { CardText(applicationContext) }
-    private var player: MediaPlayer? = null
+    private var chime: ScanChime? = null
     private val documents by lazy { Documents(this) }
+    private val settings by lazy { getSharedPreferences("scanner", MODE_PRIVATE) }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        volumeControlStream = AudioManager.STREAM_MUSIC
+        chime?.close()
+        chime = runCatching { ScanChime(applicationContext) }.getOrNull()
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kartoved/android")
             .setMethodCallHandler { call, reply ->
                 when (call.method) {
                     "readText" -> textReader.read(call, reply)
+                    "scanPhoto" -> textReader.photo(call, reply)
+                    "scannerGuide" -> {
+                        val visible = call.arguments as? Boolean
+                        if (visible != null) settings.edit().putBoolean("guide", visible).apply()
+                        reply.success(visible ?: settings.getBoolean("guide", true))
+                    }
                     "chime" -> {
-                        runCatching {
-                            if (player == null) player = MediaPlayer.create(this, R.raw.card_added)
-                            player?.seekTo(0)
-                            player?.start()
-                        }
+                        chime?.play()
                         reply.success(null)
                     }
                     "saveCsv" -> documents.saveCsv(call.argument("name"), call.argument("csv"), reply)
@@ -41,8 +47,8 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         textReader.close()
-        player?.release()
-        player = null
+        chime?.close()
+        chime = null
         super.onDestroy()
     }
 }

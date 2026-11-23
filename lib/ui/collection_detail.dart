@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import '../collection_rows.dart';
 import '../data/catalog.dart';
 import '../model.dart';
+import 'card_facts.dart';
 import 'picture.dart';
 import 'style.dart';
 import 'card_destination.dart';
@@ -237,6 +238,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
                     onTap: saving ? null : () => _select(v.card),
                   ),
               ],
+              const SizedBox(height: 12),
+              CardFacts(selected.id, key: ValueKey(selected.id)),
             ],
           ),
         ),

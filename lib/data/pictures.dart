@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -6,7 +8,15 @@ import 'package:path_provider/path_provider.dart';
 class Pictures {
   static final shared = Pictures();
   final Map<String, Future<File>> _pending = {};
+  final _photos = StreamController<String>.broadcast();
+  Stream<String> get photos => _photos.stream;
   Future<Directory>? _root;
+
+  Future<Directory> get _directory =>
+      _root ??= getApplicationSupportDirectory().then(
+        (dir) =>
+            Directory(p.join(dir.path, 'pictures')).create(recursive: true),
+      );
 
   static Uri address(String id, {bool large = false}) {
     final matched = RegExp(
@@ -23,26 +33,43 @@ class Pictures {
     );
   }
 
-  Future<File> get(String id, {bool large = false}) {
+  Future<File> get(String id, {bool large = false}) async {
     final key = large ? '$id.normal' : id;
+    final url = address(id, large: large);
+    final root = await _directory;
+    final file = File(p.join(root.path, '$key.jpg'));
+    if (await file.exists()) return file;
+    final photo = _scanFile(root, id);
+    if (await photo.exists()) return photo;
     return _pending.putIfAbsent(
       key,
-      () => _load(id, key, large).whenComplete(() {
+      () => _download(url, file).whenComplete(() {
         _pending.remove(key);
       }),
     );
   }
 
-  Future<File> _load(String id, String key, bool large) async {
-    final url = address(id, large: large);
-    final root = await (_root ??= getApplicationSupportDirectory().then(
-      (d) => Directory(p.join(d.path, 'pictures')).create(recursive: true),
-    ));
-    final file = File(p.join(root.path, '$key.jpg'));
-    if (await file.exists()) return file;
+  File _scanFile(Directory root, String id) =>
+      File(p.join(root.path, '$id.scan.jpg'));
+
+  Future<void> saveScan(String id, Uint8List bytes) async {
+    address(id);
+    final photo = _scanFile(await _directory, id);
+    if (await photo.exists()) return;
+    final temp = File('${photo.path}.part');
+    try {
+      await temp.writeAsBytes(bytes, flush: true);
+      await temp.rename(photo.path);
+      _photos.add(id);
+    } finally {
+      if (await temp.exists()) await temp.delete();
+    }
+  }
+
+  Future<File> _download(Uri url, File file) async {
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 6)
-      ..userAgent = 'Kartoved Android';
+      ..userAgent = 'Kartoved Android (github.com/Hecatoncheir/kartoved)';
     final temp = File('${file.path}.part');
     try {
       final request = await client.getUrl(url);
@@ -50,7 +77,7 @@ class Pictures {
         const Duration(seconds: 10),
       );
       if (response.statusCode != 200 ||
-          response.headers.contentType?.mimeType != 'image/jpeg') {
+          response.headers.contentType?.primaryType != 'image') {
         throw HttpException('Изображение недоступно', uri: url);
       }
       await response

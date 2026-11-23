@@ -21,8 +21,34 @@ class CardText(private val context: Context) {
     private var engine: TessBaseAPI? = null
 
     fun read(call: MethodCall, reply: MethodChannel.Result) {
+        process(reply) {
+            recognize(textRegions(bitmap(call), call.argument<List<Double>>("corners")))
+        }
+    }
+
+    fun photo(call: MethodCall, reply: MethodChannel.Result) {
+        process(reply) {
+            val points = call.argument<List<Double>>("corners")
+            if (points?.size != 8) return@process null
+            val source = bitmap(call)
+            try {
+                val card = straighten(source, points) ?: return@process null
+                try {
+                    ByteArrayOutputStream().use { out ->
+                        if (card.compress(Bitmap.CompressFormat.JPEG, 88, out)) out.toByteArray() else null
+                    }
+                } finally {
+                    card.recycle()
+                }
+            } finally {
+                source.recycle()
+            }
+        }
+    }
+
+    private fun process(reply: MethodChannel.Result, work: () -> Any?) {
         worker.execute {
-            val result = runCatching { recognize(textRegions(bitmap(call), call.argument<List<Double>>("corners"))) }.getOrNull()
+            val result = runCatching(work).getOrNull()
             android.os.Handler(context.mainLooper).post { reply.success(result) }
         }
     }
@@ -41,7 +67,17 @@ class CardText(private val context: Context) {
     }
 
     private fun textRegions(source: Bitmap, points: List<Double>?): Bitmap {
-        if (points?.size != 8) return source
+        val page = straighten(source, points) ?: return source
+        val width = page.width.toFloat()
+        val height = page.height.toFloat()
+        // Иллюстрация между названием и текстом правил даёт ложные буквы.
+        Canvas(page).drawRect(0f, height * .15f, width, height * .53f, Paint().apply { color = Color.WHITE })
+        source.recycle()
+        return page
+    }
+
+    private fun straighten(source: Bitmap, points: List<Double>?): Bitmap? {
+        if (points?.size != 8 || points.any { !it.isFinite() }) return null
         val width = 600
         val height = 840
         val from = FloatArray(8) { i ->
@@ -49,14 +85,11 @@ class CardText(private val context: Context) {
         }
         val target = floatArrayOf(0f, 0f, width.toFloat(), 0f, width.toFloat(), height.toFloat(), 0f, height.toFloat())
         val transform = Matrix()
-        if (!transform.setPolyToPoly(from, 0, target, 0, 4)) return source
+        if (!transform.setPolyToPoly(from, 0, target, 0, 4)) return null
         val page = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(page)
         canvas.drawColor(Color.WHITE)
         canvas.drawBitmap(source, transform, Paint(Paint.FILTER_BITMAP_FLAG))
-        // Иллюстрация между названием и текстом правил даёт ложные буквы.
-        canvas.drawRect(0f, height * .15f, width.toFloat(), height * .53f, Paint().apply { color = Color.WHITE })
-        source.recycle()
         return page
     }
 

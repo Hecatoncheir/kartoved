@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -87,7 +89,10 @@ class CollectionsPage extends StatelessWidget {
           : null;
       final search = ready ? () => _catalog(context) : null;
       return Scaffold(
+        extendBodyBehindAppBar: true,
         appBar: AppBar(
+          forceMaterialTransparency: true,
+          flexibleSpace: const _LibraryAcrylic(),
           title: const Row(
             children: [
               _BrandMark(),
@@ -126,6 +131,7 @@ class CollectionsPage extends StatelessWidget {
           ],
         ),
         body: SafeArea(
+          top: false,
           left: false,
           right: false,
           bottom: false,
@@ -152,6 +158,28 @@ class CollectionsPage extends StatelessWidget {
         ),
       );
     },
+  );
+}
+
+class _LibraryAcrylic extends StatelessWidget {
+  const _LibraryAcrylic();
+
+  @override
+  Widget build(BuildContext context) => ClipRect(
+    child: BackdropFilter(
+      filter: ui.ImageFilter.blur(sigmaX: 17, sigmaY: 17),
+      child: const DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xe6282828), Color(0xbf282828)],
+          ),
+          border: Border(bottom: BorderSide(color: Color(0x70504945))),
+        ),
+        child: SizedBox.expand(),
+      ),
+    ),
   );
 }
 
@@ -244,7 +272,10 @@ class _LibraryContent extends StatelessWidget {
     return CustomScrollView(
       slivers: [
         SliverPadding(
-          padding: sides.copyWith(top: 10, bottom: 8),
+          padding: sides.copyWith(
+            top: MediaQuery.paddingOf(context).top + 10,
+            bottom: 8,
+          ),
           sliver: SliverList.list(
             children: [
               AlbumHeader(
@@ -592,8 +623,12 @@ class CollectionPage extends StatelessWidget {
                   if (items.isNotEmpty && !keyboard)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: Frost(
-                        radius: 16,
+                      child: Material(
+                        color: surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: const BorderSide(color: strongOutline),
+                        ),
                         child: DefaultTextStyle(
                           style: const TextStyle(
                             color: paper,

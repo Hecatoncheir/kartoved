@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
@@ -21,6 +22,27 @@ class _CardPictureState extends State<CardPicture> {
   late Future<File>? large = _large();
   Future<File>? _large() =>
       widget.large ? Pictures.shared.get(widget.card.id, large: true) : null;
+
+  late final StreamSubscription<String> _photos;
+
+  @override
+  void initState() {
+    super.initState();
+    _photos = Pictures.shared.photos.listen((id) {
+      if (id != widget.card.id) return;
+      setState(() {
+        file = Pictures.shared.get(id);
+        large = _large();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _photos.cancel();
+    super.dispose();
+  }
+
   @override
   void didUpdateWidget(CardPicture old) {
     super.didUpdateWidget(old);
@@ -66,27 +88,33 @@ class _CardPictureState extends State<CardPicture> {
     future: file,
     builder: (c, s) {
       if (s.connectionState == ConnectionState.done && s.hasData) {
-        return Image.file(s.requireData, fit: BoxFit.contain);
+        return Image.file(
+          s.requireData,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => _placeholder(),
+        );
       }
-      return ColoredBox(
-        color: const Color(0xff504945),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(3),
-            child: Text(
-              widget.card.name,
-              textAlign: TextAlign.center,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: paper,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+      return _placeholder();
+    },
+  );
+
+  Widget _placeholder() => ColoredBox(
+    color: const Color(0xff504945),
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: Text(
+          widget.card.name,
+          textAlign: TextAlign.center,
+          maxLines: 4,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: paper,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
           ),
         ),
-      );
-    },
+      ),
+    ),
   );
 }

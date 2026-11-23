@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -6,13 +7,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kartoved/data/catalog.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/ui/collections.dart';
+import 'package:kartoved/ui/picture.dart';
+import 'package:kartoved/ui/scan_frame.dart';
 import 'package:kartoved/ui/style.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-const en = Edition('opt-en', 'Opt', 'eld', '59', 'en');
-const ru = Edition('opt-ru', 'Opt', 'eld', '59', 'ru');
+const en = Edition(
+  'c3669391-8f64-4904-b432-0f0582f30449',
+  'Opt',
+  'eld',
+  '59',
+  'en',
+);
+const ru = Edition(
+  '5c71b782-30f9-4d91-a6d3-6325fdac4ba3',
+  'Opt',
+  'eld',
+  '59',
+  'ru',
+);
 
 class _Catalog extends Catalog {
   _Catalog()
@@ -44,7 +59,7 @@ class _ScannerModel extends AppModel {
 
 void main() {
   testWidgets(
-    'Спорный снимок, выбор издания, отмена и настройки стопки через камеру',
+    'Скан сохраняется сразу со звуком и фото даже при скрытой рамке',
     (tester) async {
       tester.view.physicalSize = const Size(390, 780);
       tester.view.devicePixelRatio = 1;
@@ -71,14 +86,51 @@ void main() {
       final messenger = tester.binding.defaultBinaryMessenger;
       const picker = MethodChannel('plugins.flutter.io/image_picker');
       const android = MethodChannel('kartoved/android');
+      const paths = MethodChannel('plugins.flutter.io/path_provider');
+      final photo = File('test/fixtures/bouncers-beatdown.jpg')
+          .readAsBytesSync();
+      File scanPhoto(Edition card) =>
+          File(p.join(directory.path, 'pictures', '${card.id}.scan.jpg'));
+      final image = (await tester.runAsync(() async {
+        final codec = await ui.instantiateImageCodec(photo);
+        try {
+          return (await codec.getNextFrame()).image;
+        } finally {
+          codec.dispose();
+        }
+      }))!;
+      // Flutter Tester в Windows удерживает JPEG, декодированный из файла.
+      for (final card in [en, ru]) {
+        PaintingBinding.instance.imageCache.putIfAbsent(
+          FileImage(scanPhoto(card)),
+          () => OneFrameImageStreamCompleter(
+            Future.value(ImageInfo(image: image.clone())),
+          ),
+        );
+      }
+      addTearDown(image.dispose);
+      var sounds = 0;
+      var guide = true;
+      messenger.setMockMethodCallHandler(paths, (_) async => directory.path);
       messenger.setMockMethodCallHandler(picker, (_) async => 'opt.jpg');
-      messenger.setMockMethodCallHandler(
-        android,
-        (c) async => c.method == 'readText' ? <String, String>{} : null,
-      );
+      messenger.setMockMethodCallHandler(android, (c) async {
+        switch (c.method) {
+          case 'readText':
+            return <String, String>{};
+          case 'scanPhoto':
+            return photo;
+          case 'scannerGuide':
+            guide = (c.arguments as bool?) ?? guide;
+            return guide;
+          case 'chime':
+            sounds++;
+        }
+        return null;
+      });
       addTearDown(() {
         messenger.setMockMethodCallHandler(picker, null);
         messenger.setMockMethodCallHandler(android, null);
+        messenger.setMockMethodCallHandler(paths, null);
       });
       await tester.pumpWidget(
         BlocProvider<AppModel>.value(
@@ -117,20 +169,36 @@ void main() {
       await tap(find.text('Моя коллекция'));
       await waitFor(() => find.byType(CollectionPage).evaluate().isNotEmpty);
       await tap(find.text('Сканировать карту'));
+      expect(find.byType(ScanFrame), findsOneWidget);
+      await tap(find.byTooltip('Меню сканера'));
+      await tap(find.text('Скрыть рамку и стекло'));
+      expect(find.byType(ScanFrame), findsNothing);
       await tap(find.text('Из фото'));
       await waitFor(
-        () => find.text('В коллекциях: 3 · Opt').evaluate().isNotEmpty,
+        () =>
+            find.text('В коллекциях: 4 · Opt').evaluate().isNotEmpty &&
+            sounds == 1,
       );
-      expect(model.state.additions.length, 2);
-      await tap(find.text('Проверить · 1'));
-      await tap(find.widgetWithText(ListTile, 'Opt'));
-      await tap(find.text(ru.detail));
-      await tap(find.text('Подтвердить'));
-      await waitFor(() => model.state.printings.single.quantity == 2);
-      await tap(find.byType(BackButton));
-      await tap(find.byTooltip('Отменить последнее добавление'));
-      await waitFor(() => model.state.recent.length == 1);
-      expect(model.state.printings.single.quantity, 1);
+      expect(model.state.recent.first.card.language, 'und');
+      expect(model.state.reviews, isEmpty);
+      expect(find.text('В коллекцию'), findsNothing);
+      final thumbnail = find.descendant(
+        of: find.byType(CardPicture),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Image &&
+              widget.image is FileImage &&
+              (widget.image as FileImage).file.path.endsWith('.scan.jpg'),
+        ),
+      );
+      await waitFor(() => thumbnail.evaluate().isNotEmpty);
+      expect(scanPhoto(en).readAsBytesSync(), photo);
+      await tap(find.byTooltip('К коллекции'));
+      await tap(find.text('Сканировать карту'));
+      expect(find.byType(ScanFrame), findsNothing);
+      await tap(find.byTooltip('Меню сканера'));
+      await tap(find.text('Показать рамку и стекло'));
+      expect(find.byType(ScanFrame), findsOneWidget);
       await tap(find.byTooltip('Меню сканера'));
       await tap(find.text('Настройки стопки'));
       await tap(find.text('Язык'));
@@ -141,32 +209,30 @@ void main() {
       await tap(find.text('Применить'));
       expect(find.text('ELD · RU'), findsOneWidget);
       await tap(find.text('Из фото'));
-      await waitFor(() => find.text('В коллекциях · 3').evaluate().isNotEmpty);
-      await tap(find.text('В коллекцию'));
-      await waitFor(() => model.state.printings.single.quantity == 2);
       await waitFor(
-        () => find.text('В коллекциях: 4 · Opt').evaluate().isNotEmpty,
+        () => model.state.recent.first.card.language == 'ru' && sounds == 2,
       );
+      await tap(find.byTooltip('Отменить последнее добавление'));
+      await waitFor(() => model.state.recent.length == 2);
+      await waitFor(() => model.state.owned('Opt') == 4);
       expect(model.state.reviews, isEmpty);
       model.matches = const [
         Match([en]),
       ];
       await tap(find.text('Из фото'));
-      await waitFor(() => model.state.reviews.isNotEmpty);
+      await waitFor(() => model.state.owned('Opt') == 5 && sounds == 3);
+      expect(model.state.reviews, isEmpty);
+      expect(model.state.recent.first.card.language, 'en');
       await tap(find.byTooltip('К коллекции'));
-      await tap(find.byTooltip('Экспорт для Moxfield'));
-      await tap(find.text('Проверить карты'));
-      await tap(
-        find.widgetWithText(ListTile, 'Расхождение с настройками стопки'),
-      );
-      await tap(find.text('Убрать из очереди'));
-      await waitFor(() => model.state.reviews.isEmpty);
-      expect(model.state.printings.single.quantity, 2);
-      await tap(find.byType(BackButton));
       await tap(find.text('Сканировать карту'));
       await tap(find.byTooltip('Меню сканера'));
       await tap(find.text('Настройки стопки'));
       expect(find.text('Авто'), findsNWidgets(2));
+      await tester.pumpWidget(const SizedBox.shrink());
+      PaintingBinding.instance.imageCache
+        ..clear()
+        ..clearLiveImages();
+      await tester.pump();
     },
   );
 }

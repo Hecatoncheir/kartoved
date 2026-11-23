@@ -6,6 +6,22 @@ import 'package:image/image.dart' as im;
 // CameraX возвращает один непрерывный буфер NV21.
 typedef PreviewFrame = ({Uint8List bytes, int width, int height, int rotation});
 
+Map<String, Object?> scanArguments({
+  String? file,
+  PreviewFrame? frame,
+  required List<double> corners,
+}) => {
+  'corners': corners,
+  if (frame == null)
+    'file': file
+  else ...{
+    'bytes': frame.bytes,
+    'width': frame.width,
+    'height': frame.height,
+    'rotation': frame.rotation,
+  },
+};
+
 im.Image frameImage(PreviewFrame frame) {
   final scale = math.min(1.0, 640 / math.max(frame.width, frame.height));
   final rgb = im.Image(

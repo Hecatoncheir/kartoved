@@ -129,6 +129,56 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Заголовок альбомов прокручивается под акриловой шапкой', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 520);
+    tester.view.padding = const FakeViewPadding(top: 24);
+    addTearDown(tester.view.reset);
+    final model = AppModel(
+      CatalogStore(),
+      History(),
+      initial: const LibraryState(groups: [(id: 1, name: 'Альбом', count: 3)]),
+    );
+    addTearDown(model.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: kartovedTheme(),
+        home: BlocProvider.value(value: model, child: const CollectionsPage()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    final bar = find.byType(AppBar);
+    final bounds = tester.getRect(bar);
+    final title = find.text('Альбомы');
+    expect(
+      tester.getTopLeft(find.byType(AlbumHeader)).dy,
+      greaterThan(bounds.bottom),
+    );
+    final scroll = find
+        .descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    final titleCenter = tester.getCenter(title).dy;
+    expect(titleCenter, greaterThan(bounds.bottom));
+    final position = tester.state<ScrollableState>(scroll).position;
+    position.jumpTo(titleCenter - bounds.bottom + 12);
+    await tester.pump();
+    expect(tester.getRect(bar), bounds);
+    expect(
+      tester.getCenter(title).dy,
+      inExclusiveRange(bounds.top, bounds.bottom),
+    );
+    final acrylic = find.descendant(
+      of: bar,
+      matching: find.byType(BackdropFilter),
+    );
+    expect(tester.getRect(acrylic), bounds);
+  });
+
   testWidgets('Выбор языка и выпуска работает без подключения', (tester) async {
     const en = Edition('a', 'Counterspell', 'lea', '54', 'en');
     const ru = Edition('b', 'Counterspell', '7ed', '67', 'ru');

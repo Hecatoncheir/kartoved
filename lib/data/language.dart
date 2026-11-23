@@ -28,18 +28,10 @@ class CardLanguage {
     List<double> corners = const [],
   }) async {
     if (options.length == 1) return options;
-    final args = frame == null
-        ? {'file': file}
-        : {
-            'bytes': frame.bytes,
-            'width': frame.width,
-            'height': frame.height,
-            'rotation': frame.rotation,
-          };
     try {
       final result = await _channel.invokeMapMethod<String, String>(
         'readText',
-        {...args, 'corners': corners},
+        scanArguments(file: file, frame: frame, corners: corners),
       );
       return candidates(result?['text'] ?? '', result?['language'], options);
     } on PlatformException {

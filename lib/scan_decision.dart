@@ -1,4 +1,5 @@
 import 'data/catalog.dart';
+import 'data/language.dart';
 import 'data/review.dart';
 import 'model.dart';
 
@@ -17,6 +18,16 @@ List<Match> closeMatches(List<Match> matches) =>
     matches.where((m) => matches.first.score - m.score < .05).toList();
 
 typedef ScanDecision = ({Edition card, ScanReview? review});
+
+Edition selectScannedEdition(List<Edition> evidence, BatchSettings batch) {
+  final matching = evidence.where(batch.accepts).toList();
+  final options = matching.isEmpty ? evidence : matching;
+  final languages = options.map((card) => card.language).toSet();
+  return CardLanguage.select(
+    options,
+    languages.length == 1 ? languages.single : null,
+  );
+}
 
 ScanDecision decideScan(
   List<Match> matches,

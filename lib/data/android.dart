@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import 'frame.dart';
+
 class AndroidActions {
   static const _channel = MethodChannel('kartoved/android');
   static Future<void> chime() async {
@@ -10,6 +12,27 @@ class AndroidActions {
       await _channel.invokeMethod<void>('chime');
     } on PlatformException {
       /* Звук может быть отключён. */
+    } on MissingPluginException {
+      /* Звуковой канал доступен на Android. */
+    }
+  }
+
+  static Future<Uint8List?> scanPhoto({
+    String? file,
+    PreviewFrame? frame,
+    required List<double> corners,
+  }) => _channel.invokeMethod<Uint8List>(
+    'scanPhoto',
+    scanArguments(file: file, frame: frame, corners: corners),
+  );
+
+  static Future<bool?> scannerGuide([bool? visible]) async {
+    try {
+      return await _channel.invokeMethod<bool>('scannerGuide', visible);
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
     }
   }
 

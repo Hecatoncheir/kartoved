@@ -63,8 +63,12 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
     );
   }
 
-  Widget _toolbar() => Frost(
-    radius: 18,
+  Widget _toolbar() => DecoratedBox(
+    decoration: BoxDecoration(
+      color: surface,
+      border: Border.all(color: outline),
+      borderRadius: BorderRadius.circular(18),
+    ),
     child: Row(
       children: [
         Expanded(

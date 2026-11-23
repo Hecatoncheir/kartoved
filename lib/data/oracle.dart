@@ -57,73 +57,106 @@ Recognition identifyImage(String directory, im.Image original) {
   try {
     final detector = open('detector');
     final width = constants['det_input'] as int;
-    final coarse = _detect(
-      detector,
-      bytes,
-      side,
-      width,
-      side / 2,
-      side / 2,
-      side.toDouble(),
-    );
-    final refine = math.max(
-      coarse.short *
-          (constants['card_aspect'] as num) /
-          (constants['refine_fill'] as num),
-      (constants['refine_min_side'] as num).toDouble(),
-    );
-    final fine = _detect(
-      detector,
-      bytes,
-      side,
-      width,
-      coarse.x,
-      coarse.y,
-      refine,
-    );
-    if (fine.vote / (constants['rotations'] as int) < 0.5 ||
-        fine.short < side * 0.09) {
-      return (hits: <Hit>[], corners: <double>[]);
-    }
-    final embed = open('embed');
-    final features = _run(embed, {
-      'scene': _pixels(bytes, side),
-      'quad': _floats(fine.quad, [4, 2]),
-    }, (outputs) => Float32List.fromList(outputs.values.first.view.float32s));
-    final search = open('search');
-    final hits = _run(
-      search,
-      {
-        'embeddings': _floats(features, [features.length ~/ 128, 128]),
-        if (config['searchMask'] == true)
-          'mask': _floats(
-            Float32List(config['count'] as int)
-              ..fillRange(0, config['count'] as int, 1),
-            [config['count'] as int],
+    final rotations = constants['rotations'] as int;
+    late final embed = open('embed');
+    late final search = open('search');
+
+    for (final window in _windows(side, scaled.width, scaled.height)) {
+      final coarse = _detect(
+        detector,
+        bytes,
+        side,
+        width,
+        window.x,
+        window.y,
+        window.extent,
+      );
+      final refine = math.max(
+        coarse.short *
+            (constants['card_aspect'] as num) /
+            (constants['refine_fill'] as num),
+        (constants['refine_min_side'] as num).toDouble(),
+      );
+      final fine = _detect(
+        detector,
+        bytes,
+        side,
+        width,
+        coarse.x,
+        coarse.y,
+        refine,
+      );
+      if (fine.vote / rotations < 0.5 || fine.short < side * 0.09) continue;
+      final hits = _identifyCard(embed, search, config, bytes, side, fine.quad);
+      if (hits.isEmpty || hits.first.score < .60) continue;
+      final corners = [
+        for (var i = 0; i < fine.quad.length; i++)
+          _unitCoord(
+            fine.quad[i],
+            side,
+            i.isEven ? scaled.width : scaled.height,
           ),
-      },
-      (outputs) {
-        final ids = outputs['indices']!.view.int64s;
-        final scores = outputs['scores']!.view.float32s;
-        return [
-          for (var i = 0; i < ids.length; i++)
-            if (scores[i] >= 0.0) (index: ids[i], score: scores[i]),
-        ];
-      },
-    );
-    final corners = [
-      for (var i = 0; i < fine.quad.length; i++)
-        _unitCoord(fine.quad[i], side, i.isEven ? scaled.width : scaled.height),
-    ];
-    return (
-      hits: hits.isEmpty || hits.first.score < .60 ? <Hit>[] : hits,
-      corners: corners,
-    );
+      ];
+      return (hits: hits, corners: corners);
+    }
+    return (hits: <Hit>[], corners: <double>[]);
   } finally {
     for (final session in sessions.reversed) {
       session.release();
     }
   }
+}
+
+// Увеличиваем перекрывающиеся участки кадра, если общий проход пропустил карту.
+Iterable<({double x, double y, double extent})> _windows(
+  int side,
+  int width,
+  int height,
+) sync* {
+  final center = side / 2;
+  yield (x: center, y: center, extent: side.toDouble());
+  final extent = side * .64;
+  final dx = math.max(0.0, (width - extent) / 2);
+  final dy = math.max(0.0, (height - extent) / 2);
+  for (final y in {center - dy, center + dy}) {
+    for (final x in {center - dx, center + dx}) {
+      yield (x: x, y: y, extent: extent);
+    }
+  }
+}
+
+List<Hit> _identifyCard(
+  Session embed,
+  Session search,
+  Map config,
+  Uint8List bytes,
+  int side,
+  Float32List quad,
+) {
+  final features = _run(embed, {
+    'scene': _pixels(bytes, side),
+    'quad': _floats(quad, [4, 2]),
+  }, (outputs) => Float32List.fromList(outputs.values.first.view.float32s));
+  return _run(
+    search,
+    {
+      'embeddings': _floats(features, [features.length ~/ 128, 128]),
+      if (config['searchMask'] == true)
+        'mask': _floats(
+          Float32List(config['count'] as int)
+            ..fillRange(0, config['count'] as int, 1),
+          [config['count'] as int],
+        ),
+    },
+    (outputs) {
+      final ids = outputs['indices']!.view.int64s;
+      final scores = outputs['scores']!.view.float32s;
+      return [
+        for (var i = 0; i < ids.length; i++)
+          if (scores[i] >= 0.0) (index: ids[i], score: scores[i]),
+      ];
+    },
+  );
 }
 
 double _unitCoord(double coordinate, int scene, int drawn) =>

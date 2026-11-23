@@ -143,7 +143,19 @@ void main() {
         of: find.byType(CollectionStack),
         matching: find.byType(BackdropFilter),
       );
-      expect(blurs, findsWidgets);
+      expect(blurs, findsNothing);
+      expect(
+        find.descendant(
+          of: tile(0),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is DecoratedBox &&
+                widget.decoration is BoxDecoration &&
+                (widget.decoration as BoxDecoration).color?.a == 1,
+          ),
+        ),
+        findsWidgets,
+      );
       final position = tester
           .state<ScrollableState>(find.byType(Scrollable))
           .position;

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:kartoved/data/frame.dart';
+import 'package:kartoved/data/android.dart';
 import 'package:kartoved/scan_cubit.dart';
 import 'package:kartoved/scan_decision.dart';
 import 'package:kartoved/data/review.dart';
@@ -39,6 +40,21 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
       final english = cards.first.editions.firstWhere(
         (e) => e.language == 'en',
       );
+      final thumbnail = await AndroidActions.scanPhoto(
+        file: photo.path,
+        corners: cards.first.corners,
+      );
+      expect(img.decodeJpg(thumbnail!)?.width, 600);
+      debugPrint('Автономная проверка: карта у края кадра NV21');
+      final edgeFrame = _cameraFrame(_offsetPhoto(await photo.readAsBytes()));
+      final edgeMatches = await model.recognizeFrame(edgeFrame);
+      expect(edgeMatches.first.editions.first.name, "Bouncer's Beatdown");
+      expect(edgeMatches.first.corners[1], lessThan(.10));
+      final edgeThumbnail = await AndroidActions.scanPhoto(
+        frame: edgeFrame,
+        corners: edgeMatches.first.corners,
+      );
+      expect(img.decodeJpg(edgeThumbnail!)?.height, 840);
       final catalog = model.catalog!;
       expect((await catalog.searchNames('солнечное кольцо')).first, 'Sol Ring');
       expect((await catalog.searchNames('sol ring')).first, 'Sol Ring');
@@ -211,6 +227,17 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
     expect(rows.where((r) => r.card.foil).single.quantity, 1);
     expect(rows.where((r) => !r.card.foil).single.quantity, 3);
   });
+}
+
+Uint8List _offsetPhoto(Uint8List jpg) {
+  final scene = img.Image(width: 800, height: 1100);
+  img.fill(scene, color: img.ColorRgb8(82, 77, 67));
+  final card = img.copyResize(
+    img.bakeOrientation(img.decodeJpg(jpg)!),
+    width: 300,
+  );
+  img.compositeImage(scene, card, dstX: 490, dstY: 24);
+  return img.encodeJpg(scene, quality: 93);
 }
 
 PreviewFrame _cameraFrame(Uint8List jpg) {

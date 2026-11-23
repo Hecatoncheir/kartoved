@@ -12,6 +12,7 @@ import '../data/android.dart';
 import '../data/catalog.dart';
 import '../data/frame.dart';
 import '../data/language.dart';
+import '../data/pictures.dart';
 import '../model.dart';
 import '../scan_cubit.dart';
 import '../scan_decision.dart';
@@ -42,7 +43,19 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_restoreGuide());
     openCamera(true);
+  }
+
+  Future<void> _restoreGuide() async {
+    final visible = await AndroidActions.scannerGuide();
+    if (mounted && visible != null) scan.setGuide(visible);
+  }
+
+  void _toggleGuide() {
+    final visible = !scan.state.showGuide;
+    scan.setGuide(visible);
+    unawaited(AndroidActions.scannerGuide(visible));
   }
 
   @override
@@ -178,6 +191,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     }
     final c = camera;
     if (c == null || image.planes.length != 1) return;
+    // Передаём весь кадр. Рамка служит визуальной подсказкой.
     final frame = (
       bytes: image.planes.single.bytes,
       width: image.width,
@@ -194,14 +208,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       if (!accepts(token)) return;
       final hit = scan.evaluate(matches);
       if (hit == null) return;
-      final evidence = await CardLanguage.readOptions(
-        corners: matches.first.corners,
-        frame: frame,
-        options: matches.first.editions,
-      );
-      if (accepts(token)) {
-        await _save(decideScan(matches, evidence, scan.state.batch), matches);
-      }
+      await _store(matches, frame: frame, accept: () => accepts(token));
     } catch (e) {
       if (accepts(token)) {
         _mode();
@@ -213,44 +220,56 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _save(ScanDecision decision, List<Match> matches) async {
+  Future<void> _save(Edition card, List<Match> matches) async {
     setState(() => writing = true);
     try {
-      final seq = await library.save(decision.card, review: decision.review);
+      final seq = await library.save(card);
       if (!mounted) return;
-      scan.recorded(seq, decision.card, matches);
-      if (decision.review == null) await AndroidActions.chime();
+      scan.recorded(seq, card, matches);
+      await AndroidActions.chime();
     } finally {
       if (mounted) setState(() => writing = false);
     }
   }
 
-  Future<void> _confirm(XFile file) async {
+  Future<void> _recognize(XFile file) async {
     final matches = await library.recognize(file.path);
     if (!active) return;
     if (matches.isEmpty) {
       message('Карта не найдена');
       return;
     }
-    final options = matches.first.editions;
+    await _store(matches, file: file.path, accept: () => active);
+  }
+
+  Future<void> _store(
+    List<Match> matches, {
+    String? file,
+    PreviewFrame? frame,
+    required bool Function() accept,
+  }) async {
+    final hit = matches.first;
     final evidence = await CardLanguage.readOptions(
-      corners: matches.first.corners,
-      file: file.path,
-      options: options,
+      corners: hit.corners,
+      file: file,
+      frame: frame,
+      options: hit.editions,
     );
-    if (!mounted || !active) return;
-    final decision = decideScan(matches, evidence, scan.state.batch);
-    if (decision.review != null) {
-      await _save(decision, matches);
-      return;
+    if (!accept()) return;
+    final card = selectScannedEdition(evidence, scan.state.batch);
+    try {
+      final photo = await AndroidActions.scanPhoto(
+        file: file,
+        frame: frame,
+        corners: hit.corners,
+      );
+      if (photo != null && accept()) {
+        await Pictures.shared.saveScan(card.id, photo);
+      }
+    } on Exception {
+      // Издание можно сохранить даже при недоступном кэше фотографий.
     }
-    final card = await panel<Edition>(
-      context,
-      ResultSheet(matches, decision.card, owned: library.state.owned),
-    );
-    if (card != null && active) {
-      await _save((card: card, review: null), matches);
-    }
+    if (accept()) await _save(card, matches);
   }
 
   Future<void> _discard(XFile? file) async {
@@ -281,7 +300,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
             )
           : await camera?.takePicture();
       if (file == null || !active) return;
-      await _confirm(file);
+      await _recognize(file);
     } catch (e) {
       message('Не удалось обработать снимок');
     } finally {
@@ -387,8 +406,25 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
             Icons.tune,
             color: scan.state.batch.active ? butter : paper,
           ),
-          onSelected: (action) => action == 'batch' ? _settings() : _torch(),
+          onSelected: (action) {
+            switch (action) {
+              case 'batch':
+                _settings();
+              case 'guide':
+                _toggleGuide();
+              case 'torch':
+                _torch();
+            }
+          },
           itemBuilder: (_) => [
+            PopupMenuItem(
+              value: 'guide',
+              child: Text(
+                scan.state.showGuide
+                    ? 'Скрыть рамку и стекло'
+                    : 'Показать рамку и стекло',
+              ),
+            ),
             PopupMenuItem(
               value: 'batch',
               enabled: library.catalog != null,
@@ -470,7 +506,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     return Stack(
       fit: StackFit.expand,
       children: [
-        ScanFrame(window: rect, hasPreview: camera != null),
+        if (scan.state.showGuide)
+          ScanFrame(window: rect, hasPreview: camera != null),
         Positioned(
           left: 10,
           right: 10,

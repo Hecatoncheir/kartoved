@@ -49,7 +49,12 @@ class ScanGate {
 
 enum ScanMode { manual, automatic }
 
-typedef ScanSession = ({ScanMode mode, BatchSettings batch, int? lastScan});
+typedef ScanSession = ({
+  ScanMode mode,
+  BatchSettings batch,
+  int? lastScan,
+  bool showGuide,
+});
 
 class ScanCubit extends Cubit<ScanSession> {
   ScanCubit()
@@ -57,6 +62,7 @@ class ScanCubit extends Cubit<ScanSession> {
         mode: ScanMode.manual,
         batch: const BatchSettings(),
         lastScan: null,
+        showGuide: true,
       ));
   final gate = ScanGate();
   bool _force = false;
@@ -69,25 +75,48 @@ class ScanCubit extends Cubit<ScanSession> {
           : ScanMode.manual,
       batch: state.batch,
       lastScan: state.lastScan,
+      showGuide: state.showGuide,
     ));
   }
 
   void configure(BatchSettings value) {
     cancelFrame();
-    emit((mode: state.mode, batch: value, lastScan: state.lastScan));
+    emit((
+      mode: state.mode,
+      batch: value,
+      lastScan: state.lastScan,
+      showGuide: state.showGuide,
+    ));
   }
+
+  void setGuide(bool visible) => emit((
+    mode: state.mode,
+    batch: state.batch,
+    lastScan: state.lastScan,
+    showGuide: visible,
+  ));
 
   void recorded(int seq, Edition card, List<Match> matches) {
     gate.saved(
       card,
       observedNames: closeMatches(matches).map((m) => m.editions.first.name),
     );
-    emit((mode: state.mode, batch: state.batch, lastScan: seq));
+    emit((
+      mode: state.mode,
+      batch: state.batch,
+      lastScan: seq,
+      showGuide: state.showGuide,
+    ));
   }
 
   void undone() {
     cancelFrame();
-    emit((mode: state.mode, batch: state.batch, lastScan: null));
+    emit((
+      mode: state.mode,
+      batch: state.batch,
+      lastScan: null,
+      showGuide: state.showGuide,
+    ));
   }
 
   void shutter() => _force = true;

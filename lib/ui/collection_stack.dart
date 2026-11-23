@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
 
@@ -57,71 +56,53 @@ class _CollectionStackState extends State<CollectionStack> {
           ? naturalHeight + bottomSpace + 20
           : box.maxHeight;
       return ClipRect(
-        child: AnimatedBuilder(
-          animation: scroll,
-          builder: (_, list) {
-            final remaining =
-                contentHeight -
-                box.maxHeight -
-                (scroll.hasClients ? scroll.offset : 0.0);
-            return _BottomFade(
-              height: math.min(dock + 54, box.maxHeight * .5),
-              strength: (remaining / 64).clamp(0.0, 1.0),
-              child: list!,
-            );
+        child: NotificationListener<ScrollStartNotification>(
+          onNotification: (event) {
+            if (event.dragDetails != null) _select(null);
+            return false;
           },
-          child: NotificationListener<ScrollStartNotification>(
-            onNotification: (event) {
-              if (event.dragDetails != null) _select(null);
-              return false;
-            },
-            child: SingleChildScrollView(
-              controller: scroll,
-              child: SizedBox(
-                height: contentHeight,
-                width: box.maxWidth,
-                child: AnimatedBuilder(
-                  animation: scroll,
-                  builder: (_, _) {
-                    final pixels = scroll.hasClients
-                        ? scroll.offset.clamp(
-                            0.0,
-                            contentHeight - box.maxHeight,
-                          )
-                        : 0.0;
-                    final front = (pixels / step).floor();
-                    final first = math.max(0, front - 2);
-                    final end = math.min(
-                      count,
-                      front + (box.maxHeight / step).ceil() + 1,
-                    );
-                    final rim = math.min(pixels / step, 2.0) * 10;
-                    // После верхней границы карта сдвигается всего на ширину кромки.
-                    double depth(int i) => i == count - 1
-                        ? 0
-                        : (pixels / step - i).clamp(0.0, 2.0);
-                    double top(int i) {
-                      final natural = i * step - pixels;
-                      if (i == count - 1) return rim + natural;
-                      return rim + math.max(0.0, natural) - 10 * depth(i);
-                    }
+          child: SingleChildScrollView(
+            controller: scroll,
+            child: SizedBox(
+              height: contentHeight,
+              width: box.maxWidth,
+              child: AnimatedBuilder(
+                animation: scroll,
+                builder: (_, _) {
+                  final pixels = scroll.hasClients
+                      ? scroll.offset.clamp(0.0, contentHeight - box.maxHeight)
+                      : 0.0;
+                  final front = (pixels / step).floor();
+                  final first = math.max(0, front - 2);
+                  final end = math.min(
+                    count,
+                    front + (box.maxHeight / step).ceil() + 1,
+                  );
+                  final rim = math.min(pixels / step, 2.0) * 10;
+                  // После верхней границы карта сдвигается всего на ширину кромки.
+                  double depth(int i) =>
+                      i == count - 1 ? 0 : (pixels / step - i).clamp(0.0, 2.0);
+                  double top(int i) {
+                    final natural = i * step - pixels;
+                    if (i == count - 1) return rim + natural;
+                    return rim + math.max(0.0, natural) - 10 * depth(i);
+                  }
 
-                    return Stack(
-                      children: [
-                        for (int i = first; i < end; i++)
-                          _position(
-                            i,
-                            pixels + top(i),
-                            7 * depth(i),
-                            height,
-                            (top(i + 1) - top(i)).clamp(0.0, height),
-                            7 * (depth(i) - depth(i + 1)),
-                            depth(i) >= 1,
-                          ),
-                      ],
-                    );
-                  },
-                ),
+                  return Stack(
+                    children: [
+                      for (int i = first; i < end; i++)
+                        _position(
+                          i,
+                          pixels + top(i),
+                          7 * depth(i),
+                          height,
+                          (top(i + 1) - top(i)).clamp(0.0, height),
+                          7 * (depth(i) - depth(i + 1)),
+                          depth(i) >= 1,
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -174,63 +155,7 @@ class _CollectionStackState extends State<CollectionStack> {
   }
 }
 
-// Размывается только нижняя полоса. Прозрачность открывает настоящий фон альбома.
-class _BottomFade extends StatelessWidget {
-  const _BottomFade({
-    required this.height,
-    required this.strength,
-    required this.child,
-  });
-  final double height, strength;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => ShaderMask(
-    blendMode: BlendMode.dstIn,
-    shaderCallback: (bounds) => ui.Gradient.linear(
-      Offset(0, bounds.bottom - height),
-      Offset(0, bounds.bottom),
-      [
-        Colors.white,
-        Colors.white.withValues(alpha: 1 - .12 * strength),
-        Colors.white.withValues(alpha: 1 - .48 * strength),
-        Colors.white.withValues(alpha: 1 - strength),
-      ],
-      const [0, .34, .68, 1],
-    ),
-    child: Stack(
-      fit: StackFit.expand,
-      children: [
-        child,
-        if (strength > 0)
-          for (final (fraction, sigma) in const [
-            (1.0, .65),
-            (.73, 1.25),
-            (.46, 2.4),
-          ])
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: height * fraction,
-              child: IgnorePointer(
-                child: ClipRect(
-                  child: BackdropFilter(
-                    filter: ui.ImageFilter.blur(
-                      sigmaX: sigma * strength,
-                      sigmaY: sigma * strength,
-                    ),
-                    child: const SizedBox.expand(),
-                  ),
-                ),
-              ),
-            ),
-      ],
-    ),
-  );
-}
-
-// Кромка повторяет дугу передней карты, чтобы задняя не проступала сквозь стекло.
+// Кромка повторяет дугу передней карты.
 class _StackEdge extends CustomClipper<Path> {
   const _StackEdge(this.top, this.overhang);
   final double top, overhang;

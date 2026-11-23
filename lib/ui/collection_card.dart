@@ -79,13 +79,7 @@ class _CollectionCardState extends State<CollectionCard>
       return ClipRRect(
         borderRadius: corners,
         child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xf5454439), Color(0xf832332c), Color(0xfc282828)],
-            ),
-          ),
+          decoration: const BoxDecoration(color: surface),
           foregroundDecoration: BoxDecoration(
             borderRadius: corners,
             border: Border.all(
@@ -128,9 +122,9 @@ class _CollectionCardState extends State<CollectionCard>
                               decoration: const BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [
-                                    Color(0x00494735),
-                                    Color(0xdf494735),
-                                    Color(0xf5584538),
+                                    surface,
+                                    Color(0xff494735),
+                                    Color(0xff584538),
                                     Color(0xff654039),
                                   ],
                                   stops: [0, .37, .70, 1],
