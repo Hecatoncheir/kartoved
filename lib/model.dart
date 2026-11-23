@@ -6,13 +6,14 @@ import 'data/oracle.dart';
 import 'data/frame.dart';
 import 'data/moxfield.dart';
 
-List<Hit> _photo(({String directory, String file}) input) =>
-    identify(input.directory, input.file);
-List<Hit> _preview(({String directory, PreviewFrame frame}) input) =>
+Recognition _photo(({String directory, String file}) input) =>
+    identifyPhoto(input.directory, input.file);
+Recognition _preview(({String directory, PreviewFrame frame}) input) =>
     identifyImage(input.directory, frameImage(input.frame));
 
 class Match {
-  const Match(this.editions, {this.score = 1});
+  const Match(this.editions, {this.score = 1, this.corners = const []});
+  final List<double> corners;
   final List<Edition> editions;
   final double score;
 }
@@ -68,15 +69,23 @@ class AppModel extends Cubit<LibraryState> {
     );
   }
 
-  Future<void> select(int folder) => _refresh(folder, catalog);
+  Future<bool>? _updating;
+  Future<void> select(int folder) async {
+    // Дождаться смены каталога раньше, чем камера начнёт читать модели.
+    await _updating?.catchError((Object _) => false);
+    await _refresh(folder, catalog);
+  }
+
   Future<void> create(String title) async =>
       select(await history.create(title));
 
-  Future<List<Match>> _matches(List<Hit> hits) async {
+  Future<List<Match>> _matches(Recognition result) async {
     final matches = <Match>[];
-    for (final hit in hits) {
+    for (final hit in result.hits) {
       final editions = await catalog!.editions(hit.index);
-      if (editions.isNotEmpty) matches.add(Match(editions, score: hit.score));
+      if (editions.isNotEmpty) {
+        matches.add(Match(editions, score: hit.score, corners: result.corners));
+      }
     }
     return matches;
   }
@@ -126,7 +135,10 @@ class AppModel extends Cubit<LibraryState> {
     return moxfieldCsv(byPrinting.values.toList());
   }
 
-  Future<bool> update() async {
+  Future<bool> update() => _updating ??= _update().whenComplete(() {
+    _updating = null;
+  });
+  Future<bool> _update() async {
     final old = catalog!;
     final next = await store.update(old);
     if (old.spec.version == next.spec.version) return false;

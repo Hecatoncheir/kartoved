@@ -25,7 +25,9 @@ class Pictures {
 
   Future<File> get(String id) => _pending.putIfAbsent(
     id,
-    () => _load(id).whenComplete(() => _pending.remove(id)),
+    () => _load(id).whenComplete(() {
+      _pending.remove(id);
+    }),
   );
 
   Future<File> _load(String id) async {

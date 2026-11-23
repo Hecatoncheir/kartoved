@@ -9,14 +9,19 @@ import 'package:path/path.dart' as p;
 
 typedef Hit = ({int index, double score});
 
+typedef Recognition = ({List<Hit> hits, List<double> corners});
+
 /// Распознаёт одиночную фотографию. Вызывается в рабочем изоляте.
-List<Hit> identify(String directory, String photo) {
+List<Hit> identify(String directory, String photo) =>
+    identifyPhoto(directory, photo).hits;
+
+Recognition identifyPhoto(String directory, String photo) {
   final decoded = im.decodeImage(File(photo).readAsBytesSync());
   if (decoded == null) throw const FormatException('Не удалось открыть снимок');
   return identifyImage(directory, im.bakeOrientation(decoded));
 }
 
-List<Hit> identifyImage(String directory, im.Image original) {
+Recognition identifyImage(String directory, im.Image original) {
   final config = jsonDecode(
     File(p.join(directory, 'catalog.json')).readAsStringSync(),
   ) as Map;
@@ -78,7 +83,7 @@ List<Hit> identifyImage(String directory, im.Image original) {
     );
     if (fine.vote / (constants['rotations'] as int) < 0.5 ||
         fine.short < side * 0.09) {
-      return [];
+      return (hits: <Hit>[], corners: <double>[]);
     }
     final embed = open('embed');
     final features = _run(embed, {
@@ -106,13 +111,23 @@ List<Hit> identifyImage(String directory, im.Image original) {
         ];
       },
     );
-    return hits.isEmpty || hits.first.score < 0.60 ? [] : hits;
+    final corners = [
+      for (var i = 0; i < fine.quad.length; i++)
+        _unitCoord(fine.quad[i], side, i.isEven ? scaled.width : scaled.height),
+    ];
+    return (
+      hits: hits.isEmpty || hits.first.score < .60 ? <Hit>[] : hits,
+      corners: corners,
+    );
   } finally {
     for (final session in sessions.reversed) {
       session.release();
     }
   }
 }
+
+double _unitCoord(double coordinate, int scene, int drawn) =>
+    (coordinate - ((scene - drawn) ~/ 2)) / drawn;
 
 OrtTensor _pixels(Uint8List data, int side) =>
     OrtTensor.fromData(OrtElementType.uint8, data, [side, side, 4]);

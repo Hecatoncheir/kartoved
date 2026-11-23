@@ -47,6 +47,14 @@ void main() {
       'ru',
     );
     expect(CardLanguage.resolve('123', 'en', [ru, en]), isNull);
+    expect(
+      CardLanguage.resolve(
+        'АБВГДЕЖЗ Deals damage to target creature you control',
+        'en',
+        [ru, en],
+      ),
+      'en',
+    );
     expect(CardLanguage.select([en, ru], null).language, 'und');
     expect(CardLanguage.select([en, ru], 'ru'), ru);
   });

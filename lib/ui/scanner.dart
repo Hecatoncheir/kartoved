@@ -32,7 +32,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   CameraController? camera;
   String? error;
   bool reading = false, modal = false, torch = false;
-  int epoch = 0, nextFrame = 0, frameSession=0;
+  int epoch = 0, nextFrame = 0, frameSession = 0;
   Future<void> cameraQueue = Future.value();
   AppModel get library => context.read<AppModel>();
 
@@ -72,7 +72,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     await _connect(token);
   }
 
-  Future<void> _connect(int token)async {
+  Future<void> _connect(int token) async {
     final cameras = await availableCameras();
     final back = cameras.firstWhere(
       (c) => c.lensDirection == CameraLensDirection.back,
@@ -148,7 +148,10 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
 
   bool get active => mounted && ModalRoute.of(context)?.isCurrent == true;
   bool accepts(int token) =>
-      active && token == frameSession && !modal && scan.state == ScanMode.automatic;
+      active &&
+      token == frameSession &&
+      !modal &&
+      scan.state == ScanMode.automatic;
   int rotation(CameraController c) {
     final turns = switch (c.value.deviceOrientation) {
       DeviceOrientation.portraitUp => 0,
@@ -166,7 +169,9 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   }
 
   void _onFrame(CameraImage image) {
-    if (reading || !accepts(frameSession) || clock.elapsedMilliseconds < nextFrame) {
+    if (reading ||
+        !accepts(frameSession) ||
+        clock.elapsedMilliseconds < nextFrame) {
       return;
     }
     final c = camera;
@@ -188,8 +193,12 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       final hit = scan.evaluate(matches);
       if (hit == null) return;
       final options = matches.first.editions;
-      final lang = await CardLanguage.read(frame: frame, options: options);
-      if (accepts(token)) await _save(CardLanguage.select(options, lang));
+      final printing = await CardLanguage.identify(
+        corners: matches.first.corners,
+        frame: frame,
+        options: options,
+      );
+      if (accepts(token)) await _save(printing);
     } catch (e) {
       if (accepts(token)) {
         _mode();
@@ -216,12 +225,13 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       return;
     }
     final options = matches.first.editions;
-    final lang = await CardLanguage.read(file: file.path, options: options);
-    if (!mounted || !active) return;
-    final card = await panel<Edition>(
-      context,
-      ResultSheet(matches, CardLanguage.select(options, lang)),
+    final printing = await CardLanguage.identify(
+      corners: matches.first.corners,
+      file: file.path,
+      options: options,
     );
+    if (!mounted || !active) return;
+    final card = await panel<Edition>(context, ResultSheet(matches, printing));
     if (card != null && active) await _save(card);
   }
 

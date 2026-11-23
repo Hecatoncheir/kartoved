@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
+import 'package:kartoved/data/frame.dart';
+import 'package:kartoved/scan_cubit.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -37,21 +40,39 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
       final saved = await model.history.list();
       expect(saved.first.card.id, english.id);
       expect(
-        await CardLanguage.read(
+        (await CardLanguage.identify(
           file: photo.path,
+          corners: cards.first.corners,
           options: cards.first.editions,
-        ),
+        )).language,
         'en',
       );
       final russian = File(p.join(temp.path, 'ru.jpg'));
       await russian.writeAsBytes(base64Decode(russianPhoto));
-      final candidates = (await model.recognize(russian.path)).first.editions;
-      final lang = await CardLanguage.read(
+      final russianMatch = (await model.recognize(russian.path)).first;
+      final candidates = russianMatch.editions;
+      final ru = await CardLanguage.identify(
         file: russian.path,
+        corners: russianMatch.corners,
         options: candidates,
       );
-      expect(lang, 'ru');
-      final ru = CardLanguage.select(candidates, lang);
+      expect(ru.language, 'ru');
+      final frame = _cameraFrame(await russian.readAsBytes());
+      final liveMatches = await model.recognizeFrame(frame);
+      final scan = ScanCubit()..toggle();
+      expect(scan.evaluate(liveMatches), isNull);
+      expect(scan.evaluate(liveMatches)?.name, "Bouncer's Beatdown");
+      final live = await CardLanguage.identify(
+        frame: frame,
+        corners: liveMatches.first.corners,
+        options: liveMatches.first.editions,
+      );
+      expect(live.id, ru.id);
+      scan.gate.saved(live);
+      expect(scan.evaluate(liveMatches), isNull);
+      scan.shutter();
+      expect(scan.evaluate(liveMatches), isNotNull);
+      await scan.close();
       await model.create('Русские карты');
       await model.save(ru);
       await model.save(ru);
@@ -109,4 +130,31 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
     expect((await history.list()).single.quantity, 3);
     expect((await history.folders()).single.count, 3);
   });
+}
+
+PreviewFrame _cameraFrame(Uint8List jpg) {
+  final source = img.decodeJpg(jpg)!;
+  final width = source.width & ~1, height = source.height & ~1;
+  final output = Uint8List(width * height * 3 ~/ 2);
+  for (var y = 0; y < height; y++) {
+    for (var x = 0; x < width; x++) {
+      final pixel = source.getPixel(x, y);
+      final r = pixel.r, g = pixel.g, b = pixel.b;
+      output[y * width + x] = (16 + .257 * r + .504 * g + .098 * b)
+          .round()
+          .clamp(0, 255);
+      if (x.isEven && y.isEven) {
+        final idx = width * height + (y ~/ 2) * width + x;
+        output[idx] = (128 + .439 * r - .368 * g - .071 * b).round().clamp(
+          0,
+          255,
+        );
+        output[idx + 1] = (128 - .148 * r - .291 * g + .439 * b).round().clamp(
+          0,
+          255,
+        );
+      }
+    }
+  }
+  return (bytes: output, width: width, height: height, rotation: 0);
 }

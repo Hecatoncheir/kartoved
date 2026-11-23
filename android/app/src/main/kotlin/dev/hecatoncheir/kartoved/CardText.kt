@@ -5,6 +5,7 @@ import android.graphics.*
 import androidx.exifinterface.media.ExifInterface
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.nl.languageid.LanguageIdentification
+import com.google.mlkit.nl.languageid.LanguageIdentificationOptions
 import com.googlecode.tesseract.android.TessBaseAPI
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -14,12 +15,14 @@ import java.util.concurrent.Executors
 
 class CardText(private val context: Context) {
     private val worker = Executors.newSingleThreadExecutor()
-    private val identifier = LanguageIdentification.getClient()
+    private val identifier = LanguageIdentification.getClient(
+        LanguageIdentificationOptions.Builder().setConfidenceThreshold(0.75f).build()
+    )
     private var engine: TessBaseAPI? = null
 
     fun read(call: MethodCall, reply: MethodChannel.Result) {
         worker.execute {
-            val result = runCatching { recognize(bitmap(call)) }.getOrNull()
+            val result = runCatching { recognize(textRegions(bitmap(call), call.argument<List<Double>>("corners"))) }.getOrNull()
             android.os.Handler(context.mainLooper).post { reply.success(result) }
         }
     }
@@ -29,12 +32,32 @@ class CardText(private val context: Context) {
         try {
             api.setImage(bitmap)
             val text = api.getUTF8Text().orEmpty()
-            val language = Tasks.await(identifier.identifyLanguage(text))
+            val language = runCatching { Tasks.await(identifier.identifyLanguage(text)) }.getOrDefault("und")
             return mapOf("text" to text, "language" to language)
         } finally {
             api.clear()
             bitmap.recycle()
         }
+    }
+
+    private fun textRegions(source: Bitmap, points: List<Double>?): Bitmap {
+        if (points?.size != 8) return source
+        val width = 600
+        val height = 840
+        val from = FloatArray(8) { i ->
+            (points[i] * if (i % 2 == 0) source.width else source.height).toFloat()
+        }
+        val target = floatArrayOf(0f, 0f, width.toFloat(), 0f, width.toFloat(), height.toFloat(), 0f, height.toFloat())
+        val transform = Matrix()
+        if (!transform.setPolyToPoly(from, 0, target, 0, 4)) return source
+        val page = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(page)
+        canvas.drawColor(Color.WHITE)
+        canvas.drawBitmap(source, transform, Paint(Paint.FILTER_BITMAP_FLAG))
+        // Иллюстрация между названием и текстом правил даёт ложные буквы.
+        canvas.drawRect(0f, height * .15f, width.toFloat(), height * .53f, Paint().apply { color = Color.WHITE })
+        source.recycle()
+        return page
     }
 
     private fun open(): TessBaseAPI {
