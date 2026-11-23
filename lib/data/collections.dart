@@ -1,6 +1,8 @@
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
+import 'package:flutter/foundation.dart' show compute;
 
+import 'backup.dart';
 import 'catalog.dart' show Edition;
 import 'review.dart';
 
@@ -70,6 +72,31 @@ class History {
   static Future<void> _indexPrintings(Database db) => db.execute(
     'CREATE INDEX scans_by_printing ON scans(folder,id,lang,foil)',
   );
+
+  Future<void> writeBackup(String path) async {
+    final snapshot = await _db.transaction(
+      (db) async => (
+        path: path,
+        folders: await db.query('folders', orderBy: 'folder'),
+        scans: await db.query('scans', orderBy: 'seq'),
+      ),
+    );
+    await compute(LibraryBackup.write, snapshot);
+  }
+
+  Future<void> restoreBackup(LibraryBackup backup) =>
+      _db.transaction((db) async {
+        await db.delete('scans');
+        await db.delete('folders');
+        final batch = db.batch();
+        for (final folder in backup.folders) {
+          batch.insert('folders', folder);
+        }
+        for (final scan in backup.scans) {
+          batch.insert('scans', scan);
+        }
+        await batch.commit(noResult: true);
+      });
 
   Future<int> create(String name) {
     final title = name.trim();

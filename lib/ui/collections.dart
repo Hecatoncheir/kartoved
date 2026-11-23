@@ -12,6 +12,7 @@ import 'sheets.dart';
 import 'collection_light.dart';
 import 'collection_browser.dart';
 import 'album.dart';
+import 'backup_panel.dart';
 import 'catalog_search.dart';
 
 class CollectionsPage extends StatelessWidget {
@@ -42,6 +43,13 @@ class CollectionsPage extends StatelessWidget {
             ],
           ),
           actions: [
+            IconButton(
+              tooltip: 'Резервная копия',
+              onPressed: state.groups.isEmpty
+                  ? null
+                  : () => panel<void>(context, BackupPanel(model)),
+              icon: const Icon(Icons.settings_backup_restore_rounded),
+            ),
             IconButton(
               tooltip: 'База карт',
               onPressed: state.catalog == null

@@ -42,6 +42,6 @@ jobs:
           script: |
             adb shell svc wifi disable
             adb shell svc data disable
-            flutter test integration_test/generated_acceptance_test.dart -d emulator-5554 --timeout 10m
+            python tool/android_documents.py flutter test integration_test/generated_acceptance_test.dart -d emulator-5554 --timeout 10m
       - name: Проверить автономный каталог внутри APK
         run: python tool/verify_apk.py build/app/outputs/flutter-apk/app-debug.apk

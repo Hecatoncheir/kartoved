@@ -97,6 +97,19 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
       expect(conflict.review?.reason, ReviewReason.batch);
       final seq = await model.save(conflict.card, review: conflict.review);
       expect(model.state.reviews[seq]?.batchLabel, 'ELD');
+      final russianFolder = model.state.folder;
+      expect(await model.saveBackup(), isTrue);
+      await model.create('После копирования');
+      final backup = await model.openBackup();
+      expect(backup?.pending, 1);
+      await model.restoreBackup(backup!);
+      expect(
+        model.state.groups.map((g) => g.name),
+        isNot(contains('После копирования')),
+      );
+      expect(model.state.recent.single.card.id, english.id);
+      await model.select(russianFolder);
+      expect(model.state.reviews[seq]?.batchLabel, 'ELD');
       expect(await model.export(), isNot(contains("Bouncer's Beatdown")));
       await model.confirmReview(seq, live);
       expect(model.state.printings.single.card.language, 'ru');

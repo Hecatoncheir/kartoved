@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'data/catalog.dart';
+import 'data/android.dart';
+import 'data/backup.dart';
 import 'data/oracle.dart';
 import 'data/frame.dart';
 import 'data/moxfield.dart';
@@ -111,6 +113,22 @@ class AppModel extends Cubit<LibraryState> {
 
   Future<void> create(String title) async =>
       select(await history.create(title));
+
+  Future<bool> saveBackup() => AndroidActions.withBackupFile((path) async {
+    await history.writeBackup(path);
+    return AndroidActions.saveBackup(path);
+  });
+
+  Future<LibraryBackup?> openBackup() =>
+      AndroidActions.withBackupFile((path) async {
+        if (!await AndroidActions.openBackup(path)) return null;
+        return compute(LibraryBackup.read, path);
+      });
+
+  Future<void> restoreBackup(LibraryBackup backup) async {
+    await history.restoreBackup(backup);
+    await select(1);
+  }
 
   Future<List<Match>> _matches(Recognition result) async {
     final matches = <Match>[];
