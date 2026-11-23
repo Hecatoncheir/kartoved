@@ -1,13 +1,17 @@
 import 'dart:io';
+import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import 'frame.dart';
+import 'browser.dart';
 
 class AndroidActions {
   static const _channel = MethodChannel('kartoved/android');
   static Future<void> chime() async {
+    if (kIsWeb) return browserChime();
     try {
       await _channel.invokeMethod<void>('chime');
     } on PlatformException {
@@ -21,12 +25,15 @@ class AndroidActions {
     String? file,
     PreviewFrame? frame,
     required List<double> corners,
-  }) => _channel.invokeMethod<Uint8List>(
-    'scanPhoto',
-    scanArguments(file: file, frame: frame, corners: corners),
-  );
+  }) => kIsWeb
+      ? browserCrop(file!, corners)
+      : _channel.invokeMethod<Uint8List>(
+          'scanPhoto',
+          scanArguments(file: file, frame: frame, corners: corners),
+        );
 
   static Future<bool?> scannerGuide([bool? visible]) async {
+    if (kIsWeb) return browserGuide(visible);
     try {
       return await _channel.invokeMethod<bool>('scannerGuide', visible);
     } on PlatformException {
@@ -36,12 +43,17 @@ class AndroidActions {
     }
   }
 
-  static Future<bool> saveCsv(String name, String csv) async =>
-      await _channel.invokeMethod<bool>('saveCsv', {
-        'name': name,
-        'csv': csv,
-      }) ??
-      false;
+  static Future<bool> saveCsv(String name, String csv) async {
+    if (kIsWeb) {
+      browserDownload(name, 'text/csv;charset=utf-8', utf8.encode(csv));
+      return true;
+    }
+    return await _channel.invokeMethod<bool>('saveCsv', {
+          'name': name,
+          'csv': csv,
+        }) ??
+        false;
+  }
 
   static Future<T> withBackupFile<T>(
     Future<T> Function(String path) action,

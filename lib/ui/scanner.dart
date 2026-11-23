@@ -3,12 +3,14 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../data/android.dart';
+import '../data/browser.dart';
 import '../data/catalog.dart';
 import '../data/frame.dart';
 import '../data/language.dart';
@@ -17,6 +19,7 @@ import '../model.dart';
 import '../scan_cubit.dart';
 import '../scan_decision.dart';
 import 'batch_settings.dart';
+import 'browser_glass.dart';
 import 'scan_frame.dart';
 import 'scan_reviews.dart';
 import 'sheets.dart';
@@ -33,6 +36,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   final scan = ScanCubit();
   final clock = Stopwatch()..start();
   CameraController? camera;
+  Timer? _webFrames;
   String? error;
   bool reading = false, modal = false, torch = false, writing = false;
   int epoch = 0, nextFrame = 0, frameSession = 0;
@@ -78,6 +82,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   }
 
   Future<void> _open(bool open, int token) async {
+    _webFrames?.cancel();
     final old = camera;
     camera = null;
     torch = false;
@@ -127,6 +132,15 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     final c = camera;
     if (c == null) return;
     final auto = scan.state.mode == ScanMode.automatic;
+    if (kIsWeb) {
+      _webFrames?.cancel();
+      if (auto) {
+        _webFrames = Timer.periodic(const Duration(milliseconds: 300), (_) {
+          unawaited(_webFrame(c));
+        });
+      }
+      return;
+    }
     if (auto == c.value.isStreamingImages) return;
     if (auto) {
       await c.startImageStream(_onFrame);
@@ -136,6 +150,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   }
 
   void _mode() {
+    unlockBrowserSound();
     frameSession++;
     scan.toggle();
     cameraQueue = cameraQueue.then((_) => _syncStream()).catchError((Object e) {
@@ -147,6 +162,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _webFrames?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     openCamera(false);
     unawaited(scan.close());
@@ -199,6 +215,45 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       rotation: rotation(c),
     );
     unawaited(_automatic(frame, frameSession));
+  }
+
+  Future<XFile> _takePicture(CameraController controller) async {
+    final capture = controller.takePicture();
+    final photo = await (kIsWeb
+        ? capture.timeout(const Duration(seconds: 5))
+        : capture);
+    if (!kIsWeb ||
+        controller.description.lensDirection == CameraLensDirection.back) {
+      return photo;
+    }
+    try {
+      return XFile(await browserUnmirror(photo.path));
+    } finally {
+      releaseBrowserPhoto(photo.path);
+    }
+  }
+
+  Future<void> _webFrame(CameraController c) async {
+    final token = frameSession;
+    if (reading || !accepts(token) || !identical(c, camera)) return;
+    reading = true;
+    XFile? photo;
+    try {
+      photo = await _takePicture(c);
+      if (!accepts(token)) return;
+      final matches = await library.recognize(photo.path);
+      if (accepts(token) && scan.evaluate(matches) != null) {
+        await _store(matches, file: photo.path, accept: () => accepts(token));
+      }
+    } catch (_) {
+      if (accepts(token)) {
+        _mode();
+        message('Автоскан остановлен. Попробуйте ещё раз.');
+      }
+    } finally {
+      await _discard(photo);
+      reading = false;
+    }
   }
 
   Future<void> _automatic(PreviewFrame frame, int token) async {
@@ -274,6 +329,10 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
 
   Future<void> _discard(XFile? file) async {
     if (file == null) return;
+    if (kIsWeb) {
+      releaseBrowserPhoto(file.path);
+      return;
+    }
     try {
       await File(file.path).delete();
     } on FileSystemException {
@@ -283,6 +342,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
 
   Future<void> _manual({bool gallery = false}) async {
     if (modal || writing) return;
+    unlockBrowserSound();
     if (!gallery && scan.state.mode == ScanMode.automatic) {
       scan.shutter();
       nextFrame = 0;
@@ -298,13 +358,13 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
               maxWidth: 2000,
               maxHeight: 2000,
             )
-          : await camera?.takePicture();
+          : await (camera == null ? null : _takePicture(camera!));
       if (file == null || !active) return;
       await _recognize(file);
     } catch (e) {
       message('Не удалось обработать снимок');
     } finally {
-      if (!gallery) await _discard(file);
+      if (!gallery || kIsWeb) await _discard(file);
       if (mounted) setState(() => modal = false);
     }
   }
@@ -506,8 +566,10 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     return Stack(
       fit: StackFit.expand,
       children: [
+        if (kIsWeb && scan.state.showGuide && camera != null)
+          BrowserGlass(rect, bounds.biggest),
         if (scan.state.showGuide)
-          ScanFrame(window: rect, hasPreview: camera != null),
+          ScanFrame(window: rect, hasPreview: !kIsWeb && camera != null),
         Positioned(
           left: 10,
           right: 10,
@@ -616,7 +678,7 @@ class _CameraSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final landscape =
-        MediaQuery.orientationOf(context) == Orientation.landscape;
+        kIsWeb || MediaQuery.orientationOf(context) == Orientation.landscape;
     final size = controller.value.previewSize!;
     return ClipRect(
       child: FittedBox(

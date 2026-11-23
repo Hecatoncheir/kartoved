@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#282828">
+  <link rel="icon" type="image/png" href="runtime/favicon.png">
+  <meta name="description" content="Картовед распознаёт бумажные карты Magic и ведёт коллекции прямо в браузере.">
+  <title>Картовед</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #282828; color: #fbf1c7; }
+    #loading { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; font: 1rem system-ui, sans-serif; padding: 1rem; }
+  </style>
+</head>
+<body>
+  <div id="loading" role="status">Картовед загружается…</div>
+  <noscript>Включите JavaScript, чтобы открыть Картовед.</noscript>
+  <script type="module">
+    import './browser.mjs';
+    addEventListener('flutter-first-frame', () => document.getElementById('loading').remove(), {once: true});
+    const bootstrap = document.createElement('script');
+    bootstrap.src = 'flutter_bootstrap.js';
+    bootstrap.onerror = () => document.getElementById('loading').textContent = 'Не удалось загрузить Картовед. Обновите страницу.';
+    document.body.append(bootstrap);
+  </script>
+</body>
+</html>

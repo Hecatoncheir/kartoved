@@ -63,9 +63,7 @@ class _BackupPanelState extends State<BackupPanel> {
             'Коллекций: ${backup.folders.length}  ·  Карт: ${backup.copies}  ·  На проверке: ${backup.pending}',
           ),
           const SizedBox(height: 10),
-          const Text(
-            'Коллекции на этом телефоне будут заменены данными из файла.',
-          ),
+          const Text('Текущие коллекции будут заменены данными из файла.'),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: busy ? null : () => _restore(backup),

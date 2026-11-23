@@ -2,12 +2,18 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/painting.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+
+import 'browser.dart';
 
 class Pictures {
   static final shared = Pictures();
   final Map<String, Future<File>> _pending = {};
+  final Map<String, Future<Uint8List>> _browserPending = {};
   final _photos = StreamController<String>.broadcast();
   Stream<String> get photos => _photos.stream;
   Future<Directory>? _root;
@@ -33,7 +39,36 @@ class Pictures {
     );
   }
 
-  Future<File> get(String id, {bool large = false}) async {
+  Future<ImageProvider> get(String id, {bool large = false}) async => kIsWeb
+      ? MemoryImage(await _getBrowser(id, large: large))
+      : FileImage(await _getFile(id, large: large));
+
+  Future<Uint8List> _getBrowser(String id, {required bool large}) async {
+    final url = address(id, large: large);
+    final key = 'images/$id/${large ? 'large' : 'small'}';
+    final cached =
+        await browserCacheRead(key) ?? await browserCacheRead('scans/$id');
+    if (cached != null) return cached;
+    return _browserPending.putIfAbsent(
+      key,
+      () => _downloadBrowser(
+        url,
+        key,
+      ).whenComplete(() => _browserPending.remove(key)),
+    );
+  }
+
+  Future<Uint8List> _downloadBrowser(Uri url, String key) async {
+    final response = await http.get(url).timeout(const Duration(seconds: 12));
+    if (response.statusCode != 200 ||
+        response.headers['content-type']?.startsWith('image/') != true) {
+      throw StateError('Изображение недоступно');
+    }
+    await browserCacheWrite(key, response.bodyBytes);
+    return response.bodyBytes;
+  }
+
+  Future<File> _getFile(String id, {required bool large}) async {
     final key = large ? '$id.normal' : id;
     final url = address(id, large: large);
     final root = await _directory;
@@ -54,6 +89,12 @@ class Pictures {
 
   Future<void> saveScan(String id, Uint8List bytes) async {
     address(id);
+    if (kIsWeb) {
+      if (await browserCacheRead('scans/$id') != null) return;
+      await browserCacheWrite('scans/$id', bytes);
+      _photos.add(id);
+      return;
+    }
     final photo = _scanFile(await _directory, id);
     if (await photo.exists()) return;
     final temp = File('${photo.path}.part');

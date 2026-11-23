@@ -7,9 +7,9 @@ import 'package:image/image.dart' as im;
 import 'package:onnxruntime_core/onnxruntime_core.dart';
 import 'package:path/path.dart' as p;
 
-typedef Hit = ({int index, double score});
+import 'recognition_result.dart';
 
-typedef Recognition = ({List<Hit> hits, List<double> corners});
+export 'recognition_result.dart';
 
 /// Распознаёт одиночную фотографию. Вызывается в рабочем изоляте.
 List<Hit> identify(String directory, String photo) =>

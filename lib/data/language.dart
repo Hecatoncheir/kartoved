@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
+import 'browser.dart';
 import 'catalog.dart';
 import 'frame.dart';
 
@@ -28,6 +30,14 @@ class CardLanguage {
     List<double> corners = const [],
   }) async {
     if (options.length == 1) return options;
+    if (kIsWeb) {
+      try {
+        return candidates(await browserReadText(file!, corners), null, options);
+      } catch (e) {
+        debugPrint('Не удалось прочитать текст карты в браузере: $e');
+        return options;
+      }
+    }
     try {
       final result = await _channel.invokeMapMethod<String, String>(
         'readText',

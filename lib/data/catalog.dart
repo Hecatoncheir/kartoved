@@ -49,13 +49,22 @@ class CatalogSpec {
 }
 
 class Catalog {
-  const Catalog(this.directory, this.spec);
-  final Directory directory;
+  const Catalog(Directory directory, this.spec)
+    : _directory = directory,
+      _database = null;
+  const Catalog.opened(Database database, this.spec)
+    : _database = database,
+      _directory = null;
+
+  final Directory? _directory;
+  final Database? _database;
+  Directory get directory => _directory!;
   final CatalogSpec spec;
   Future<List<Map<String, Object?>>> _query(
     String sql,
     List<Object?> args,
   ) async {
+    if (_database case final db?) return db.rawQuery(sql, args);
     final db = await openReadOnlyDatabase(
       p.join(directory.path, 'cards.sqlite'),
       singleInstance: false,
@@ -94,54 +103,26 @@ class Catalog {
   Future<Edition> front(Edition card) async {
     if (!card.id.endsWith('-1')) return card;
     final id = card.id.substring(0, card.id.length - 2);
-    final db = await openReadOnlyDatabase(
-      p.join(directory.path, 'cards.sqlite'),
-      singleInstance: false,
-    );
-    try {
-      final rows = await db.query(
-        'editions',
-        where: 'id=?',
-        whereArgs: [id],
-        limit: 1,
-      );
-      return rows.isEmpty ? card : Edition.fromRow(rows.first);
-    } finally {
-      await db.close();
-    }
+    final rows = await _query('SELECT * FROM editions WHERE id=? LIMIT 1', [
+      id,
+    ]);
+    return rows.isEmpty ? card : Edition.fromRow(rows.first);
   }
 
   Future<List<Edition>> variants(Edition card) async {
-    final db = await openReadOnlyDatabase(
-      p.join(directory.path, 'cards.sqlite'),
-      singleInstance: false,
+    final rows = await _query(
+      'SELECT * FROM editions WHERE art = (SELECT art FROM editions WHERE id = ? LIMIT 1) ORDER BY rowid',
+      [card.id],
     );
-    try {
-      final rows = await db.rawQuery(
-        'SELECT * FROM editions WHERE art = (SELECT art FROM editions WHERE id = ? LIMIT 1) ORDER BY rowid',
-        [card.id],
-      );
-      return rows.map(Edition.fromRow).toList();
-    } finally {
-      await db.close();
-    }
+    return rows.map(Edition.fromRow).toList();
   }
 
   Future<List<Edition>> inSet(String code, String language) async {
-    final db = await openReadOnlyDatabase(
-      p.join(directory.path, 'cards.sqlite'),
-      singleInstance: false,
+    final rows = await _query(
+      'SELECT * FROM editions WHERE set_code=? AND lang=?',
+      [code, language],
     );
-    try {
-      final rows = await db.query(
-        'editions',
-        where: 'set_code=? AND lang=?',
-        whereArgs: [code, language],
-      );
-      return rows.map(Edition.fromRow).toList();
-    } finally {
-      await db.close();
-    }
+    return rows.map(Edition.fromRow).toList();
   }
 
   Future<List<String>> setCodes() async {
@@ -161,21 +142,11 @@ class Catalog {
   }
 
   Future<List<Edition>> editions(int index) async {
-    final db = await openReadOnlyDatabase(
-      p.join(directory.path, 'cards.sqlite'),
-      singleInstance: false,
+    final rows = await _query(
+      'SELECT * FROM editions WHERE art=? ORDER BY rowid',
+      [index],
     );
-    try {
-      final rows = await db.query(
-        'editions',
-        where: 'art = ?',
-        whereArgs: [index],
-        orderBy: 'rowid',
-      );
-      return rows.map(Edition.fromRow).toList();
-    } finally {
-      await db.close();
-    }
+    return rows.map(Edition.fromRow).toList();
   }
 }
 

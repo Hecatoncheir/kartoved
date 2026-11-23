@@ -1,0 +1,63 @@
+name: Публикация Картоведа в браузере
+
+on:
+  push:
+    branches: ['1.x.x']
+    paths:
+      - '.github/workflows/pages.yml'
+      - 'assets/**'
+      - 'android/app/src/main/assets/tessdata/**'
+      - 'android/app/src/main/res/raw/card_added.wav'
+      - 'android/app/src/main/res/mipmap-mdpi/ic_launcher.png'
+      - 'lib/**'
+      - 'pubspec.*'
+      - 'shaders/**'
+      - 'tool/prepare_web.py'
+      - 'tool/web/**'
+      - 'web/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kartoved-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: tool/web/package-lock.json
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.0'
+          cache: true
+      - run: npm ci --ignore-scripts --prefix tool/web
+      - run: flutter pub get
+      - run: dart run sqflite_common_ffi_web:setup
+      - run: python tool/prepare_web.py
+      - run: flutter build web --release --no-pub --no-web-resources-cdn --pwa-strategy=none --no-wasm-dry-run --base-href /kartoved/
+      - run: python tool/prepare_web.py --seal build/web "$GITHUB_SHA"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: pages

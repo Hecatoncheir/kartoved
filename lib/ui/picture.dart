@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
 
@@ -18,9 +17,9 @@ class CardPicture extends StatefulWidget {
 }
 
 class _CardPictureState extends State<CardPicture> {
-  late Future<File> file = Pictures.shared.get(widget.card.id);
-  late Future<File>? large = _large();
-  Future<File>? _large() =>
+  late Future<ImageProvider> file = Pictures.shared.get(widget.card.id);
+  late Future<ImageProvider>? large = _large();
+  Future<ImageProvider>? _large() =>
       widget.large ? Pictures.shared.get(widget.card.id, large: true) : null;
 
   late final StreamSubscription<String> _photos;
@@ -66,13 +65,13 @@ class _CardPictureState extends State<CardPicture> {
         borderRadius: BorderRadius.circular(5),
         child: !widget.large
             ? _thumbnail()
-            : FutureBuilder<File>(
+            : FutureBuilder<ImageProvider>(
                 future: large,
                 builder: (context, full) {
                   if (full.connectionState == ConnectionState.done &&
                       full.hasData) {
-                    return Image.file(
-                      full.requireData,
+                    return Image(
+                      image: full.requireData,
                       fit: BoxFit.contain,
                       errorBuilder: (_, _, _) => _thumbnail(),
                     );
@@ -84,12 +83,12 @@ class _CardPictureState extends State<CardPicture> {
     ),
   );
 
-  Widget _thumbnail() => FutureBuilder<File>(
+  Widget _thumbnail() => FutureBuilder<ImageProvider>(
     future: file,
     builder: (c, s) {
       if (s.connectionState == ConnectionState.done && s.hasData) {
-        return Image.file(
-          s.requireData,
+        return Image(
+          image: s.requireData,
           fit: BoxFit.contain,
           errorBuilder: (_, _, _) => _placeholder(),
         );

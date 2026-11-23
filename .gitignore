@@ -48,3 +48,8 @@ app.*.map.json
 .widget_preview/
 
 /integration_test/generated_acceptance_test.dart
+/tool/web/node_modules/
+/web/runtime/
+/web/sqlite3.wasm
+/web/sqflite_sw.js
+/web/sqflite_sw.js.map

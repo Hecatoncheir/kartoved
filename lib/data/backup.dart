@@ -1,11 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'review.dart';
 
 typedef BackupRow = Map<String, Object?>;
 
 const _invalid = FormatException('Файл резервной копии повреждён');
+final maxCardQuantity = kIsWeb
+    ? 9007199254740991
+    : int.parse('9223372036854775807');
 
 class LibraryBackup {
   LibraryBackup._(this.folders, this.scans, this.copies, this.pending);
@@ -47,7 +52,7 @@ class LibraryBackup {
     var copies = 0;
     for (final row in confirmed) {
       final quantity = _positive(row['qty']);
-      if (copies > 0x7fffffffffffffff - quantity) throw _invalid;
+      if (copies > maxCardQuantity - quantity) throw _invalid;
       copies += quantity;
     }
     return LibraryBackup._(
@@ -61,23 +66,26 @@ class LibraryBackup {
   static Future<void> write(
     ({String path, List<BackupRow> folders, List<BackupRow> scans}) snapshot,
   ) async {
-    final json = {
-      'format': 'kartoved',
-      'version': 1,
-      'folders': snapshot.folders,
-      'scans': [
-        for (final row in snapshot.scans)
-          {
-            ...row,
-            'review': switch (row['review']) {
-              String text => jsonDecode(text),
-              _ => null,
-            },
-          },
-      ],
-    };
-    await File(snapshot.path).writeAsString(jsonEncode(json), flush: true);
+    await File(snapshot.path)
+        .writeAsString(encode(snapshot.folders, snapshot.scans), flush: true);
   }
+
+  static String encode(List<BackupRow> folders, List<BackupRow> scans) =>
+      jsonEncode({
+        'format': 'kartoved',
+        'version': 1,
+        'folders': folders,
+        'scans': [
+          for (final row in scans)
+            {
+              ...row,
+              'review': switch (row['review']) {
+                String text => jsonDecode(text),
+                _ => null,
+              },
+            },
+        ],
+      });
 }
 
 Iterable<BackupRow> _rows(Object? value) sync* {

@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+
 import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
@@ -23,7 +26,7 @@ class _Tilt extends ValueNotifier<Offset> with WidgetsBindingObserver {
   }
 
   void _start() {
-    if (!Platform.isAndroid) return;
+    if (kIsWeb || !Platform.isAndroid) return;
     sensor ??=
         accelerometerEventStream(
           samplingPeriod: const Duration(milliseconds: 60),

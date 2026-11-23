@@ -2,6 +2,7 @@ import 'picture.dart';
 import '../data/pictures.dart';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../data/catalog.dart';
 import '../model.dart';
@@ -280,7 +281,13 @@ class _CatalogPanelState extends State<CatalogPanel> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.sync),
-          label: Text(loading ? 'Обновление…' : 'Проверить обновления'),
+          label: Text(
+            loading
+                ? 'Обновление…'
+                : kIsWeb
+                ? 'Обновить страницу'
+                : 'Проверить обновления',
+          ),
         ),
       ],
     );

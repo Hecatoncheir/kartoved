@@ -2,8 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+
+import 'browser.dart';
 
 typedef CardFaceText = ({
   String name,
@@ -84,31 +88,55 @@ class CardReferences {
   }
 
   Future<CardReference> _load(String id) async {
+    if (kIsWeb) {
+      final key = 'reference/$id';
+      final bytes = await browserCacheRead(key);
+      final cached = bytes == null ? null : _decodeCache(utf8.decode(bytes));
+      return _readReference(
+        id,
+        cached,
+        (data) => browserCacheWrite(key, utf8.encode(jsonEncode(data))),
+      );
+    }
     final root = await getApplicationSupportDirectory();
     final folder = await Directory(p.join(root.path, 'card-reference'))
         .create(recursive: true);
     final file = File(p.join(folder.path, '$id.json'));
-    final cached = await _readCache(file);
+    return _readReference(
+      id,
+      await _readCache(file),
+      (data) => _saveCache(file, data),
+    );
+  }
+
+  Future<CardReference> _readReference(
+    String id,
+    Map<String, dynamic>? cached,
+    Future<void> Function(Map<String, dynamic>) save,
+  ) async {
     final savedCard = cached?['card'] as Map<String, dynamic>?;
     final savedRulings = cached?['rulings'] as List<dynamic>?;
     if (savedCard != null && savedRulings != null) {
       return CardReference.fromJson(savedCard, savedRulings);
     }
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 5)
-      ..userAgent = 'Kartoved Android (github.com/Hecatoncheir/kartoved)';
+    final client = kIsWeb
+        ? null
+        : (HttpClient()
+            ..connectionTimeout = const Duration(seconds: 5)
+            ..userAgent =
+                'Kartoved Android (github.com/Hecatoncheir/kartoved)');
     try {
       final card = savedCard ?? await _request(client, '/cards/$id');
       final rulings = await _rulings(client, id);
       final result = CardReference.fromJson(card, rulings);
-      await _saveCache(file, {'card': card, 'rulings': rulings});
+      await save({'card': card, 'rulings': rulings});
       return result;
     } finally {
-      client.close(force: true);
+      client?.close(force: true);
     }
   }
 
-  Future<List<dynamic>?> _rulings(HttpClient client, String id) async {
+  Future<List<dynamic>?> _rulings(HttpClient? client, String id) async {
     try {
       final result = <dynamic>[];
       var page = 1;
@@ -126,7 +154,7 @@ class CardReferences {
   }
 
   Future<Map<String, dynamic>> _request(
-    HttpClient client,
+    HttpClient? client,
     String path, [
     Map<String, String>? query,
   ]) async {
@@ -135,9 +163,18 @@ class CardReferences {
     _nextRequest = now + wait + 120;
     if (wait > 0) await Future<void>.delayed(Duration(milliseconds: wait));
     const timeout = Duration(seconds: 7);
-    final request = await client
-        .getUrl(Uri.https('api.scryfall.com', path, query))
-        .timeout(timeout);
+    final uri = Uri.https('api.scryfall.com', path, query);
+    if (client == null) {
+      final response = await http
+          .get(uri, headers: {'Accept': 'application/json'})
+          .timeout(timeout);
+      if (response.statusCode != 200) {
+        throw const FormatException('Данные карты недоступны');
+      }
+      return jsonDecode(utf8.decode(response.bodyBytes))
+          as Map<String, dynamic>;
+    }
+    final request = await client.getUrl(uri).timeout(timeout);
     request.headers.set(HttpHeaders.acceptHeader, 'application/json');
     final response = await request.close().timeout(timeout);
     if (response.statusCode != HttpStatus.ok) {
@@ -150,10 +187,19 @@ class CardReferences {
   Future<Map<String, dynamic>?> _readCache(File file) async {
     try {
       if (await file.exists()) {
-        final data = jsonDecode(await file.readAsString());
-        if (data is Map<String, dynamic>) return data;
+        return _decodeCache(await file.readAsString());
       }
     } on Exception {
+      // Повреждённый кэш можно заполнить повторно.
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _decodeCache(String text) {
+    try {
+      final data = jsonDecode(text);
+      if (data is Map<String, dynamic>) return data;
+    } on FormatException {
       // Повреждённый кэш можно заполнить повторно.
     }
     return null;

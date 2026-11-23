@@ -1,18 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'data/catalog.dart';
 import 'data/android.dart';
 import 'data/backup.dart';
-import 'data/oracle.dart';
+import 'data/browser.dart';
+import 'data/recognition.dart';
 import 'data/frame.dart';
 import 'data/moxfield.dart';
 import 'data/review.dart';
-
-Recognition _photo(({String directory, String file}) input) =>
-    identifyPhoto(input.directory, input.file);
-Recognition _preview(({String directory, PreviewFrame frame}) input) =>
-    identifyImage(input.directory, frameImage(input.frame));
 
 class Match {
   const Match(this.editions, {this.score = 1, this.corners = const []});
@@ -124,16 +122,33 @@ class AppModel extends Cubit<LibraryState> {
   Future<void> create(String title) async =>
       select(await history.create(title));
 
-  Future<bool> saveBackup() => AndroidActions.withBackupFile((path) async {
-    await history.writeBackup(path);
-    return AndroidActions.saveBackup(path);
-  });
+  Future<bool> saveBackup() async {
+    if (kIsWeb) {
+      final date = DateTime.now().toIso8601String().split('T').first;
+      final data = await history.backupJson();
+      browserDownload(
+        'kartoved-$date.json',
+        'application/json',
+        utf8.encode(data),
+      );
+      return true;
+    }
+    return AndroidActions.withBackupFile((path) async {
+      await history.writeBackup(path);
+      return AndroidActions.saveBackup(path);
+    });
+  }
 
-  Future<LibraryBackup?> openBackup() =>
-      AndroidActions.withBackupFile((path) async {
-        if (!await AndroidActions.openBackup(path)) return null;
-        return compute(LibraryBackup.read, path);
-      });
+  Future<LibraryBackup?> openBackup() async {
+    if (kIsWeb) {
+      final text = await browserPickBackup();
+      return text == null ? null : LibraryBackup.fromJson(jsonDecode(text));
+    }
+    return AndroidActions.withBackupFile((path) async {
+      if (!await AndroidActions.openBackup(path)) return null;
+      return compute(LibraryBackup.read, path);
+    });
+  }
 
   Future<void> restoreBackup(LibraryBackup backup) async {
     _undoable = null;
@@ -152,13 +167,11 @@ class AppModel extends Cubit<LibraryState> {
     return matches;
   }
 
-  Future<List<Match>> recognize(String file) async => _matches(
-    await compute(_photo, (directory: catalog!.directory.path, file: file)),
-  );
+  Future<List<Match>> recognize(String file) async =>
+      _matches(await recognizeFile(catalog!, file));
 
-  Future<List<Match>> recognizeFrame(PreviewFrame frame) async => _matches(
-    await compute(_preview, (directory: catalog!.directory.path, frame: frame)),
-  );
+  Future<List<Match>> recognizeFrame(PreviewFrame frame) async =>
+      _matches(await recognizeCameraFrame(catalog!, frame));
 
   Future<int> save(Edition card, {ScanReview? review}) async {
     final folder = state.folder;

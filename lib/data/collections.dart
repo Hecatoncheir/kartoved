@@ -78,15 +78,26 @@ class History {
   );
 
   Future<void> writeBackup(String path) async {
-    final snapshot = await _db.transaction(
-      (db) async => (
-        path: path,
-        folders: await db.query('folders', orderBy: 'folder'),
-        scans: await db.query('scans', orderBy: 'seq'),
-      ),
-    );
-    await compute(LibraryBackup.write, snapshot);
+    final snapshot = await _backupRows();
+    await compute(LibraryBackup.write, (
+      path: path,
+      folders: snapshot.folders,
+      scans: snapshot.scans,
+    ));
   }
+
+  Future<String> backupJson() async {
+    final snapshot = await _backupRows();
+    return LibraryBackup.encode(snapshot.folders, snapshot.scans);
+  }
+
+  Future<({List<BackupRow> folders, List<BackupRow> scans})> _backupRows() =>
+      _db.transaction(
+        (db) async => (
+          folders: await db.query('folders', orderBy: 'folder'),
+          scans: await db.query('scans', orderBy: 'seq'),
+        ),
+      );
 
   Future<void> restoreBackup(LibraryBackup backup) =>
       _db.transaction((db) async {
@@ -165,7 +176,7 @@ class History {
           await db.rawQuery('SELECT SUM(qty) FROM scans'),
         ) ??
         0;
-    if (quantity < 1 || quantity > 0x7fffffffffffffff - total) {
+    if (quantity < 1 || quantity > maxCardQuantity - total) {
       throw RangeError('Проверьте количество экземпляров');
     }
     return db.insert('scans', {
