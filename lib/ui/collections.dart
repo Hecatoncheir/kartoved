@@ -6,6 +6,7 @@ import '../data/catalog.dart';
 import '../model.dart';
 import 'scanner.dart';
 import 'scan_glass.dart';
+import 'scan_reviews.dart';
 import 'style.dart';
 import 'sheets.dart';
 import 'collection_light.dart';
@@ -199,6 +200,12 @@ class CollectionPage extends StatelessWidget {
     final model = context.read<AppModel>();
     try {
       final folder = model.state.folder;
+      if (model.state.reviews.isNotEmpty) {
+        final proceed = await reviewBeforeExport(context, model);
+        if (!proceed || !context.mounted || model.state.folder != folder) {
+          return;
+        }
+      }
       final flaggedOnly = model.state.flags.isEmpty
           ? false
           : await panel<bool>(
@@ -274,6 +281,11 @@ class CollectionPage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
               child: Column(
                 children: [
+                  if (state.reviews.isNotEmpty)
+                    ReviewButton(
+                      state.reviews.length,
+                      () => openReviews(context, context.read<AppModel>()),
+                    ),
                   if (items.isNotEmpty && !keyboard)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
@@ -312,16 +324,18 @@ class CollectionPage extends StatelessWidget {
                     ),
                   Expanded(
                     child: items.isEmpty
-                        ? const SafeArea(
+                        ? SafeArea(
                             top: false,
                             child: Center(
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Folio(),
+                                  const Folio(),
                                   Text(
-                                    'Пока нет карт',
-                                    style: TextStyle(color: paper),
+                                    state.reviews.isEmpty
+                                        ? 'Пока нет карт'
+                                        : 'Карты ожидают проверки',
+                                    style: const TextStyle(color: paper),
                                   ),
                                 ],
                               ),

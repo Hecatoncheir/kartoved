@@ -11,7 +11,23 @@ class CardLanguage {
     required List<Edition> options,
     List<double> corners = const [],
   }) async {
-    if (options.length == 1) return options.single;
+    final choices = await readOptions(
+      file: file,
+      frame: frame,
+      options: options,
+      corners: corners,
+    );
+    final languages = choices.map((e) => e.language).toSet();
+    return select(choices, languages.length == 1 ? languages.single : null);
+  }
+
+  static Future<List<Edition>> readOptions({
+    String? file,
+    PreviewFrame? frame,
+    required List<Edition> options,
+    List<double> corners = const [],
+  }) async {
+    if (options.length == 1) return options;
     final args = frame == null
         ? {'file': file}
         : {
@@ -25,9 +41,9 @@ class CardLanguage {
         'readText',
         {...args, 'corners': corners},
       );
-      return printing(result?['text'] ?? '', result?['language'], options);
+      return candidates(result?['text'] ?? '', result?['language'], options);
     } on PlatformException {
-      return printing('', null, options);
+      return options;
     }
   }
 
@@ -35,7 +51,7 @@ class CardLanguage {
     final languages = options.map((e) => e.language).toSet();
     if (languages.length == 1) return languages.single;
     final printed = _footer(text, options, languages);
-    if (printed != null) return printed;
+    if (printed != null) return printed.language;
     final rules = _rulesLanguage(text, languages);
     if (rules != null) return rules;
     if (text.trim().length < 15) return null;
@@ -47,7 +63,7 @@ class CardLanguage {
         : null;
   }
 
-  static String? _footer(
+  static ({String set, String language})? _footer(
     String text,
     List<Edition> options,
     Set<String> languages,
@@ -58,7 +74,6 @@ class CardLanguage {
         r'\b' + RegExp.escape(set) + r'[\s•·.\-|:]{1,6}([A-Z]{2,3})\b',
         caseSensitive: false,
       );
-      final code = pattern.firstMatch(text)?[1]?.toLowerCase();
       const aliases = {
         'jp': 'ja',
         'kr': 'ko',
@@ -66,8 +81,13 @@ class CardLanguage {
         'ct': 'zht',
         'sp': 'es',
       };
-      final printed = aliases[code] ?? code;
-      if (languages.contains(printed)) return printed;
+      for (final match in pattern.allMatches(text)) {
+        final code = match[1]!.toLowerCase();
+        final printed = aliases[code] ?? code;
+        if (languages.contains(printed)) {
+          return (set: set.toLowerCase(), language: printed);
+        }
+      }
     }
     return null;
   }
@@ -107,32 +127,36 @@ class CardLanguage {
     return null;
   }
 
-  static Edition printing(
+  static List<Edition> candidates(
     String text,
     String? detected,
     List<Edition> options,
   ) {
     final lang = resolve(text, detected, options);
-    final tokens = RegExp(r'[A-Za-z0-9]+')
-        .allMatches(text.toLowerCase())
-        .map((m) => m[0]!)
-        .toSet();
+    // Слова из текста правил могут совпасть с кодом набора (например, ONE).
+    // Используем только обозначения, похожие на выходные данные карты.
+    final footer = _footer(
+      text,
+      options,
+      options.map((e) => e.language).toSet(),
+    );
+    final numbers = RegExp(
+      r'\b([0-9]{1,4}[a-z]?)\s*/\s*[0-9]{3,4}\b|\b[curmspl]\s+([0-9]{3,4}[a-z]?)\b',
+      caseSensitive: false,
+    ).allMatches(text).map((m) => _number(m[1] ?? m[2]!)).toSet();
     final matchingLanguage = options
         .where((e) => lang == null || e.language == lang)
         .toList();
-    final bySet = matchingLanguage
-        .where((e) => tokens.contains(e.set))
-        .toList();
+    final bySet = matchingLanguage.where((e) => e.set == footer?.set).toList();
     final editions = bySet.isEmpty ? matchingLanguage : bySet;
     final byNumber = editions
-        .where(
-          (e) =>
-              tokens.contains(e.number.toLowerCase()) ||
-              tokens.contains(e.number.padLeft(4, '0')),
-        )
+        .where((e) => numbers.contains(_number(e.number)))
         .toList();
-    return select(byNumber.isEmpty ? editions : byNumber, lang);
+    return byNumber.isEmpty ? editions : byNumber;
   }
+
+  static String _number(String value) =>
+      value.toLowerCase().replaceFirst(RegExp(r'^0+(?=\d)'), '');
 
   static Edition select(List<Edition> options, String? language) {
     final matching = options.where((e) => e.language == language).toList();

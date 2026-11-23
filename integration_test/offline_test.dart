@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:kartoved/data/frame.dart';
 import 'package:kartoved/scan_cubit.dart';
+import 'package:kartoved/scan_decision.dart';
+import 'package:kartoved/data/review.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -70,11 +72,16 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
       final scan = ScanCubit()..toggle();
       expect(scan.evaluate(liveMatches), isNull);
       expect(scan.evaluate(liveMatches)?.name, "Bouncer's Beatdown");
-      final live = await CardLanguage.identify(
+      final evidence = await CardLanguage.readOptions(
         frame: frame,
         corners: liveMatches.first.corners,
         options: liveMatches.first.editions,
       );
+      final live = decideScan(
+        liveMatches,
+        evidence,
+        const BatchSettings(language: 'ru', setCode: 'snc'),
+      ).card;
       expect(live.id, ru.id);
       scan.gate.saved(live);
       expect(scan.evaluate(liveMatches), isNull);
@@ -82,6 +89,19 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
       expect(scan.evaluate(liveMatches), isNotNull);
       await scan.close();
       await model.create('Русские карты');
+      final conflict = decideScan(
+        liveMatches,
+        evidence,
+        const BatchSettings(setCode: 'eld'),
+      );
+      expect(conflict.review?.reason, ReviewReason.batch);
+      final seq = await model.save(conflict.card, review: conflict.review);
+      expect(model.state.reviews[seq]?.batchLabel, 'ELD');
+      expect(await model.export(), isNot(contains("Bouncer's Beatdown")));
+      await model.confirmReview(seq, live);
+      expect(model.state.printings.single.card.language, 'ru');
+      await model.discardScan(seq);
+      expect(model.state.recent, isEmpty);
       await model.save(ru);
       await model.save(ru);
       expect(model.state.recent.length, 2);

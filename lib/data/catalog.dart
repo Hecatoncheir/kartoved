@@ -144,6 +144,22 @@ class Catalog {
     }
   }
 
+  Future<List<String>> setCodes() async {
+    final rows = await _query(
+      'SELECT DISTINCT set_code FROM editions ORDER BY set_code',
+      [],
+    );
+    return [for (final row in rows) row['set_code'] as String];
+  }
+
+  Future<List<String>> languages() async {
+    final rows = await _query(
+      "SELECT DISTINCT lang FROM editions WHERE lang != 'und' ORDER BY lang",
+      [],
+    );
+    return [for (final row in rows) row['lang'] as String];
+  }
+
   Future<List<Edition>> editions(int index) async {
     final db = await openReadOnlyDatabase(
       p.join(directory.path, 'cards.sqlite'),

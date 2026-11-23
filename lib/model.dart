@@ -5,6 +5,7 @@ import 'data/catalog.dart';
 import 'data/oracle.dart';
 import 'data/frame.dart';
 import 'data/moxfield.dart';
+import 'data/review.dart';
 
 Recognition _photo(({String directory, String file}) input) =>
     identifyPhoto(input.directory, input.file);
@@ -25,6 +26,7 @@ class LibraryState {
     this.folder = 1,
     this.recent = const [],
     this.flags = const {},
+    this.reviews = const {},
     this.error,
   });
   final Catalog? catalog;
@@ -32,10 +34,12 @@ class LibraryState {
   final int folder;
   final List<ScanEntry> recent;
   final Set<String> flags;
+  final Map<int, ScanReview> reviews;
   final String? error;
   List<CardCount> get printings {
     final rows = <String, CardCount>{};
     for (final entry in recent) {
+      if (reviews.containsKey(entry.sequence)) continue;
       final key = entry.card.printingKey;
       rows[key] = (
         card: entry.card,
@@ -81,7 +85,7 @@ class AppModel extends Cubit<LibraryState> {
     final folder = _folder;
     final revision = ++_revision;
     final groups = await history.folders();
-    final recent = await history.recent(folder);
+    final timeline = await history.timeline(folder);
     final flags = await history.flags(folder);
     if (revision != _revision || isClosed) return;
     _loadedRevision = revision;
@@ -90,7 +94,8 @@ class AppModel extends Cubit<LibraryState> {
         catalog: _base,
         groups: groups,
         folder: folder,
-        recent: recent,
+        recent: timeline.recent,
+        reviews: timeline.reviews,
         flags: flags,
       ),
     );
@@ -126,27 +131,43 @@ class AppModel extends Cubit<LibraryState> {
     await compute(_preview, (directory: catalog!.directory.path, frame: frame)),
   );
 
-  Future<void> save(Edition card) async {
+  Future<int> save(Edition card, {ScanReview? review}) async {
     final folder = state.folder;
     final revision = _loadedRevision;
-    final seq = await history.add(card, folder: folder);
-    if (isClosed) return;
+    final seq = await history.add(card, folder: folder, review: review);
+    if (isClosed) return seq;
     if (folder != _folder || revision != _revision || state.groups.isEmpty) {
       await _refresh();
-      return;
+      return seq;
     }
     emit(
       LibraryState(
         catalog: catalog,
         folder: folder,
         flags: state.flags,
+        reviews: review == null
+            ? state.reviews
+            : {...state.reviews, seq: review},
         groups: [
           for (final g in state.groups)
-            g.id == folder ? (id: g.id, name: g.name, count: g.count + 1) : g,
+            g.id == folder && review == null
+                ? (id: g.id, name: g.name, count: g.count + 1)
+                : g,
         ],
         recent: [(sequence: seq, card: card, quantity: 1), ...state.recent],
       ),
     );
+    return seq;
+  }
+
+  Future<void> confirmReview(int seq, Edition card) async {
+    await history.confirm(state.folder, seq, card);
+    await _refresh();
+  }
+
+  Future<void> discardScan(int seq, {bool pendingOnly = false}) async {
+    await history.discard(state.folder, seq, pendingOnly: pendingOnly);
+    await _refresh();
   }
 
   Future<void> replace(ScanEntry entry, Edition card) async {

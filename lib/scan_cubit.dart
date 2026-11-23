@@ -2,15 +2,18 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'model.dart';
 import 'data/catalog.dart';
+import 'scan_decision.dart';
 
-// Два уверенных совпадения подряд. Пропуск кадра не снимает защиту от дубля.
+// Два кадра с одинаковыми кандидатами. Пропуск кадра не снимает защиту от дубля.
 class ScanGate {
   String? _candidate;
   Edition? _last;
+  Set<String> _seenNames = {};
 
   void clearCandidate() => _candidate = null;
-  void saved(Edition card) {
+  void saved(Edition card, {Iterable<String> observedNames = const []}) {
     _last = card;
+    _seenNames = {card.name, ...observedNames};
     clearCandidate();
   }
 
@@ -24,17 +27,19 @@ class ScanGate {
     if (manual) {
       return best.editions.where((e) => e.id == _last?.id).firstOrNull ?? card;
     }
-    if (best.score < .75 || _uncertain(matches) || _sameCard(card, _last)) {
+    final candidates = closeMatches(matches).map((m) => m.editions.first);
+    if (best.score < .60 ||
+        candidates.any((e) => _seenNames.contains(e.name)) ||
+        _sameCard(card, _last)) {
       clearCandidate();
       return null;
     }
-    final stable = _candidate == card.id;
-    _candidate = card.id;
+    final key = (candidates.map((e) => e.id).toList()..sort()).join('\n');
+    final stable = _candidate == key;
+    _candidate = key;
     return stable ? card : null;
   }
 
-  bool _uncertain(List<Match> matches) =>
-      matches.length > 1 && matches[0].score - matches[1].score < .05;
   bool _sameCard(Edition card, Edition? previous) =>
       previous != null &&
       (card.name == previous.name ||
@@ -44,14 +49,45 @@ class ScanGate {
 
 enum ScanMode { manual, automatic }
 
-class ScanCubit extends Cubit<ScanMode> {
-  ScanCubit() : super(ScanMode.manual);
+typedef ScanSession = ({ScanMode mode, BatchSettings batch, int? lastScan});
+
+class ScanCubit extends Cubit<ScanSession> {
+  ScanCubit()
+    : super((
+        mode: ScanMode.manual,
+        batch: const BatchSettings(),
+        lastScan: null,
+      ));
   final gate = ScanGate();
   bool _force = false;
   void toggle() {
     _force = false;
     gate.clearCandidate();
-    emit(state == ScanMode.manual ? ScanMode.automatic : ScanMode.manual);
+    emit((
+      mode: state.mode == ScanMode.manual
+          ? ScanMode.automatic
+          : ScanMode.manual,
+      batch: state.batch,
+      lastScan: state.lastScan,
+    ));
+  }
+
+  void configure(BatchSettings value) {
+    cancelFrame();
+    emit((mode: state.mode, batch: value, lastScan: state.lastScan));
+  }
+
+  void recorded(int seq, Edition card, List<Match> matches) {
+    gate.saved(
+      card,
+      observedNames: closeMatches(matches).map((m) => m.editions.first.name),
+    );
+    emit((mode: state.mode, batch: state.batch, lastScan: seq));
+  }
+
+  void undone() {
+    cancelFrame();
+    emit((mode: state.mode, batch: state.batch, lastScan: null));
   }
 
   void shutter() => _force = true;

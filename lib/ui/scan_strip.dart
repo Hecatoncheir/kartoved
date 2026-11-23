@@ -4,8 +4,14 @@ import '../data/catalog.dart';
 import 'picture.dart';
 
 class ScanStrip extends StatefulWidget {
-  const ScanStrip(this.entries, this.edit, {super.key});
+  const ScanStrip(
+    this.entries,
+    this.edit, {
+    super.key,
+    this.pending = const {},
+  });
   final List<ScanEntry> entries;
+  final Set<int> pending;
   final ValueChanged<ScanEntry> edit;
   @override
   State<ScanStrip> createState() => _ScanStripState();
@@ -81,7 +87,30 @@ class _ScanStripState extends State<ScanStrip>
             aspectRatio: 63 / 88,
             child: InkWell(
               onTap: () => widget.edit(entry),
-              child: CardPicture(entry.card, slot: entry.sequence),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CardPicture(entry.card, slot: entry.sequence),
+                  if (widget.pending.contains(entry.sequence))
+                    Positioned(
+                      top: 3,
+                      right: 3,
+                      child: Semantics(
+                        label: 'Требует проверки',
+                        child: const DecoratedBox(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color(0xfffabd2f),
+                            border: Border.fromBorderSide(
+                              BorderSide(color: Color(0xff282828)),
+                            ),
+                          ),
+                          child: SizedBox.square(dimension: 12),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),

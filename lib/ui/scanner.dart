@@ -16,6 +16,9 @@ import '../data/frame.dart';
 import '../data/language.dart';
 import '../model.dart';
 import '../scan_cubit.dart';
+import '../scan_decision.dart';
+import 'batch_settings.dart';
+import 'scan_reviews.dart';
 import 'sheets.dart';
 import 'scan_strip.dart';
 import 'style.dart';
@@ -31,7 +34,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   final clock = Stopwatch()..start();
   CameraController? camera;
   String? error;
-  bool reading = false, modal = false, torch = false;
+  bool reading = false, modal = false, torch = false, writing = false;
   int epoch = 0, nextFrame = 0, frameSession = 0;
   Future<void> cameraQueue = Future.value();
   AppModel get library => context.read<AppModel>();
@@ -111,7 +114,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   Future<void> _syncStream() async {
     final c = camera;
     if (c == null) return;
-    final auto = scan.state == ScanMode.automatic;
+    final auto = scan.state.mode == ScanMode.automatic;
     if (auto == c.value.isStreamingImages) return;
     if (auto) {
       await c.startImageStream(_onFrame);
@@ -125,7 +128,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     scan.toggle();
     cameraQueue = cameraQueue.then((_) => _syncStream()).catchError((Object e) {
       if (!mounted) return;
-      if (scan.state == ScanMode.automatic) scan.toggle();
+      if (scan.state.mode == ScanMode.automatic) scan.toggle();
       message('Не удалось включить поток камеры');
     });
   }
@@ -151,7 +154,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       active &&
       token == frameSession &&
       !modal &&
-      scan.state == ScanMode.automatic;
+      scan.state.mode == ScanMode.automatic;
   int rotation(CameraController c) {
     final turns = switch (c.value.deviceOrientation) {
       DeviceOrientation.portraitUp => 0,
@@ -192,13 +195,14 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       if (!accepts(token)) return;
       final hit = scan.evaluate(matches);
       if (hit == null) return;
-      final options = matches.first.editions;
-      final printing = await CardLanguage.identify(
+      final evidence = await CardLanguage.readOptions(
         corners: matches.first.corners,
         frame: frame,
-        options: options,
+        options: matches.first.editions,
       );
-      if (accepts(token)) await _save(printing);
+      if (accepts(token)) {
+        await _save(decideScan(matches, evidence, scan.state.batch), matches);
+      }
     } catch (e) {
       if (accepts(token)) {
         _mode();
@@ -210,11 +214,16 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _save(Edition card) async {
-    await library.save(card);
-    if (!mounted) return;
-    scan.gate.saved(card);
-    await AndroidActions.chime();
+  Future<void> _save(ScanDecision decision, List<Match> matches) async {
+    setState(() => writing = true);
+    try {
+      final seq = await library.save(decision.card, review: decision.review);
+      if (!mounted) return;
+      scan.recorded(seq, decision.card, matches);
+      if (decision.review == null) await AndroidActions.chime();
+    } finally {
+      if (mounted) setState(() => writing = false);
+    }
   }
 
   Future<void> _confirm(XFile file) async {
@@ -225,14 +234,24 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       return;
     }
     final options = matches.first.editions;
-    final printing = await CardLanguage.identify(
+    final evidence = await CardLanguage.readOptions(
       corners: matches.first.corners,
       file: file.path,
       options: options,
     );
     if (!mounted || !active) return;
-    final card = await panel<Edition>(context, ResultSheet(matches, printing));
-    if (card != null && active) await _save(card);
+    final decision = decideScan(matches, evidence, scan.state.batch);
+    if (decision.review != null) {
+      await _save(decision, matches);
+      return;
+    }
+    final card = await panel<Edition>(
+      context,
+      ResultSheet(matches, decision.card),
+    );
+    if (card != null && active) {
+      await _save((card: card, review: null), matches);
+    }
   }
 
   Future<void> _discard(XFile? file) async {
@@ -245,8 +264,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   }
 
   Future<void> _manual({bool gallery = false}) async {
-    if (modal) return;
-    if (!gallery && scan.state == ScanMode.automatic) {
+    if (modal || writing) return;
+    if (!gallery && scan.state.mode == ScanMode.automatic) {
       scan.shutter();
       nextFrame = 0;
       return;
@@ -272,24 +291,48 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _edit(ScanEntry entry) async {
-    if (modal) return;
+  Future<void> _edit(ScanEntry entry) => _paused(() async {
+    if (library.state.reviews.containsKey(entry.sequence)) {
+      await chooseReview(context, library, entry.sequence);
+      return;
+    }
+    final variants = await library.catalog!.variants(entry.card);
+    if (!mounted || !active || variants.isEmpty) return;
+    final edition = await panel<Edition>(
+      context,
+      ResultSheet([Match(variants)], entry.card, action: 'Сохранить'),
+    );
+    if (edition != null && active) await library.replace(entry, edition);
+  });
+
+  Future<void> _paused(Future<void> Function() action) async {
+    if (modal || writing) return;
     frameSession++;
-    modal = true;
+    scan.cancelFrame();
+    setState(() => modal = true);
     try {
-      final variants = await library.catalog!.variants(entry.card);
-      if (!mounted || !active || variants.isEmpty) return;
-      final edition = await panel<Edition>(
-        context,
-        ResultSheet([Match(variants)], entry.card, action: 'Сохранить'),
-      );
-      if (edition != null && active) await library.replace(entry, edition);
-    } catch (e) {
-      message('Не удалось изменить издание');
+      await action();
+    } catch (_) {
+      message('Не удалось выполнить действие. Попробуйте ещё раз.');
     } finally {
-      modal = false;
+      if (mounted) setState(() => modal = false);
     }
   }
+
+  Future<void> _settings() => _paused(() async {
+    final catalog = library.catalog;
+    if (catalog == null) return;
+    final batch = await panel<BatchSettings>(
+      context,
+      BatchSheet(catalog, scan.state.batch),
+    );
+    if (batch != null && mounted) scan.configure(batch);
+  });
+
+  Future<void> _undo(int seq) => _paused(() async {
+    await library.discardScan(seq);
+    if (mounted) scan.undone();
+  });
 
   Future<void> _torch() async {
     final c = camera;
@@ -311,22 +354,54 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       ),
       const SizedBox(width: 8),
       Expanded(
-        child: Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: paper,
-            fontFamily: 'Nunito',
-            fontWeight: FontWeight.w900,
-            fontSize: 21,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: paper,
+                fontFamily: 'Nunito',
+                fontWeight: FontWeight.w900,
+                fontSize: 21,
+              ),
+            ),
+            if (scan.state.batch.active)
+              Text(
+                scan.state.batch.label,
+                style: const TextStyle(
+                  color: butter,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+          ],
         ),
       ),
-      RoundAction(
-        torch ? Icons.flashlight_on : Icons.flashlight_off,
-        'Фонарь',
-        camera == null ? null : _torch,
+      Frost(
+        child: PopupMenuButton<String>(
+          tooltip: 'Меню сканера',
+          enabled: !modal && !writing,
+          icon: Icon(
+            Icons.tune,
+            color: scan.state.batch.active ? butter : paper,
+          ),
+          onSelected: (action) => action == 'batch' ? _settings() : _torch(),
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              value: 'batch',
+              enabled: library.catalog != null,
+              child: const Text('Настройки стопки'),
+            ),
+            PopupMenuItem(
+              value: 'torch',
+              enabled: camera != null,
+              child: Text(torch ? 'Выключить фонарь' : 'Включить фонарь'),
+            ),
+          ],
+        ),
       ),
     ],
   );
@@ -374,7 +449,11 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     final stripTop = insets.top + 70;
     final strip = math.min(84.0, bounds.maxHeight * .12);
     final top = stripTop + strip + 8;
-    final bottom = bounds.maxHeight - insets.bottom - 104;
+    final bottom =
+        bounds.maxHeight -
+        insets.bottom -
+        104 -
+        (state.reviews.isEmpty ? 0 : 48);
     final width = math.min(
       bounds.maxWidth * .77,
       math.max(20.0, (bottom - top) * 63 / 88),
@@ -409,7 +488,27 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
           height: strip,
           left: 0,
           right: 0,
-          child: ScanStrip(state.recent, _edit),
+          child: Row(
+            children: [
+              Expanded(
+                child: ScanStrip(
+                  state.recent,
+                  _edit,
+                  pending: state.reviews.keys.toSet(),
+                ),
+              ),
+              if (scan.state.lastScan case final seq?
+                  when state.recent.any((e) => e.sequence == seq))
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: RoundAction(
+                    Icons.undo_rounded,
+                    'Отменить последнее добавление',
+                    modal || writing ? null : () => _undo(seq),
+                  ),
+                ),
+            ],
+          ),
         ),
         if (camera == null)
           Center(
@@ -425,9 +524,18 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
           left: 12,
           right: 12,
           bottom: insets.bottom + 8,
-          child: BlocBuilder<ScanCubit, ScanMode>(
-            bloc: scan,
-            builder: _controls,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (state.reviews.isNotEmpty)
+                ReviewButton(
+                  state.reviews.length,
+                  modal || writing
+                      ? null
+                      : () => _paused(() => openReviews(context, library)),
+                ),
+              _controls(context, scan.state.mode),
+            ],
           ),
         ),
       ],
@@ -442,7 +550,10 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         fit: StackFit.expand,
         children: [
           if (camera case final c?) _CameraSurface(c),
-          LayoutBuilder(builder: _overlay),
+          BlocBuilder<ScanCubit, ScanSession>(
+            bloc: scan,
+            builder: (_, _) => LayoutBuilder(builder: _overlay),
+          ),
         ],
       ),
     ),

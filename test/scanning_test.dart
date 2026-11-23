@@ -5,6 +5,8 @@ import 'package:kartoved/data/moxfield.dart';
 import 'package:kartoved/data/pictures.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/scan_cubit.dart';
+import 'package:kartoved/scan_decision.dart';
+import 'package:kartoved/data/review.dart';
 
 void main() {
   const en = Edition('en', 'A, "B"', 'snc', '135', 'en');
@@ -31,14 +33,71 @@ void main() {
     expect(mode.evaluate(a), isNull);
     expect(mode.evaluate(a), en);
   });
-  test('Сходные рисунки не создают ложную запись', () {
-    final gate = ScanGate();
-    const uncertain = [
-      Match([en], score: .86),
-      Match([next], score: .84),
+  test(
+    'Сходные рисунки дают одну спорную карту, отмена сохраняет защиту от дубля',
+    () {
+      final scan = ScanCubit()..toggle();
+      const uncertain = [
+        Match([en], score: .86),
+        Match([next], score: .84),
+      ];
+      expect(scan.evaluate(uncertain), isNull);
+      expect(scan.evaluate(uncertain), en);
+      final decision = decideScan(uncertain, [en], scan.state.batch);
+      expect(decision.review!.reason, ReviewReason.artwork);
+      expect(decision.review!.choices, [en, next]);
+      scan.recorded(42, en, uncertain);
+      expect(scan.state.lastScan, 42);
+      scan.undone();
+      expect(scan.state.lastScan, isNull);
+      expect(scan.state.mode, ScanMode.automatic);
+      expect(scan.evaluate([]), isNull);
+      expect(
+        scan.evaluate([
+          const Match([next], score: .86),
+          const Match([en], score: .84),
+        ]),
+        isNull,
+      );
+      expect(scan.evaluate(uncertain), isNull);
+      scan.shutter();
+      expect(scan.evaluate(uncertain), en);
+      addTearDown(scan.close);
+    },
+  );
+
+  test('Стопка сужает выбор, конфликт или неоднозначный выпуск отправляются на проверку', () {
+    const other = Edition('other', 'A, "B"', 'dom', '77', 'ru');
+    const hits = [
+      Match([en, ru, other]),
     ];
-    expect(gate.accept(uncertain), isNull);
-    expect(gate.accept(uncertain), isNull);
+    const auto = BatchSettings();
+    const russian = BatchSettings(language: 'ru');
+    const batch = BatchSettings(language: 'ru', setCode: 'snc');
+    expect(
+      decideScan(hits, hits.first.editions, auto).review!.reason,
+      ReviewReason.language,
+    );
+    expect(
+      decideScan(hits, hits.first.editions, russian).review!.reason,
+      ReviewReason.printing,
+    );
+    expect(decideScan(hits, hits.first.editions, batch), (
+      card: ru,
+      review: null,
+    ));
+    expect(decideScan(hits, [en], batch).review!.reason, ReviewReason.batch);
+    expect(decideScan(hits, [other], batch).review!.reason, ReviewReason.batch);
+    expect(
+      decideScan(hits, [en], const BatchSettings(setCode: 'snc')).card,
+      en,
+    );
+    expect(
+      decideScan(hits, [
+        en,
+      ], const BatchSettings(setCode: 'eld')).review!.reason,
+      ReviewReason.batch,
+    );
   });
   test('Печатный код языка, кириллица и неизвестный язык', () {
     expect(CardLanguage.resolve('SNC • RU', 'en', [ru, en]), 'ru');
@@ -58,6 +117,31 @@ void main() {
     expect(CardLanguage.select([en, ru], null).language, 'und');
     expect(CardLanguage.select([en, ru], 'ru'), ru);
   });
+  test(
+    'Слова и числа в тексте правил не выбирают издание одноимённой карты',
+    () {
+      const one = Edition('one-id', 'Opt', 'one', '2', 'en');
+      const eld = Edition('eld-id', 'Opt', 'eld', '59', 'en');
+      const options = [one, eld];
+      expect(
+        CardLanguage.candidates(
+          'Choose one of 2 target creatures',
+          'en',
+          options,
+        ),
+        options,
+      );
+      expect(
+        CardLanguage.candidates(
+          'Draw one card. 059/269 ELD • EN',
+          'en',
+          options,
+        ),
+        [eld],
+      );
+      expect(CardLanguage.candidates('C 0002', null, options), [one]);
+    },
+  );
   test('CSV сохраняет язык, количество и кавычки', () {
     final data = moxfieldCsv([(card: ru, quantity: 2)]);
     expect(
