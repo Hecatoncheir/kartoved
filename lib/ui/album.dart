@@ -190,18 +190,22 @@ class _Lamp extends CustomPainter {
 }
 
 class AlbumShelf extends StatelessWidget {
-  const AlbumShelf(this.groups, this.onOpen, {super.key});
+  const AlbumShelf(
+    this.groups,
+    this.onOpen, {
+    super.key,
+    required this.padding,
+  });
 
-  static const gutter = 16.0;
   final List<CardGroup> groups;
   final ValueChanged<int> onOpen;
+  final EdgeInsets padding;
 
   @override
   Widget build(BuildContext context) => SliverLayoutBuilder(
     builder: (context, constraints) {
       final height = 131 + 3 * MediaQuery.textScalerOf(context).scale(16);
-      final contentWidth = constraints.crossAxisExtent - 2 * gutter;
-      const padding = EdgeInsets.symmetric(horizontal: gutter);
+      final contentWidth = constraints.crossAxisExtent - padding.horizontal;
       final shelf = contentWidth < 600
           ? SliverToBoxAdapter(
               child: SizedBox(

@@ -126,6 +126,8 @@ class CollectionsPage extends StatelessWidget {
           ],
         ),
         body: SafeArea(
+          left: false,
+          right: false,
           bottom: false,
           child: Align(
             alignment: Alignment.topCenter,
@@ -237,63 +239,68 @@ class _LibraryContent extends StatelessWidget {
   final ValueChanged<LibraryAddition> onOpenRecent;
 
   @override
-  Widget build(BuildContext context) => CustomScrollView(
-    slivers: [
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-        sliver: SliverList.list(
-          children: [
-            AlbumHeader(
-              albums: state.groups.length,
-              cards: state.groups.fold(0, (sum, group) => sum + group.count),
-              onScan: onScan,
-            ),
-            if (state.error case final error?)
-              TextButton(onPressed: onRetry, child: Text('$error. Повторить'))
-            else if (state.catalog == null)
-              const LinearProgressIndicator(),
-            const SizedBox(height: 16),
-            _LibrarySection(
-              'Альбомы',
-              OutlinedButton.icon(
-                onPressed: onCreate,
-                icon: const Icon(Icons.add),
-                label: const Text('Создать коллекцию'),
+  Widget build(BuildContext context) {
+    final safe = MediaQuery.paddingOf(context);
+    final sides = EdgeInsets.only(left: safe.left + 16, right: safe.right + 16);
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: sides.copyWith(top: 10, bottom: 8),
+          sliver: SliverList.list(
+            children: [
+              AlbumHeader(
+                albums: state.groups.length,
+                cards: state.groups.fold(0, (sum, group) => sum + group.count),
+                onScan: onScan,
               ),
-            ),
-          ],
-        ),
-      ),
-      if (state.groups.isNotEmpty) AlbumShelf(state.groups, onOpenAlbum),
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 22),
-        sliver: SliverList.list(
-          children: [
-            _LibrarySection(
-              'Недавно добавленные',
-              TextButton.icon(
-                onPressed: onBrowse,
-                icon: const Icon(Icons.arrow_forward, size: 16),
-                iconAlignment: IconAlignment.end,
-                style: TextButton.styleFrom(
-                  foregroundColor: aqua,
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  textStyle: const TextStyle(
-                    fontFamily: bodyFont,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
+              if (state.error case final error?)
+                TextButton(onPressed: onRetry, child: Text('$error. Повторить'))
+              else if (state.catalog == null)
+                const LinearProgressIndicator(),
+              const SizedBox(height: 16),
+              _LibrarySection(
+                'Альбомы',
+                OutlinedButton.icon(
+                  onPressed: onCreate,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Создать коллекцию'),
                 ),
-                label: const Text('Все карты'),
               ),
-            ),
-            const SizedBox(height: 6),
-            _RecentAdditions(state, onOpenRecent),
-          ],
+            ],
+          ),
         ),
-      ),
-    ],
-  );
+        if (state.groups.isNotEmpty)
+          AlbumShelf(state.groups, onOpenAlbum, padding: sides),
+        SliverPadding(
+          padding: sides.copyWith(top: 20, bottom: 22),
+          sliver: SliverList.list(
+            children: [
+              _LibrarySection(
+                'Недавно добавленные',
+                TextButton.icon(
+                  onPressed: onBrowse,
+                  icon: const Icon(Icons.arrow_forward, size: 16),
+                  iconAlignment: IconAlignment.end,
+                  style: TextButton.styleFrom(
+                    foregroundColor: aqua,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    textStyle: const TextStyle(
+                      fontFamily: bodyFont,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  label: const Text('Все карты'),
+                ),
+              ),
+              const SizedBox(height: 6),
+              _RecentAdditions(state, onOpenRecent),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _LibrarySection extends StatelessWidget {

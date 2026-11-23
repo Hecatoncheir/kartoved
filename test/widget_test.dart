@@ -83,6 +83,13 @@ void main() {
     expect(shelf.left, 0);
     expect(shelf.right, 320);
     expect(tester.getRect(find.byKey(const ValueKey(1))).left, 16);
+
+    tester.view.padding = const FakeViewPadding(left: 8, right: 20);
+    await tester.pump();
+    final shelfWithInsets = tester.getRect(find.byType(ListView));
+    expect(shelfWithInsets.left, 0);
+    expect(shelfWithInsets.right, 320);
+    expect(tester.getRect(find.byKey(const ValueKey(1))).left, 24);
     expect(tester.takeException(), isNull);
   });
 
