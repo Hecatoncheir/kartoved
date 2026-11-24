@@ -16,7 +16,11 @@ Future<Uint8List> _loadGraph(String name) async {
 typedef _Models = ({Uint8List? mtg, Uint8List? pose});
 
 Future<_Models> _graphs(RecognitionModel engine) async => (
-  mtg: engine == RecognitionModel.oracle ? null : await _mtgGraph,
+  mtg:
+      engine == RecognitionModel.mtgIdentification ||
+          engine == RecognitionModel.mtgStandalone
+      ? await _mtgGraph
+      : null,
   pose: engine == RecognitionModel.mtgStandalone ? await _poseGraph : null,
 );
 

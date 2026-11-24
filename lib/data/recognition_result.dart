@@ -11,7 +11,8 @@ const nearMatchWindow = .05;
 enum RecognitionModel {
   oracle('Oracle', .60),
   mtgIdentification('MTG Card Identification + Oracle', .60),
-  mtgStandalone('MTG Card Identification (без Oracle)', .34);
+  mtgStandalone('MTG Card Identification (без Oracle)', .34),
+  keypoints('Ключевые точки + Oracle', .60);
 
   const RecognitionModel(this.label, this.minimumScore);
   final String label;
@@ -20,6 +21,7 @@ enum RecognitionModel {
   static RecognitionModel fromName(String? name) => switch (name) {
     'mtgIdentification' => mtgIdentification,
     'mtgStandalone' => mtgStandalone,
+    'keypoints' => keypoints,
     _ => oracle,
   };
 }

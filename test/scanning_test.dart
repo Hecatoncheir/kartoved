@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kartoved/data/catalog.dart';
+import 'package:kartoved/data/keypoints.dart';
 import 'package:kartoved/data/language.dart';
 import 'package:kartoved/data/moxfield.dart';
 import 'package:kartoved/data/pictures.dart';
@@ -84,6 +87,23 @@ void main() {
     scan.setModel(RecognitionModel.mtgStandalone);
     expect(scan.evaluate(match), isNull);
     expect(scan.evaluate(match), en);
+  });
+
+  test('Ключевые точки различают иллюстрации на контрольных изображениях', () {
+    final references = [
+      File('docs/ui-prototype/media/bouncer.webp').readAsBytesSync(),
+      File('docs/ui-prototype/media/counter.webp').readAsBytesSync(),
+    ];
+    for (final suffix in ['', '-ru']) {
+      final crop = File('test/fixtures/bouncers-beatdown$suffix.jpg')
+          .readAsBytesSync();
+      final [same, different] = compareKeypoints((
+        crop: crop,
+        references: references,
+      ));
+      expect(same.art, greaterThanOrEqualTo(12));
+      expect(different.art, 0);
+    }
   });
 
   test(

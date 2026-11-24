@@ -374,6 +374,16 @@ void main() {
       await tap(find.text('Из фото'));
       await waitFor(() => model.state.owned('Opt') == 7 && sounds == 5);
       expect(model.lastEngine, RecognitionModel.mtgStandalone);
+      await tap(find.byTooltip('Меню сканера'));
+      await tap(find.text('Модель распознавания'));
+      await tap(find.text(RecognitionModel.keypoints.label));
+      expect(savedEngine, RecognitionModel.keypoints.name);
+      await tap(find.byTooltip('К коллекции'));
+      await tap(find.text('Сканировать карту'));
+      await waitFor(() => find.text('Ключевые точки').evaluate().isNotEmpty);
+      await tap(find.text('Из фото'));
+      await waitFor(() => model.state.owned('Opt') == 8 && sounds == 6);
+      expect(model.lastEngine, RecognitionModel.keypoints);
       await tester.pumpWidget(const SizedBox.shrink());
       PaintingBinding.instance.imageCache
         ..clear()

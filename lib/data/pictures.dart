@@ -44,6 +44,10 @@ class Pictures {
       ? MemoryImage(await _getBrowser(id, large: large))
       : FileImage(await _getFile(id, large: large));
 
+  Future<Uint8List> referenceBytes(String id) async => kIsWeb
+      ? _getBrowser(id, large: true)
+      : (await _getFile(id, large: true)).readAsBytes();
+
   Future<ImageProvider?> cachedThumbnail(String id) async {
     if (kIsWeb) {
       final bytes = await _cachedBrowserThumbnail(id);

@@ -503,28 +503,32 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   Future<void> _pickModel() => _paused(() async {
     final selected = await panel<RecognitionModel>(
       context,
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SheetHeading('Модель распознавания'),
-          for (final model in RecognitionModel.values)
-            ListTile(
-              title: Text(model.label),
-              subtitle: Text(switch (model) {
-                RecognitionModel.oracle => 'Каталог Картоведа',
-                RecognitionModel.mtgIdentification =>
-                  'Уточняет близкие совпадения Oracle по галерее автора',
-                RecognitionModel.mtgStandalone =>
-                  'Находит карту в кадре и ищет совпадение в галерее MTG',
-              }),
-              selected: scan.state.model == model,
-              trailing: scan.state.model == model
-                  ? const Icon(Icons.check)
-                  : null,
-              onTap: () => Navigator.pop(context, model),
-            ),
-        ],
+      SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SheetHeading('Модель распознавания'),
+            for (final model in RecognitionModel.values)
+              ListTile(
+                title: Text(model.label),
+                subtitle: Text(switch (model) {
+                  RecognitionModel.oracle => 'Каталог Картоведа',
+                  RecognitionModel.mtgIdentification =>
+                    'Уточняет близкие совпадения Oracle по галерее автора',
+                  RecognitionModel.mtgStandalone =>
+                    'Находит карту в кадре и ищет совпадение в галерее MTG',
+                  RecognitionModel.keypoints =>
+                    'Сверяет варианты Oracle с изображениями Scryfall',
+                }),
+                selected: scan.state.model == model,
+                trailing: scan.state.model == model
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () => Navigator.pop(context, model),
+              ),
+          ],
+        ),
       ),
     );
     if (!mounted || selected == null) return;
@@ -602,6 +606,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                     'MTG + Oracle',
                   if (scan.state.model == RecognitionModel.mtgStandalone)
                     'MTG без Oracle',
+                  if (scan.state.model == RecognitionModel.keypoints)
+                    'Ключевые точки',
                   ?_targetLabel,
                   if (scan.state.batch.active) scan.state.batch.label,
                 ].join('  ·  '),

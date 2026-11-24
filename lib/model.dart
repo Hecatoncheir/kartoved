@@ -10,6 +10,7 @@ import 'data/backup.dart';
 import 'data/browser.dart';
 import 'data/recognition.dart';
 import 'data/frame.dart';
+import 'data/keypoint_scan.dart';
 import 'data/moxfield.dart';
 import 'data/review.dart';
 
@@ -194,8 +195,10 @@ class AppModel extends Cubit<LibraryState> {
 
   Future<List<Match>> _matches(
     Recognition result,
-    RecognitionModel engine,
-  ) async {
+    RecognitionModel engine, {
+    String? file,
+    PreviewFrame? frame,
+  }) async {
     if (engine == RecognitionModel.mtgStandalone) {
       return _standaloneMatches(result);
     }
@@ -208,6 +211,14 @@ class AppModel extends Cubit<LibraryState> {
         matches.add(Match(editions, score: hit.score, corners: result.corners));
       }
     }
+    if (engine == RecognitionModel.keypoints && matches.isNotEmpty) {
+      return _preferKeypoints(
+        matches,
+        result.corners,
+        file: file,
+        frame: frame,
+      );
+    }
     if (result.mtgHits.isEmpty) return matches;
     final printings = await _mtgPrintings;
     return Match.preferMtg(matches, [
@@ -216,16 +227,54 @@ class AppModel extends Cubit<LibraryState> {
     ]);
   }
 
+  Future<List<Match>> _preferKeypoints(
+    List<Match> matches,
+    List<double> corners, {
+    String? file,
+    PreviewFrame? frame,
+  }) async {
+    final choice = await refineKeypointScan(
+      [for (final match in matches) match.editions],
+      corners,
+      file: file,
+      frame: frame,
+    );
+    if (choice == null || (choice.artwork == 0 && choice.printing == null)) {
+      return matches;
+    }
+    final picked = matches[choice.artwork];
+    final printing = choice.printing;
+    final editions = printing == null
+        ? picked.editions
+        : [
+            ...picked.editions.where(
+              (e) => e.set == printing.set && e.number == printing.number,
+            ),
+            ...picked.editions.where(
+              (e) => e.set != printing.set || e.number != printing.number,
+            ),
+          ];
+    return [
+      Match(editions, score: matches.first.score, corners: picked.corners),
+      for (final match in matches)
+        if (!identical(match, picked)) match,
+    ];
+  }
+
   Future<List<Match>> recognize(
     String file, {
     RecognitionModel engine = RecognitionModel.oracle,
-  }) async => _matches(await recognizeFile(catalog!, file, engine), engine);
+  }) async =>
+      _matches(await recognizeFile(catalog!, file, engine), engine, file: file);
 
   Future<List<Match>> recognizeFrame(
     PreviewFrame frame, {
     RecognitionModel engine = RecognitionModel.oracle,
-  }) async =>
-      _matches(await recognizeCameraFrame(catalog!, frame, engine), engine);
+  }) async => _matches(
+    await recognizeCameraFrame(catalog!, frame, engine),
+    engine,
+    frame: frame,
+  );
 
   Future<int> save(Edition card, {ScanReview? review}) async {
     final folder = state.folder;
