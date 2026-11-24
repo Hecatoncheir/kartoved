@@ -170,6 +170,16 @@ class Edition {
   static String keyOf(String id, String language, bool foil) =>
       '$id/$language/$foil';
   String get printingKey => keyOf(id, language, foil);
+  Uri get scryfallPage => Uri(
+    scheme: 'https',
+    host: 'scryfall.com',
+    pathSegments: [
+      'card',
+      set.toLowerCase(),
+      number,
+      if (language != 'en' && language != 'und') language,
+    ],
+  );
   String get detail =>
       '${set.toUpperCase()}  ·  № $number  ·  ${language == 'und' ? 'язык не определён' : language.toUpperCase()}';
   factory Edition.fromRow(Map<String, Object?> row) => Edition(

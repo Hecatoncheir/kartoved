@@ -1,7 +1,32 @@
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../data/android.dart';
 import '../data/card_reference.dart';
+import '../data/catalog.dart';
 import 'style.dart';
+
+class ScryfallLink extends StatelessWidget {
+  const ScryfallLink(this.card, {super.key});
+
+  final Edition card;
+
+  @override
+  Widget build(BuildContext context) => TextButton.icon(
+    icon: const Icon(Icons.open_in_new),
+    label: const Text('Открыть в Scryfall'),
+    onPressed: () async {
+      final page = card.scryfallPage;
+      if (await AndroidActions.openScryfall(page)) return;
+      await Clipboard.setData(ClipboardData(text: page.toString()));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ссылка на Scryfall скопирована')),
+        );
+      }
+    },
+  );
+}
 
 class CardFacts extends StatefulWidget {
   const CardFacts(this.printingId, {super.key});

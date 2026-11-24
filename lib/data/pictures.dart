@@ -39,10 +39,17 @@ class Pictures {
     );
   }
 
-  Future<ImageProvider> official(String id, {bool large = false}) async =>
-      kIsWeb
-      ? MemoryImage(await _getBrowser(id, large: large))
-      : FileImage(await _getFile(id, large: large));
+  Future<ImageProvider> official(String id, {bool large = false}) async {
+    if (!kIsWeb) return FileImage(await _getFile(id, large: large));
+    try {
+      return MemoryImage(await _getBrowser(id, large: large));
+    } on Exception {
+      return NetworkImage(
+        address(id, large: large).toString(),
+        webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+      );
+    }
+  }
 
   Future<Uint8List> referenceBytes(String id) async => kIsWeb
       ? _getBrowser(id, large: true)
@@ -102,7 +109,7 @@ class Pictures {
     if (response.statusCode != 200 ||
         response.headers['content-type']?.startsWith('image/') != true ||
         response.bodyBytes.isEmpty) {
-      throw StateError('Изображение недоступно');
+      throw const FormatException('Изображение недоступно');
     }
     await browserCacheWrite(key, response.bodyBytes);
     return response.bodyBytes;

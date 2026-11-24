@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'package:web/web.dart' as web;
 
 import 'catalog.dart';
 
@@ -83,6 +84,9 @@ class _BrowserCatalogStore extends CatalogStore {
 Future<bool> browserGuide(bool? visible) async => _guide(visible?.toJS);
 Future<void> browserChime(bool targetFound) async =>
     await _chime(targetFound).toDart;
+
+void openBrowserScryfall(String url) =>
+    web.window.open(url, '_blank', 'noopener,noreferrer');
 
 Future<Uint8List> browserCrop(String file, List<double> corners) async =>
     (await _crop(file, corners.map((v) => v.toJS).toList().toJS).toDart).toDart;

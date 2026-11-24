@@ -318,15 +318,15 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       }
       if (!mounted) return;
       scan.recorded(seq, card, matches);
-      unawaited(
-        _announceWhenReady(seq, card, scan.state.targets.contains(card.name)),
-      );
+      final targetFound = scan.state.targets.contains(card.name);
+      if (kIsWeb) unawaited(AndroidActions.chime(targetFound: targetFound));
+      unawaited(_loadScannedCardDetails(seq, card, targetFound));
     } finally {
       if (mounted) setState(() => writing = false);
     }
   }
 
-  Future<void> _announceWhenReady(
+  Future<void> _loadScannedCardDetails(
     int seq,
     Edition card,
     bool targetFound,
@@ -337,7 +337,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         Pictures.shared.official(card.id),
         CardReferences.shared.get(card.id),
       ).wait;
-      if (!mounted ||
+      if (kIsWeb ||
+          !mounted ||
           _pendingSounds[seq] != token ||
           !reference.imageAvailable) {
         return;
@@ -348,7 +349,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       );
       if (kept) await AndroidActions.chime(targetFound: targetFound);
     } catch (_) {
-      // Звук подтверждает готовность данных Scryfall.
+      // Данные Scryfall можно загрузить позже.
     } finally {
       if (_pendingSounds[seq] == token) _pendingSounds.remove(seq);
     }

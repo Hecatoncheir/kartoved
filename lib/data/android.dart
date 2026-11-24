@@ -22,6 +22,24 @@ class AndroidActions {
     }
   }
 
+  static Future<bool> openScryfall(Uri page) async {
+    if (kIsWeb) {
+      openBrowserScryfall(page.toString());
+      return true;
+    }
+    try {
+      return await _channel.invokeMethod<bool>(
+            'openScryfall',
+            page.toString(),
+          ) ??
+          false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   static Future<Uint8List?> scanPhoto({
     String? file,
     PreviewFrame? frame,

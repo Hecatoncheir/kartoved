@@ -248,6 +248,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                   ),
               ],
               const SizedBox(height: 12),
+              ScryfallLink(selected),
               CardFacts(selected.id, key: ValueKey(selected.id)),
             ],
           ),

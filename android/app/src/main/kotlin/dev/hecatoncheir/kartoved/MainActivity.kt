@@ -2,6 +2,7 @@ package dev.hecatoncheir.kartoved
 
 import android.content.Intent
 import android.media.AudioManager
+import android.net.Uri
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -36,12 +37,19 @@ class MainActivity : FlutterActivity() {
                         chime?.play(call.arguments == true)
                         reply.success(null)
                     }
+                    "openScryfall" -> reply.success(openScryfall(call.arguments as? String))
                     "saveCsv" -> documents.saveCsv(call.argument("name"), call.argument("csv"), reply)
                     "saveBackup" -> documents.saveBackup(call.argument("name"), call.argument("path"), reply)
                     "openBackup" -> documents.openBackup(call.argument("path"), reply)
                     else -> reply.notImplemented()
                 }
             }
+    }
+
+    private fun openScryfall(url: String?): Boolean {
+        val page = url?.let(Uri::parse) ?: return false
+        if (page.scheme != "https" || page.host != "scryfall.com") return false
+        return runCatching { startActivity(Intent(Intent.ACTION_VIEW, page)) }.isSuccess
     }
 
     @Deprecated("Используется механизм результата FlutterActivity")

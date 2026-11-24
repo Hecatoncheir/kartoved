@@ -6,6 +6,7 @@ CatalogStore createCatalogStore() => CatalogStore();
 void unlockBrowserSound() {}
 void releaseBrowserPhoto(String file) {}
 void reloadBrowser() {}
+void openBrowserScryfall(String url) => _unsupported();
 
 Future<bool> browserGuide(bool? visible) => _unsupported();
 String browserScannerModel(String? model) => _unsupported();

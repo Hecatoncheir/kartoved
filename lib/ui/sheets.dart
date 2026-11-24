@@ -63,7 +63,11 @@ class _ResultSheetState extends State<ResultSheet> {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
-              child: SizedBox(width: 66, height: 90, child: CardPicture(card)),
+              child: SizedBox(
+                width: 66,
+                height: 90,
+                child: CardPicture(card, large: true),
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -135,6 +139,7 @@ class _ResultSheetState extends State<ResultSheet> {
           icon: const Icon(Icons.check),
           label: Text(widget.action),
         ),
+        ScryfallLink(card),
         ExpansionTile(
           key: ValueKey(card.id),
           tilePadding: EdgeInsets.zero,
