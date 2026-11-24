@@ -282,7 +282,9 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       final seq = await library.save(card);
       if (!mounted) return;
       scan.recorded(seq, card, matches);
-      await AndroidActions.chime(targetFound: scan.state.target == card.name);
+      await AndroidActions.chime(
+        targetFound: scan.state.targets.contains(card.name),
+      );
     } finally {
       if (mounted) setState(() => writing = false);
     }
@@ -408,19 +410,17 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     if (batch != null && mounted) scan.configure(batch);
   });
 
-  Future<void> _target() {
+  Future<void> _targets() {
     unlockBrowserSound();
     return _paused(() async {
       final catalog = library.catalog;
       if (catalog == null) return;
-      final name = await Navigator.of(context).push<String>(
-        MaterialPageRoute(
-          builder: (_) => ScanTargetPage(catalog, scan.state.target),
-        ),
+      final hadTargets = scan.state.targets.isNotEmpty;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => ScanTargetsPage(catalog, scan)),
       );
-      if (!mounted || name == null) return;
-      scan.setTarget(name.isEmpty ? null : name);
-      if (name.isNotEmpty && scan.state.mode == ScanMode.manual) _mode();
+      if (!mounted || hadTargets || scan.state.targets.isEmpty) return;
+      if (scan.state.mode == ScanMode.manual) _mode();
     });
   }
 
@@ -439,6 +439,12 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       message('Фонарь недоступен');
     }
   }
+
+  String? get _targetLabel => switch (scan.state.targets.length) {
+    0 => null,
+    1 => 'Ищу · ${scan.state.targets.single}',
+    final count => 'Ищу · карт: $count',
+  };
 
   Widget _header(String title) => Row(
     children: [
@@ -463,10 +469,10 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                 fontSize: 21,
               ),
             ),
-            if (scan.state.batch.active || scan.state.target != null)
+            if (scan.state.batch.active || scan.state.targets.isNotEmpty)
               Text(
                 [
-                  if (scan.state.target case final name?) 'Ищу · $name',
+                  ?_targetLabel,
                   if (scan.state.batch.active) scan.state.batch.label,
                 ].join('  ·  '),
                 maxLines: 1,
@@ -491,7 +497,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
           onSelected: (action) {
             switch (action) {
               case 'target':
-                _target();
+                _targets();
               case 'batch':
                 _settings();
               case 'guide':
@@ -504,7 +510,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
             PopupMenuItem(
               value: 'target',
               enabled: library.catalog != null,
-              child: const Text('Искомая карта'),
+              child: const Text('Искомые карты'),
             ),
             PopupMenuItem(
               value: 'guide',

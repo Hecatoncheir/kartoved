@@ -28,6 +28,7 @@ const ru = Edition(
   '59',
   'ru',
 );
+const bolt = Edition('bolt', 'Lightning Bolt', 'm11', '149', 'en');
 
 class _Catalog extends Catalog {
   _Catalog()
@@ -102,7 +103,7 @@ void main() {
         }
       }))!;
       // Flutter Tester в Windows удерживает JPEG, декодированный из файла.
-      for (final card in [en, ru]) {
+      for (final card in [en, ru, bolt]) {
         PaintingBinding.instance.imageCache.putIfAbsent(
           FileImage(scanPhoto(card)),
           () => OneFrameImageStreamCompleter(
@@ -165,13 +166,15 @@ void main() {
         await tester.pump(const Duration(milliseconds: 350));
       }
 
-      Future<void> pickTarget(String translation, String name) async {
+      Future<void> openTargets() async {
         await tap(find.byTooltip('Меню сканера'));
-        await tap(find.text('Искомая карта'));
+        await tap(find.text('Искомые карты'));
+      }
+
+      Future<void> addTarget(String translation, String name) async {
         await tester.enterText(find.byType(TextField), translation);
         await tap(find.widgetWithText(ListTile, name));
-        expect(find.textContaining('Ищу · $name'), findsOneWidget);
-        expect(find.text('Остановить'), findsOneWidget);
+        expect(find.byTooltip('Убрать из поиска: $name'), findsOneWidget);
       }
 
       await tap(find.text('Сканировать карту'));
@@ -227,7 +230,12 @@ void main() {
       await tap(find.text('ELD'));
       await tap(find.text('Применить'));
       expect(find.text('ELD · RU'), findsOneWidget);
-      await pickTarget('選択', 'Opt');
+      await openTargets();
+      await addTarget('選択', 'Opt');
+      await addTarget('foudre', 'Lightning Bolt');
+      await tap(find.text('Готово'));
+      expect(find.textContaining('Ищу · карт: 2'), findsOneWidget);
+      expect(find.text('Остановить'), findsOneWidget);
       await tap(find.text('Из фото'));
       await waitFor(
         () => model.state.recent.first.card.language == 'ru' && sounds == 2,
@@ -236,19 +244,39 @@ void main() {
       await waitFor(() => model.state.recent.length == 2);
       await waitFor(() => model.state.owned('Opt') == 4);
       expect(model.state.reviews, isEmpty);
-      await pickTarget('foudre', 'Lightning Bolt');
+      model.matches = const [
+        Match([bolt]),
+      ];
+      await tap(find.text('Из фото'));
+      await waitFor(
+        () => model.state.owned('Lightning Bolt') == 1 && sounds == 3,
+      );
+
+      await openTargets();
+      await tester.enterText(find.byType(TextField), 'выбор');
+      await waitFor(() => find.byTooltip('Уже в списке').evaluate().isNotEmpty);
+      await tap(find.byTooltip('Очистить поиск'));
+      await tap(find.byTooltip('Убрать из поиска: Opt'));
+      expect(find.text('Opt'), findsNothing);
+      expect(
+        find.byTooltip('Убрать из поиска: Lightning Bolt'),
+        findsOneWidget,
+      );
+      await tap(find.text('Готово'));
+      expect(find.textContaining('Ищу · Lightning Bolt'), findsOneWidget);
       model.matches = const [
         Match([en]),
       ];
       await tap(find.text('Из фото'));
-      await waitFor(() => model.state.owned('Opt') == 5 && sounds == 3);
+      await waitFor(() => model.state.owned('Opt') == 5 && sounds == 4);
       expect(model.state.reviews, isEmpty);
       expect(model.state.recent.first.card.language, 'en');
-      expect(targetSounds, [false, true, false]);
-      await tap(find.byTooltip('Меню сканера'));
-      await tap(find.text('Искомая карта'));
-      await tap(find.text('Сбросить'));
+      expect(targetSounds, [false, true, true, false]);
+      await openTargets();
+      await tap(find.byTooltip('Убрать из поиска: Lightning Bolt'));
+      await tap(find.byTooltip('Back'));
       expect(find.textContaining('Ищу ·'), findsNothing);
+      expect(find.text('Остановить'), findsOneWidget);
       await tap(find.byTooltip('К коллекции'));
       await tap(find.text('Сканировать карту'));
       await tap(find.byTooltip('Меню сканера'));

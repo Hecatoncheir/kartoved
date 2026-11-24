@@ -54,7 +54,7 @@ typedef ScanSession = ({
   BatchSettings batch,
   int? lastScan,
   bool showGuide,
-  String? target,
+  Set<String> targets,
 });
 
 class ScanCubit extends Cubit<ScanSession> {
@@ -64,7 +64,7 @@ class ScanCubit extends Cubit<ScanSession> {
         batch: const BatchSettings(),
         lastScan: null,
         showGuide: true,
-        target: null,
+        targets: const {},
       ));
   final gate = ScanGate();
   bool _force = false;
@@ -78,7 +78,7 @@ class ScanCubit extends Cubit<ScanSession> {
       batch: state.batch,
       lastScan: state.lastScan,
       showGuide: state.showGuide,
-      target: state.target,
+      targets: state.targets,
     ));
   }
 
@@ -89,7 +89,7 @@ class ScanCubit extends Cubit<ScanSession> {
       batch: value,
       lastScan: state.lastScan,
       showGuide: state.showGuide,
-      target: state.target,
+      targets: state.targets,
     ));
   }
 
@@ -98,15 +98,25 @@ class ScanCubit extends Cubit<ScanSession> {
     batch: state.batch,
     lastScan: state.lastScan,
     showGuide: visible,
-    target: state.target,
+    targets: state.targets,
   ));
 
-  void setTarget(String? name) => emit((
+  void addTarget(String name) {
+    if (state.targets.contains(name)) return;
+    _setTargets({...state.targets, name});
+  }
+
+  void removeTarget(String name) {
+    if (!state.targets.contains(name)) return;
+    _setTargets({...state.targets}..remove(name));
+  }
+
+  void _setTargets(Set<String> targets) => emit((
     mode: state.mode,
     batch: state.batch,
     lastScan: state.lastScan,
     showGuide: state.showGuide,
-    target: name,
+    targets: Set.unmodifiable(targets),
   ));
 
   void recorded(int seq, Edition card, List<Match> matches) {
@@ -119,7 +129,7 @@ class ScanCubit extends Cubit<ScanSession> {
       batch: state.batch,
       lastScan: seq,
       showGuide: state.showGuide,
-      target: state.target,
+      targets: state.targets,
     ));
   }
 
@@ -130,7 +140,7 @@ class ScanCubit extends Cubit<ScanSession> {
       batch: state.batch,
       lastScan: null,
       showGuide: state.showGuide,
-      target: state.target,
+      targets: state.targets,
     ));
   }
 

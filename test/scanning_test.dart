@@ -33,6 +33,27 @@ void main() {
     expect(mode.evaluate(a), isNull);
     expect(mode.evaluate(a), en);
   });
+
+  test('Список поиска допускает независимое добавление и удаление карт', () {
+    final scan = ScanCubit()..toggle();
+    addTearDown(scan.close);
+
+    scan.addTarget(en.name);
+    final first = scan.state.targets;
+    scan.addTarget(next.name);
+    scan.addTarget(en.name);
+    expect(scan.state.targets.toList(), [en.name, next.name]);
+    expect(first, {en.name});
+
+    scan.recorded(1, ru, a);
+    scan.removeTarget(en.name);
+    expect(scan.state.targets, {next.name});
+    expect(scan.state.lastScan, 1);
+    scan.removeTarget(next.name);
+    expect(scan.state.targets, isEmpty);
+    expect(scan.state.mode, ScanMode.automatic);
+  });
+
   test(
     'Сходные рисунки дают одну спорную карту, отмена сохраняет защиту от дубля',
     () {

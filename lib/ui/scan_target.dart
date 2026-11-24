@@ -3,37 +3,44 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/catalog.dart';
 import '../data/scan_names.dart';
+import '../scan_cubit.dart';
 import 'name_search.dart';
 
-class ScanTargetPage extends StatefulWidget {
-  const ScanTargetPage(this.catalog, this.selected, {super.key});
+class ScanTargetsPage extends StatefulWidget {
+  const ScanTargetsPage(this.catalog, this.scan, {super.key});
 
   final Catalog catalog;
-  final String? selected;
+  final ScanCubit scan;
 
   @override
-  State<ScanTargetPage> createState() => _ScanTargetPageState();
+  State<ScanTargetsPage> createState() => _ScanTargetsPageState();
 }
 
-class _ScanTargetPageState extends State<ScanTargetPage> {
+class _ScanTargetsPageState extends State<ScanTargetsPage> {
+  final text = TextEditingController();
   late final search = NameSearch(ScanNames(widget.catalog).search);
 
   @override
   void dispose() {
+    text.dispose();
     search.close();
     super.dispose();
+  }
+
+  void _clearSearch() {
+    text.clear();
+    search.search('');
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Искомая карта'),
+      title: const Text('Искомые карты'),
       actions: [
-        if (widget.selected != null)
-          TextButton(
-            onPressed: () => Navigator.pop(context, ''),
-            child: const Text('Сбросить'),
-          ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Готово'),
+        ),
       ],
     ),
     body: SafeArea(
@@ -41,20 +48,17 @@ class _ScanTargetPageState extends State<ScanTargetPage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: TextField(
-              autofocus: true,
-              textInputAction: TextInputAction.search,
-              onChanged: search.search,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                labelText: 'Название карты',
-              ),
-            ),
+            child: _searchField(),
           ),
           Expanded(
-            child: BlocBuilder<NameSearch, AsyncSnapshot<List<String>>>(
-              bloc: search,
-              builder: _results,
+            child: BlocSelector<ScanCubit, ScanSession, Set<String>>(
+              bloc: widget.scan,
+              selector: (state) => state.targets,
+              builder: (context, targets) =>
+                  BlocBuilder<NameSearch, AsyncSnapshot<List<String>>>(
+                    bloc: search,
+                    builder: (context, state) => _results(state, targets),
+                  ),
             ),
           ),
         ],
@@ -62,7 +66,28 @@ class _ScanTargetPageState extends State<ScanTargetPage> {
     ),
   );
 
-  Widget _results(BuildContext context, AsyncSnapshot<List<String>> state) {
+  Widget _searchField() => TextField(
+    controller: text,
+    textInputAction: TextInputAction.search,
+    onChanged: search.search,
+    decoration: InputDecoration(
+      prefixIcon: const Icon(Icons.search),
+      labelText: 'Название карты',
+      suffixIcon: ValueListenableBuilder(
+        valueListenable: text,
+        builder: (context, value, child) => value.text.isEmpty
+            ? const SizedBox.shrink()
+            : IconButton(
+                tooltip: 'Очистить поиск',
+                icon: const Icon(Icons.close),
+                onPressed: _clearSearch,
+              ),
+      ),
+    ),
+  );
+
+  Widget _results(AsyncSnapshot<List<String>> state, Set<String> targets) {
+    if (search.query.isEmpty) return _selected(targets);
     if (state.hasError) {
       return Center(
         child: TextButton(
@@ -79,20 +104,51 @@ class _ScanTargetPageState extends State<ScanTargetPage> {
     }
     final names = state.data ?? const [];
     if (names.isEmpty) {
-      final text = search.query.isEmpty
-          ? 'Введите название карты'
-          : 'Совпадений нет';
-      return Center(child: Text(text));
+      return const Center(child: Text('Совпадений нет'));
     }
     return ListView.builder(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       itemCount: names.length,
       itemBuilder: (context, index) {
         final name = names[index];
+        final selected = targets.contains(name);
         return ListTile(
           title: Text(name),
-          selected: name == widget.selected,
-          onTap: () => Navigator.pop(context, name),
+          selected: selected,
+          trailing: selected
+              ? const Tooltip(message: 'Уже в списке', child: Icon(Icons.check))
+              : const Icon(Icons.add),
+          onTap: selected
+              ? null
+              : () {
+                  widget.scan.addTarget(name);
+                  _clearSearch();
+                },
+        );
+      },
+    );
+  }
+
+  Widget _selected(Set<String> targets) {
+    if (targets.isEmpty) {
+      return const Center(
+        child: Text('Введите название карты, чтобы добавить её'),
+      );
+    }
+    final names = targets.toList();
+    return ListView.builder(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      itemCount: names.length,
+      itemBuilder: (context, index) {
+        final name = names[index];
+        return ListTile(
+          key: ValueKey(name),
+          title: Text(name),
+          trailing: IconButton(
+            tooltip: 'Убрать из поиска: $name',
+            icon: const Icon(Icons.remove_circle_outline),
+            onPressed: () => widget.scan.removeTarget(name),
+          ),
         );
       },
     );
