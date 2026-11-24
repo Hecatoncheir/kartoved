@@ -8,6 +8,7 @@ void releaseBrowserPhoto(String file) {}
 void reloadBrowser() {}
 
 Future<bool> browserGuide(bool? visible) => _unsupported();
+String browserScannerModel(String? model) => _unsupported();
 Future<void> browserChime(bool targetFound) => _unsupported();
 Future<Uint8List> browserCrop(String file, List<double> corners) =>
     _unsupported();

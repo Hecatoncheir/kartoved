@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'model.dart';
 import 'data/catalog.dart';
+import 'data/recognition_result.dart';
 import 'scan_decision.dart';
 
 // Два кадра с одинаковыми кандидатами. Пропуск кадра не снимает защиту от дубля.
@@ -17,7 +18,11 @@ class ScanGate {
     clearCandidate();
   }
 
-  Edition? accept(List<Match> matches, {bool manual = false}) {
+  Edition? accept(
+    List<Match> matches, {
+    bool manual = false,
+    double minimumScore = .60,
+  }) {
     if (matches.isEmpty) {
       clearCandidate();
       return null;
@@ -28,7 +33,7 @@ class ScanGate {
       return best.editions.where((e) => e.id == _last?.id).firstOrNull ?? card;
     }
     final candidates = closeMatches(matches).map((m) => m.editions.first);
-    if (best.score < .60 ||
+    if (best.score < minimumScore ||
         candidates.any((e) => _seenNames.contains(e.name)) ||
         _sameCard(card, _last)) {
       clearCandidate();
@@ -55,6 +60,7 @@ typedef ScanSession = ({
   int? lastScan,
   bool showGuide,
   Set<String> targets,
+  RecognitionModel model,
 });
 
 class ScanCubit extends Cubit<ScanSession> {
@@ -65,6 +71,7 @@ class ScanCubit extends Cubit<ScanSession> {
         lastScan: null,
         showGuide: true,
         targets: const {},
+        model: RecognitionModel.oracle,
       ));
   final gate = ScanGate();
   bool _force = false;
@@ -79,6 +86,7 @@ class ScanCubit extends Cubit<ScanSession> {
       lastScan: state.lastScan,
       showGuide: state.showGuide,
       targets: state.targets,
+      model: state.model,
     ));
   }
 
@@ -90,6 +98,7 @@ class ScanCubit extends Cubit<ScanSession> {
       lastScan: state.lastScan,
       showGuide: state.showGuide,
       targets: state.targets,
+      model: state.model,
     ));
   }
 
@@ -99,7 +108,21 @@ class ScanCubit extends Cubit<ScanSession> {
     lastScan: state.lastScan,
     showGuide: visible,
     targets: state.targets,
+    model: state.model,
   ));
+
+  void setModel(RecognitionModel model) {
+    if (state.model == model) return;
+    cancelFrame();
+    emit((
+      mode: state.mode,
+      batch: state.batch,
+      lastScan: state.lastScan,
+      showGuide: state.showGuide,
+      targets: state.targets,
+      model: model,
+    ));
+  }
 
   void addTarget(String name) {
     if (state.targets.contains(name)) return;
@@ -117,6 +140,7 @@ class ScanCubit extends Cubit<ScanSession> {
     lastScan: state.lastScan,
     showGuide: state.showGuide,
     targets: Set.unmodifiable(targets),
+    model: state.model,
   ));
 
   void recorded(int seq, Edition card, List<Match> matches) {
@@ -130,6 +154,7 @@ class ScanCubit extends Cubit<ScanSession> {
       lastScan: seq,
       showGuide: state.showGuide,
       targets: state.targets,
+      model: state.model,
     ));
   }
 
@@ -141,6 +166,7 @@ class ScanCubit extends Cubit<ScanSession> {
       lastScan: null,
       showGuide: state.showGuide,
       targets: state.targets,
+      model: state.model,
     ));
   }
 
@@ -153,6 +179,10 @@ class ScanCubit extends Cubit<ScanSession> {
   Edition? evaluate(List<Match> matches) {
     final manual = _force;
     _force = false;
-    return gate.accept(matches, manual: manual);
+    return gate.accept(
+      matches,
+      manual: manual,
+      minimumScore: state.model.minimumScore,
+    );
   }
 }

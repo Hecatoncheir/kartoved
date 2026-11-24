@@ -15,58 +15,59 @@ export 'recognition_result.dart';
 List<Hit> identify(String directory, String photo) =>
     identifyPhoto(directory, photo).hits;
 
-Recognition identifyPhoto(String directory, String photo) {
+Recognition identifyPhoto(
+  String directory,
+  String photo, {
+  Uint8List? mtgGraph,
+  Uint8List? poseGraph,
+}) {
   final decoded = im.decodeImage(File(photo).readAsBytesSync());
   if (decoded == null) throw const FormatException('Не удалось открыть снимок');
-  return identifyImage(directory, im.bakeOrientation(decoded));
+  return identifyImage(
+    directory,
+    im.bakeOrientation(decoded),
+    mtgGraph: mtgGraph,
+    poseGraph: poseGraph,
+  );
 }
 
-Recognition identifyImage(String directory, im.Image original) {
+Recognition identifyImage(
+  String directory,
+  im.Image original, {
+  Uint8List? mtgGraph,
+  Uint8List? poseGraph,
+}) {
+  if (poseGraph != null) return _identifyMtg(original, poseGraph, mtgGraph!);
   final config = jsonDecode(
     File(p.join(directory, 'catalog.json')).readAsStringSync(),
   ) as Map;
   final constants = config['constants'] as Map;
   final side = constants['scene'] as int;
-  final large = math.max(original.width, original.height);
-  final scale = side / large;
-  final scaled = im.copyResize(
-    original,
-    width: math.max(1, (original.width * scale).round()),
-    height: math.max(1, (original.height * scale).round()),
-    interpolation: im.Interpolation.linear,
-  );
-  final scene = im.Image(width: side, height: side, numChannels: 4);
-  im.fill(scene, color: im.ColorRgba8(48, 48, 48, 255));
-  im.compositeImage(
-    scene,
-    scaled,
-    dstX: (side - scaled.width) ~/ 2,
-    dstY: (side - scaled.height) ~/ 2,
-  );
-  final bytes = scene.getBytes(order: im.ChannelOrder.rgba);
+  final (bytes, width, height) = _scene(original, side);
   final sessions = <Session>[];
-  Session open(String name) {
-    final session = Session.fromBytes(
-      File(p.join(directory, '$name.onnx')).readAsBytesSync(),
-      options: const SessionOptions(intraOpNumThreads: 2),
-    );
+  Session openGraph(Uint8List graph) {
+    final session = _openGraph(graph);
     sessions.add(session);
     return session;
   }
 
+  Session open(String name) =>
+      openGraph(File(p.join(directory, '$name.onnx')).readAsBytesSync());
+
   try {
     final detector = open('detector');
-    final width = constants['det_input'] as int;
+    final input = constants['det_input'] as int;
     final rotations = constants['rotations'] as int;
     late final embed = open('embed');
     late final search = open('search');
+    late final mtg = openGraph(mtgGraph!);
 
-    for (final window in _windows(side, scaled.width, scaled.height)) {
+    for (final window in _windows(side, width, height)) {
       final coarse = _detect(
         detector,
         bytes,
         side,
-        width,
+        input,
         window.x,
         window.y,
         window.extent,
@@ -81,7 +82,7 @@ Recognition identifyImage(String directory, im.Image original) {
         detector,
         bytes,
         side,
-        width,
+        input,
         coarse.x,
         coarse.y,
         refine,
@@ -89,22 +90,120 @@ Recognition identifyImage(String directory, im.Image original) {
       if (fine.vote / rotations < 0.5 || fine.short < side * 0.09) continue;
       final hits = _identifyCard(embed, search, config, bytes, side, fine.quad);
       if (hits.isEmpty || hits.first.score < .60) continue;
+      final mtgHits = mtgGraph == null
+          ? const <Hit>[]
+          : _run(mtg, {
+              'scene': _pixels(bytes, side),
+              'quad': _floats(fine.quad, [4, 2]),
+            }, _readHits);
       final corners = [
         for (var i = 0; i < fine.quad.length; i++)
-          _unitCoord(
-            fine.quad[i],
-            side,
-            i.isEven ? scaled.width : scaled.height,
-          ),
+          _unitCoord(fine.quad[i], side, i.isEven ? width : height),
       ];
-      return (hits: hits, corners: corners);
+      return (hits: hits, mtgHits: mtgHits, corners: corners);
     }
-    return (hits: <Hit>[], corners: <double>[]);
+    return (hits: <Hit>[], mtgHits: <Hit>[], corners: <double>[]);
   } finally {
     for (final session in sessions.reversed) {
       session.release();
     }
   }
+}
+
+Session _openGraph(Uint8List graph) => Session.fromBytes(
+  graph,
+  options: const SessionOptions(intraOpNumThreads: 2),
+);
+
+(Uint8List, int, int) _scene(im.Image original, int side) {
+  final scale = side / math.max(original.width, original.height);
+  final scaled = im.copyResize(
+    original,
+    width: math.max(1, (original.width * scale).round()),
+    height: math.max(1, (original.height * scale).round()),
+    interpolation: im.Interpolation.linear,
+  );
+  final scene = im.Image(width: side, height: side, numChannels: 4);
+  im.fill(scene, color: im.ColorRgba8(48, 48, 48, 255));
+  im.compositeImage(
+    scene,
+    scaled,
+    dstX: (side - scaled.width) ~/ 2,
+    dstY: (side - scaled.height) ~/ 2,
+  );
+  return (
+    scene.getBytes(order: im.ChannelOrder.rgba),
+    scaled.width,
+    scaled.height,
+  );
+}
+
+Recognition _identifyMtg(im.Image original, Uint8List pose, Uint8List mtg) {
+  const side = 640;
+  final (bytes, width, height) = _scene(original, side);
+  final detector = _openGraph(pose);
+  Float32List? quad;
+  try {
+    quad = _run(detector, {'scene': _pixels(bytes, side)}, (outputs) {
+      if (outputs['score']!.view.float32s.first < .50) return null;
+      return Float32List.fromList(outputs['quad']!.view.float32s);
+    });
+  } finally {
+    detector.release();
+  }
+  if (quad == null) return (hits: [], mtgHits: [], corners: []);
+
+  final encoder = _openGraph(mtg);
+  try {
+    final (hits, corners) = _mtgRotations(encoder, bytes, side, quad);
+    return (
+      hits: [],
+      mtgHits: hits,
+      corners: [
+        for (var i = 0; i < corners.length; i++)
+          _unitCoord(corners[i], side, i.isEven ? width : height),
+      ],
+    );
+  } finally {
+    encoder.release();
+  }
+}
+
+(List<Hit>, Float32List) _mtgRotations(
+  Session encoder,
+  Uint8List scene,
+  int side,
+  Float32List quad,
+) {
+  final scores = <int, double>{};
+  var bestScore = -1.0;
+  var bestQuad = quad;
+  for (var offset = 0; offset < quad.length; offset += 2) {
+    final rotated = Float32List.fromList([
+      ...quad.skip(offset),
+      ...quad.take(offset),
+    ]);
+    final hits = _run(encoder, {
+      'scene': _pixels(scene, side),
+      'quad': _floats(rotated, [4, 2]),
+    }, _readHits);
+    final score = hits.firstOrNull?.score ?? -1;
+    if (score > bestScore) {
+      bestScore = score;
+      bestQuad = rotated;
+    }
+    for (final hit in hits) {
+      scores.update(
+        hit.index,
+        (score) => math.max(score, hit.score),
+        ifAbsent: () => hit.score,
+      );
+    }
+  }
+  final ranked = [
+    for (final score in scores.entries) (index: score.key, score: score.value),
+  ]..sort((a, b) => b.score.compareTo(a.score));
+  return (ranked, bestQuad);
 }
 
 // Увеличиваем перекрывающиеся участки кадра, если общий проход пропустил карту.
@@ -137,26 +236,24 @@ List<Hit> _identifyCard(
     'scene': _pixels(bytes, side),
     'quad': _floats(quad, [4, 2]),
   }, (outputs) => Float32List.fromList(outputs.values.first.view.float32s));
-  return _run(
-    search,
-    {
-      'embeddings': _floats(features, [features.length ~/ 128, 128]),
-      if (config['searchMask'] == true)
-        'mask': _floats(
-          Float32List(config['count'] as int)
-            ..fillRange(0, config['count'] as int, 1),
-          [config['count'] as int],
-        ),
-    },
-    (outputs) {
-      final ids = outputs['indices']!.view.int64s;
-      final scores = outputs['scores']!.view.float32s;
-      return [
-        for (var i = 0; i < ids.length; i++)
-          if (scores[i] >= 0.0) (index: ids[i], score: scores[i]),
-      ];
-    },
-  );
+  return _run(search, {
+    'embeddings': _floats(features, [features.length ~/ 128, 128]),
+    if (config['searchMask'] == true)
+      'mask': _floats(
+        Float32List(config['count'] as int)
+          ..fillRange(0, config['count'] as int, 1),
+        [config['count'] as int],
+      ),
+  }, _readHits);
+}
+
+List<Hit> _readHits(Map<String, OrtTensor> outputs) {
+  final ids = outputs['indices']!.view.int64s;
+  final scores = outputs['scores']!.view.float32s;
+  return [
+    for (var i = 0; i < ids.length; i++)
+      if (scores[i] >= 0.0) (index: ids[i], score: scores[i]),
+  ];
 }
 
 double _unitCoord(double coordinate, int scene, int drawn) =>

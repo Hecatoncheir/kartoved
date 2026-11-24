@@ -109,10 +109,12 @@ class Catalog {
     return rows.isEmpty ? card : Edition.fromRow(rows.first);
   }
 
-  Future<List<Edition>> variants(Edition card) async {
+  Future<List<Edition>> variants(Edition card) => editionsForPrinting(card.id);
+
+  Future<List<Edition>> editionsForPrinting(String id) async {
     final rows = await _query(
       'SELECT * FROM editions WHERE art = (SELECT art FROM editions WHERE id = ? LIMIT 1) ORDER BY rowid',
-      [card.id],
+      [id],
     );
     return rows.map(Edition.fromRow).toList();
   }

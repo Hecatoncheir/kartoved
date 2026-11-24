@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../data/catalog.dart';
 import '../model.dart';
+import 'card_facts.dart';
 import 'style.dart';
 
 Future<T?> panel<T>(BuildContext context, Widget child) =>
@@ -133,6 +134,12 @@ class _ResultSheetState extends State<ResultSheet> {
           onPressed: () => Navigator.pop(context, card),
           icon: const Icon(Icons.check),
           label: Text(widget.action),
+        ),
+        ExpansionTile(
+          key: ValueKey(card.id),
+          tilePadding: EdgeInsets.zero,
+          title: const Text('Текст и правила'),
+          children: [CardFacts(card.id)],
         ),
       ],
     ),
@@ -321,7 +328,7 @@ class _PicturePackState extends State<PicturePack> {
       var done = 0;
       for (final card in cards) {
         if (!mounted) return;
-        await Pictures.shared.get(card.id);
+        await Pictures.shared.official(card.id);
         if (mounted) setState(() => status = '${++done} из ${cards.length}');
       }
       progress(

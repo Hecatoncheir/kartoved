@@ -21,6 +21,8 @@ external JSPromise<JSString> _unmirror(String file);
 external JSPromise<JSString> _readText(String file, JSArray<JSNumber> corners);
 @JS('kartoved.guide')
 external bool _guide(JSBoolean? visible);
+@JS('kartoved.scannerModel')
+external String browserScannerModel(String? model);
 @JS('kartoved.download')
 external void _download(String name, String mime, JSUint8Array data);
 @JS('kartoved.pickBackup')

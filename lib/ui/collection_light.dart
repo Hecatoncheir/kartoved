@@ -1,117 +1,151 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../data/pictures.dart';
 import 'style.dart';
 
-class CollectionLight extends StatefulWidget {
-  const CollectionLight({super.key, required this.child});
+class CollectionLight extends StatelessWidget {
+  const CollectionLight({
+    super.key,
+    required this.cardIds,
+    required this.child,
+  });
+
+  final Iterable<String> cardIds;
   final Widget child;
 
+  static const _centers = [
+    Alignment(.90, -.85),
+    Alignment(-.95, .86),
+    Alignment(-.88, -.30),
+    Alignment(.95, .32),
+    Alignment(.75, 1.05),
+    Alignment(-.70, -.92),
+  ];
+
   @override
-  State<CollectionLight> createState() => _CollectionLightState();
+  Widget build(BuildContext context) {
+    final samples = cardIds.toSet().take(_centers.length);
+    return ColoredBox(
+      color: dark,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          for (final (index, id) in samples.indexed)
+            _CardGlow(id, _centers[index], key: ValueKey(id)),
+          child,
+        ],
+      ),
+    );
+  }
 }
 
-class _CollectionLightState extends State<CollectionLight>
-    with SingleTickerProviderStateMixin {
-  late final light = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 16),
-  );
+class _CardGlow extends StatefulWidget {
+  const _CardGlow(this.id, this.center, {required super.key});
+
+  final String id;
+  final Alignment center;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context) ||
-        !TickerMode.valuesOf(context).enabled) {
-      light.stop();
-    } else if (!light.isAnimating) {
-      light.repeat();
-    }
+  State<_CardGlow> createState() => _CardGlowState();
+}
+
+class _CardGlowState extends State<_CardGlow> {
+  late Future<Color?> color = _readColor(widget.id);
+  late final StreamSubscription<String> photos;
+
+  @override
+  void initState() {
+    super.initState();
+    photos = Pictures.shared.photos.listen((id) {
+      if (id != widget.id) return;
+      setState(() {
+        color = _readColor(id);
+      });
+    });
   }
 
   @override
   void dispose() {
-    light.dispose();
+    photos.cancel();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: dark,
-    child: Stack(
-      fit: StackFit.expand,
-      children: [
-        RepaintBoundary(child: CustomPaint(painter: _Glow(light))),
-        widget.child,
-      ],
-    ),
+  Widget build(BuildContext context) => FutureBuilder<Color?>(
+    future: color,
+    builder: (context, snapshot) {
+      final shade = snapshot.data ?? Colors.transparent;
+      return AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: widget.center,
+            radius: 1.05,
+            colors: [
+              shade.withValues(alpha: shade.a * .28),
+              shade.withValues(alpha: 0),
+            ],
+          ),
+        ),
+      );
+    },
   );
 }
 
-class _Glow extends CustomPainter {
-  _Glow(this.light) : super(repaint: light);
-  final Animation<double> light;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final phase = light.value * math.pi * 2;
-    // Мягкий край и более яркая складка дают глубину под полупрозрачными картами.
-    void ribbon(double x, double y, double angle, Color color, double width) {
-      canvas.save();
-      canvas.translate(size.width * x, size.height * y);
-      canvas.rotate(angle);
-      final side = math.min(size.width, size.height) * width;
-      canvas.scale(side);
-      final path = Path()
-        ..moveTo(-.82, .35)
-        ..cubicTo(-.89, -.05, -.5, -.52, -.20, -.51)
-        ..cubicTo(-.04, -.51, -.18, -.09, .10, -.13)
-        ..cubicTo(.40, -.18, .45, -.59, .75, -.49)
-        ..cubicTo(.68, -.12, .43, .42, .04, .48)
-        ..cubicTo(-.32, .55, -.48, .16, -.82, .35)
-        ..close();
-      canvas.drawPath(
-        path,
-        Paint()
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, .085)
-          ..shader = ui.Gradient.linear(
-            const Offset(-.52, -.4),
-            const Offset(.44, .45),
-            [
-              color.withValues(alpha: .055),
-              color.withValues(alpha: .30),
-              color.withValues(alpha: .04),
-            ],
-            const [0, .48, 1],
-          ),
-      );
-      canvas.restore();
+Future<Color?> _readColor(String id) async {
+  try {
+    final bytes = await Pictures.shared.thumbnailBytes(id);
+    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 20);
+    final ui.FrameInfo frame;
+    try {
+      frame = await codec.getNextFrame();
+    } finally {
+      codec.dispose();
     }
-
-    ribbon(
-      .77 + .18 * math.sin(phase),
-      .16 + .09 * math.cos(phase),
-      -.5 + .22 * math.sin(phase),
-      const Color(0xffb8bb26),
-      .88,
-    );
-    ribbon(
-      .01 + .20 * math.cos(phase),
-      .72 + .10 * math.sin(phase),
-      1 + .35 * math.cos(phase),
-      const Color(0xffd79921),
-      .68,
-    );
-    ribbon(
-      .93 + .10 * math.cos(phase),
-      .91 + .07 * math.sin(phase),
-      -.7,
-      const Color(0xff689d6a),
-      .53,
-    );
+    final image = frame.image;
+    try {
+      final pixels = await image.toByteData();
+      return pixels == null
+          ? null
+          : _artColor(pixels, image.width, image.height);
+    } finally {
+      image.dispose();
+    }
+  } catch (_) {
+    return null;
   }
+}
 
-  @override
-  bool shouldRepaint(_Glow old) => old.light != light;
+Color _artColor(ByteData pixels, int width, int height) {
+  var red = 0, green = 0, blue = 0, weightSum = 0;
+  // Берём область иллюстрации между названием карты и текстом правил.
+  for (var y = height ~/ 6; y < (height * .54).ceil(); y++) {
+    for (var x = width ~/ 7; x < (width * .85).ceil(); x++) {
+      final offset = (y * width + x) * 4;
+      final r = pixels.getUint8(offset);
+      final g = pixels.getUint8(offset + 1);
+      final b = pixels.getUint8(offset + 2);
+      final lightest = math.max<int>(r, math.max(g, b));
+      final darkest = math.min<int>(r, math.min(g, b));
+      final weight = 32 + lightest - darkest;
+      red += r * weight;
+      green += g * weight;
+      blue += b * weight;
+      weightSum += weight;
+    }
+  }
+  return Color.fromARGB(
+    255,
+    red ~/ weightSum,
+    green ~/ weightSum,
+    blue ~/ weightSum,
+  );
 }

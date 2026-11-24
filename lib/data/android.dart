@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import 'frame.dart';
 import 'browser.dart';
+import 'recognition_result.dart';
 
 class AndroidActions {
   static const _channel = MethodChannel('kartoved/android');
@@ -40,6 +41,25 @@ class AndroidActions {
       return null;
     } on MissingPluginException {
       return null;
+    }
+  }
+
+  static Future<RecognitionModel> scannerModel([
+    RecognitionModel? model,
+  ]) async {
+    if (kIsWeb) {
+      return RecognitionModel.fromName(browserScannerModel(model?.name));
+    }
+    try {
+      final name = await _channel.invokeMethod<String>(
+        'scannerModel',
+        model?.name,
+      );
+      return RecognitionModel.fromName(name);
+    } on PlatformException {
+      return model ?? RecognitionModel.oracle;
+    } on MissingPluginException {
+      return model ?? RecognitionModel.oracle;
     }
   }
 

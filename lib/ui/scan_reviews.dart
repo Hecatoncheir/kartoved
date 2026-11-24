@@ -80,7 +80,10 @@ class _ReviewPage extends StatelessWidget {
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Не удалось сохранить решение')),
+          const SnackBar(
+            duration: noticeDuration,
+            content: Text('Не удалось сохранить решение'),
+          ),
         );
       }
     }

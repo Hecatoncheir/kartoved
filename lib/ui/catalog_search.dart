@@ -241,6 +241,7 @@ class _PrintingsState extends State<_Printings> {
       );
       messenger.showSnackBar(
         SnackBar(
+          duration: noticeDuration,
           content: Text(
             'Добавлено в «${result.folder.name}» · ${result.quantity}',
           ),
@@ -248,7 +249,10 @@ class _PrintingsState extends State<_Printings> {
       );
     } catch (_) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Не удалось добавить карту')),
+        const SnackBar(
+          duration: noticeDuration,
+          content: Text('Не удалось добавить карту'),
+        ),
       );
     }
   }

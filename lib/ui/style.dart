@@ -21,6 +21,7 @@ const headingFont = 'Nunito';
 const bodyFont = 'Nunito Sans';
 const monoFont = 'JetBrains Mono';
 const codeText = TextStyle(fontFamily: monoFont, color: muted);
+const noticeDuration = Duration(seconds: 3);
 
 ThemeData kartovedTheme() {
   final scheme =

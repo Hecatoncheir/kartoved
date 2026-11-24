@@ -27,6 +27,11 @@ class MainActivity : FlutterActivity() {
                         if (visible != null) settings.edit().putBoolean("guide", visible).apply()
                         reply.success(visible ?: settings.getBoolean("guide", true))
                     }
+                    "scannerModel" -> {
+                        val model = call.arguments as? String
+                        if (model != null) settings.edit().putString("recognitionModel", model).apply()
+                        reply.success(model ?: settings.getString("recognitionModel", null))
+                    }
                     "chime" -> {
                         chime?.play(call.arguments == true)
                         reply.success(null)

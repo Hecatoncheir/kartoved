@@ -39,29 +39,65 @@ class Pictures {
     );
   }
 
-  Future<ImageProvider> get(String id, {bool large = false}) async => kIsWeb
+  Future<ImageProvider> official(String id, {bool large = false}) async =>
+      kIsWeb
       ? MemoryImage(await _getBrowser(id, large: large))
       : FileImage(await _getFile(id, large: large));
+
+  Future<ImageProvider?> cachedThumbnail(String id) async {
+    if (kIsWeb) {
+      final bytes = await _cachedBrowserThumbnail(id);
+      return bytes == null ? null : MemoryImage(bytes);
+    }
+    final file = await _cachedFileThumbnail(id);
+    return file == null ? null : FileImage(file);
+  }
+
+  Future<Uint8List> thumbnailBytes(String id) async {
+    if (kIsWeb) {
+      return await _cachedBrowserThumbnail(id) ?? _getBrowser(id, large: false);
+    }
+    final file =
+        await _cachedFileThumbnail(id) ?? await _getFile(id, large: false);
+    return file.readAsBytes();
+  }
+
+  Future<Uint8List?> _cachedBrowserThumbnail(String id) async =>
+      await browserCacheRead('images/$id/small') ??
+      await browserCacheRead('scans/$id');
+
+  Future<File?> _cachedFileThumbnail(String id) async {
+    address(id);
+    final root = await _directory;
+    final image = File(p.join(root.path, '$id.jpg'));
+    if (await image.exists()) return image;
+    final scan = _scanFile(root, id);
+    return await scan.exists() ? scan : null;
+  }
 
   Future<Uint8List> _getBrowser(String id, {required bool large}) async {
     final url = address(id, large: large);
     final key = 'images/$id/${large ? 'large' : 'small'}';
-    final cached =
-        await browserCacheRead(key) ?? await browserCacheRead('scans/$id');
+    final cached = await browserCacheRead(key);
     if (cached != null) return cached;
     return _browserPending.putIfAbsent(
       key,
-      () => _downloadBrowser(
-        url,
-        key,
-      ).whenComplete(() => _browserPending.remove(key)),
+      () => _downloadBrowser(url, key)
+          .then((bytes) {
+            if (!large) _photos.add(id);
+            return bytes;
+          })
+          .whenComplete(() {
+            _browserPending.remove(key);
+          }),
     );
   }
 
   Future<Uint8List> _downloadBrowser(Uri url, String key) async {
     final response = await http.get(url).timeout(const Duration(seconds: 12));
     if (response.statusCode != 200 ||
-        response.headers['content-type']?.startsWith('image/') != true) {
+        response.headers['content-type']?.startsWith('image/') != true ||
+        response.bodyBytes.isEmpty) {
       throw StateError('Изображение недоступно');
     }
     await browserCacheWrite(key, response.bodyBytes);
@@ -74,13 +110,16 @@ class Pictures {
     final root = await _directory;
     final file = File(p.join(root.path, '$key.jpg'));
     if (await file.exists()) return file;
-    final photo = _scanFile(root, id);
-    if (await photo.exists()) return photo;
     return _pending.putIfAbsent(
       key,
-      () => _download(url, file).whenComplete(() {
-        _pending.remove(key);
-      }),
+      () => _download(url, file)
+          .then((image) {
+            if (!large) _photos.add(id);
+            return image;
+          })
+          .whenComplete(() {
+            _pending.remove(key);
+          }),
     );
   }
 
@@ -124,6 +163,9 @@ class Pictures {
       await response
           .timeout(const Duration(seconds: 10))
           .pipe(temp.openWrite());
+      if (await temp.length() == 0) {
+        throw const FormatException('Пустое изображение');
+      }
       return await temp.rename(file.path);
     } finally {
       client.close(force: true);

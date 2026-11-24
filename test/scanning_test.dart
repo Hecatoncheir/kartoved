@@ -3,6 +3,7 @@ import 'package:kartoved/data/catalog.dart';
 import 'package:kartoved/data/language.dart';
 import 'package:kartoved/data/moxfield.dart';
 import 'package:kartoved/data/pictures.dart';
+import 'package:kartoved/data/recognition_result.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/scan_cubit.dart';
 import 'package:kartoved/scan_decision.dart';
@@ -52,6 +53,37 @@ void main() {
     scan.removeTarget(next.name);
     expect(scan.state.targets, isEmpty);
     expect(scan.state.mode, ScanMode.automatic);
+  });
+
+  test('MTG уточняет близкие совпадения и сохраняет границу Oracle', () {
+    const third = Edition('other', 'Mountain', 'm21', '269', 'en');
+    const oracle = [
+      Match([en, ru], score: .90),
+      Match([next], score: .87),
+      Match([third], score: .76),
+    ];
+    expect(Match.preferMtg(oracle, [third.id]), same(oracle));
+    final refined = Match.preferMtg(oracle, [third.id, next.id]);
+    expect(refined.map((match) => match.editions.first), [next, en, third]);
+    expect(refined.first.score, oracle.first.score);
+  });
+
+  test('MTG без Oracle принимает уверенное совпадение на двух кадрах', () {
+    const best = (index: 1, score: .43);
+    expect(standaloneMtgHit([best, (index: 2, score: .38)]), isNull);
+    expect(standaloneMtgHit([(index: 1, score: .33)]), isNull);
+    expect(standaloneMtgHit([best, (index: 2, score: .34)]), best);
+
+    final scan = ScanCubit()..toggle();
+    addTearDown(scan.close);
+    const match = [
+      Match([en], score: .43),
+    ];
+    expect(scan.evaluate(match), isNull);
+    expect(scan.evaluate(match), isNull);
+    scan.setModel(RecognitionModel.mtgStandalone);
+    expect(scan.evaluate(match), isNull);
+    expect(scan.evaluate(match), en);
   });
 
   test(

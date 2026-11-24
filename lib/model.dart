@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'data/catalog.dart';
@@ -17,6 +18,26 @@ class Match {
   final List<double> corners;
   final List<Edition> editions;
   final double score;
+
+  static List<Match> preferMtg(
+    List<Match> matches,
+    Iterable<String> printings,
+  ) {
+    if (matches.length < 2) return matches;
+    final best = matches.first;
+    final near = {
+      for (final match in matches.takeWhile(
+        (m) => best.score - m.score < nearMatchWindow,
+      ))
+        for (final edition in match.editions) edition.id: match,
+    };
+    final preferred = printings.map((id) => near[id]).nonNulls.firstOrNull;
+    if (preferred == null || identical(preferred, best)) return matches;
+    return [
+      Match(preferred.editions, score: best.score, corners: preferred.corners),
+      ...matches.where((match) => !identical(match, preferred)),
+    ];
+  }
 }
 
 class LibraryState {
@@ -156,22 +177,55 @@ class AppModel extends Cubit<LibraryState> {
     await select(1);
   }
 
-  Future<List<Match>> _matches(Recognition result) async {
+  static final _mtgPrintings = rootBundle
+      .loadString('$mtgIdentificationAssets/printings.json')
+      .then((json) => (jsonDecode(json) as List).cast<String>());
+
+  Future<List<Match>> _standaloneMatches(Recognition result) async {
+    final hit = standaloneMtgHit(result.mtgHits);
+    if (hit == null) return [];
+    final printings = await _mtgPrintings;
+    final editions = await catalog!.editionsForPrinting(printings[hit.index]);
+    return [
+      if (editions.isNotEmpty)
+        Match(editions, score: hit.score, corners: result.corners),
+    ];
+  }
+
+  Future<List<Match>> _matches(
+    Recognition result,
+    RecognitionModel engine,
+  ) async {
+    if (engine == RecognitionModel.mtgStandalone) {
+      return _standaloneMatches(result);
+    }
+    if (result.hits.isEmpty) return [];
+    final catalog = this.catalog!;
     final matches = <Match>[];
     for (final hit in result.hits) {
-      final editions = await catalog!.editions(hit.index);
+      final editions = await catalog.editions(hit.index);
       if (editions.isNotEmpty) {
         matches.add(Match(editions, score: hit.score, corners: result.corners));
       }
     }
-    return matches;
+    if (result.mtgHits.isEmpty) return matches;
+    final printings = await _mtgPrintings;
+    return Match.preferMtg(matches, [
+      for (final hit in result.mtgHits)
+        if (hit.score >= .25) printings[hit.index],
+    ]);
   }
 
-  Future<List<Match>> recognize(String file) async =>
-      _matches(await recognizeFile(catalog!, file));
+  Future<List<Match>> recognize(
+    String file, {
+    RecognitionModel engine = RecognitionModel.oracle,
+  }) async => _matches(await recognizeFile(catalog!, file, engine), engine);
 
-  Future<List<Match>> recognizeFrame(PreviewFrame frame) async =>
-      _matches(await recognizeCameraFrame(catalog!, frame));
+  Future<List<Match>> recognizeFrame(
+    PreviewFrame frame, {
+    RecognitionModel engine = RecognitionModel.oracle,
+  }) async =>
+      _matches(await recognizeCameraFrame(catalog!, frame, engine), engine);
 
   Future<int> save(Edition card, {ScanReview? review}) async {
     final folder = state.folder;

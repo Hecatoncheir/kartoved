@@ -17,8 +17,9 @@ class _CardFactsState extends State<CardFacts> {
     widget.printingId,
   );
 
-  void _retry() =>
-      setState(() => reference = CardReferences.shared.get(widget.printingId));
+  void _retry() => setState(() {
+    reference = CardReferences.shared.get(widget.printingId);
+  });
 
   @override
   Widget build(BuildContext context) => FutureBuilder<CardReference>(

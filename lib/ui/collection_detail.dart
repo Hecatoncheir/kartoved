@@ -52,7 +52,10 @@ class _CollectionDetailState extends State<CollectionDetail> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Не удалось сохранить изменение')),
+          const SnackBar(
+            duration: noticeDuration,
+            content: Text('Не удалось сохранить изменение'),
+          ),
         );
       }
     } finally {
@@ -67,7 +70,10 @@ class _CollectionDetailState extends State<CollectionDetail> {
     final messenger = ScaffoldMessenger.of(context);
     if (others.isEmpty) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Сначала создайте вторую коллекцию')),
+        const SnackBar(
+          duration: noticeDuration,
+          content: Text('Сначала создайте вторую коллекцию'),
+        ),
       );
       return;
     }
@@ -90,6 +96,8 @@ class _CollectionDetailState extends State<CollectionDetail> {
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
+        duration: noticeDuration,
+        persist: false,
         content: Text('В «${result.folder.name}» · ${result.quantity}'),
         action: SnackBarAction(
           label: 'Отменить',
@@ -100,6 +108,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
               if (messenger.mounted) {
                 messenger.showSnackBar(
                   const SnackBar(
+                    duration: noticeDuration,
                     content: Text('Не удалось отменить перемещение'),
                   ),
                 );

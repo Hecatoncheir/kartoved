@@ -4,11 +4,12 @@ ort.env.wasm.wasmPaths = new URL('./runtime/ort/', import.meta.url).href;
 ort.env.wasm.numThreads = 1;
 
 const models = new URL('./assets/assets/oracle/', import.meta.url);
-const open = (name) => ort.InferenceSession.create(new URL(`${name}.onnx`, models).href, {
+const mtgModels = new URL('./assets/assets/mtg_identification/', import.meta.url);
+const open = (name, directory = models) => ort.InferenceSession.create(new URL(`${name}.onnx`, directory).href, {
   executionProviders: ['wasm'],
 });
 
-let manifest, detector, embed, search;
+let manifest, detector, embed, search, mtg, pose;
 async function loadManifest() {
   const response = await fetch(new URL('catalog.json', models));
   if (!response.ok) throw new Error('Каталог распознавания недоступен');
@@ -27,6 +28,15 @@ function sceneImage(bitmap, side) {
   context.fillRect(0, 0, side, side);
   context.drawImage(bitmap, left, top, width, height);
   return {bytes: context.getImageData(0, 0, side, side).data, width, height, left, top};
+}
+
+async function readScene(blob, side) {
+  const bitmap = await createImageBitmap(blob);
+  try {
+    return sceneImage(bitmap, side);
+  } finally {
+    bitmap.close();
+  }
 }
 
 function* windows(side, width, height) {
@@ -91,23 +101,65 @@ async function identifyCard(scene, side, quad, config) {
     inputs.mask = new ort.Tensor('float32', new Float32Array(config.count).fill(1), [config.count]);
   }
   const index = await (search ??= open('search').catch((error) => { search = null; throw error; }));
-  const result = await index.run(inputs);
+  return hitsFrom(await index.run(inputs));
+}
+
+async function identifyMtgCard(scene, side, quad) {
+  const session = await (mtg ??= open('recognize', mtgModels).catch((error) => { mtg = null; throw error; }));
+  return hitsFrom(await session.run({
+    scene: new ort.Tensor('uint8', new Uint8Array(scene), [side, side, 4]),
+    quad: new ort.Tensor('float32', Float32Array.from(quad), [4, 2]),
+  }));
+}
+
+function hitsFrom(result) {
   return Array.from(result.scores.data, (score, i) => ({score, index: Number(result.indices.data[i])}))
     .filter((hit) => hit.score >= 0);
 }
 
-async function recognize(blob) {
+async function mtgRotations(scene, side, quad) {
+  const scores = new Map();
+  let bestScore = -1;
+  let bestQuad = quad;
+  for (let offset = 0; offset < quad.length; offset += 2) {
+    const rotated = [...quad.slice(offset), ...quad.slice(0, offset)];
+    const hits = await identifyMtgCard(scene, side, rotated);
+    if ((hits[0]?.score ?? -1) > bestScore) {
+      bestScore = hits[0].score;
+      bestQuad = rotated;
+    }
+    for (const {index, score} of hits) {
+      scores.set(index, Math.max(score, scores.get(index) ?? 0));
+    }
+  }
+  const mtgHits = Array.from(scores, ([index, score]) => ({index, score})).sort((a, b) => b.score - a.score);
+  return {mtgHits, quad: bestQuad};
+}
+
+function relativeCorners(quad, scene) {
+  return Array.from(quad, (value, i) => i % 2 === 0
+    ? (value - scene.left) / scene.width : (value - scene.top) / scene.height);
+}
+
+async function recognizeStandaloneMtg(blob) {
+  const side = 640;
+  const scene = await readScene(blob, side);
+  const session = await (pose ??= open('pose', mtgModels).catch((error) => { pose = null; throw error; }));
+  const {score, quad} = await session.run({
+    scene: new ort.Tensor('uint8', new Uint8Array(scene.bytes), [side, side, 4]),
+  });
+  if (score.data[0] < .50) return {hits: [], mtgHits: [], corners: []};
+  const rotated = await mtgRotations(scene.bytes, side, quad.data);
+  return {hits: [], mtgHits: rotated.mtgHits, corners: relativeCorners(rotated.quad, scene)};
+}
+
+async function recognize(blob, engine) {
+  if (engine === 'mtgStandalone') return recognizeStandaloneMtg(blob);
   const config = await (manifest ??= loadManifest().catch((error) => { manifest = null; throw error; }));
   const constants = config.constants;
   const side = constants.scene;
   const input = constants.det_input;
-  const bitmap = await createImageBitmap(blob);
-  let scene;
-  try {
-    scene = sceneImage(bitmap, side);
-  } finally {
-    bitmap.close();
-  }
+  const scene = await readScene(blob, side);
   const model = await (detector ??= open('detector').catch((error) => { detector = null; throw error; }));
   for (const region of windows(side, scene.width, scene.height)) {
     const coarse = await detect(model, scene.bytes, side, input, region);
@@ -116,18 +168,20 @@ async function recognize(blob) {
     if (fine.vote / constants.rotations < .5 || fine.short < side * .09) continue;
     const hits = await identifyCard(scene.bytes, side, fine.quad, config);
     if (!hits.length || hits[0].score < .60) continue;
-    const corners = fine.quad.map((value, i) => i % 2 === 0
-      ? (value - scene.left) / scene.width : (value - scene.top) / scene.height);
-    return {hits, corners};
+    const mtgHits = engine === 'mtgIdentification'
+      ? await identifyMtgCard(scene.bytes, side, fine.quad)
+      : [];
+    const corners = relativeCorners(fine.quad, scene);
+    return {hits, mtgHits, corners};
   }
-  return {hits: [], corners: []};
+  return {hits: [], mtgHits: [], corners: []};
 }
 
 let queue = Promise.resolve();
-self.onmessage = ({data: {id, blob}}) => {
+self.onmessage = ({data: {id, blob, engine}}) => {
   queue = queue.then(async () => {
     try {
-      self.postMessage({id, value: await recognize(blob)});
+      self.postMessage({id, value: await recognize(blob, engine)});
     } catch (error) {
       self.postMessage({id, error: error.message || String(error)});
     }

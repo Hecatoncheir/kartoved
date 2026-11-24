@@ -500,7 +500,14 @@ class CollectionPage extends StatelessWidget {
     if (!context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger.removeCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(content: Text(text), action: action));
+    messenger.showSnackBar(
+      SnackBar(
+        duration: noticeDuration,
+        persist: false,
+        content: Text(text),
+        action: action,
+      ),
+    );
   }
 
   Future<void> _remove(BuildContext context, Edition card) async {
@@ -575,7 +582,10 @@ class CollectionPage extends StatelessWidget {
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Не удалось сохранить CSV')),
+          const SnackBar(
+            duration: noticeDuration,
+            content: Text('Не удалось сохранить CSV'),
+          ),
         );
       }
     }
@@ -587,6 +597,7 @@ class CollectionPage extends StatelessWidget {
       final items = state.printings;
       final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
       return CollectionLight(
+        cardIds: items.map((item) => item.card.id),
         child: Scaffold(
           backgroundColor: Colors.transparent,
           extendBody: true,

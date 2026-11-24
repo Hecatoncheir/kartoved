@@ -25,7 +25,7 @@ function scanWorker() {
   return worker;
 }
 
-async function scan(file) {
+async function scan(file, engine) {
   const blob = await (await fetch(file)).blob();
   return new Promise((resolve, reject) => {
     const instance = scanWorker();
@@ -35,7 +35,7 @@ async function scan(file) {
       resolve: (data) => { clearTimeout(timer); resolve(data); },
       reject: (error) => { clearTimeout(timer); reject(error); },
     });
-    instance.postMessage({id, blob});
+    instance.postMessage({id, blob, engine});
   });
 }
 
@@ -171,6 +171,19 @@ function guide(value) {
   return guideVisible;
 }
 
+let currentModel = 'oracle';
+function scannerModel(value) {
+  if (value != null) currentModel = value;
+  try {
+    const key = `${localCache}:model`;
+    if (value == null) return localStorage.getItem(key) ?? currentModel;
+    localStorage.setItem(key, value);
+  } catch {
+    // Настройка остаётся доступной в текущей вкладке.
+  }
+  return currentModel;
+}
+
 function download(name, mime, data) {
   const url = URL.createObjectURL(new Blob([data], {type: mime}));
   const link = Object.assign(document.createElement('a'), {href: url, download: name});
@@ -234,7 +247,7 @@ async function reload() {
   }
 }
 
-globalThis.kartoved = {scan, crop, unmirror, readCardText, guide, chime, unlockSound, readCache, writeCache, unpack, download, pickBackup, reload};
+globalThis.kartoved = {scan, crop, unmirror, readCardText, guide, scannerModel, chime, unlockSound, readCache, writeCache, unpack, download, pickBackup, reload};
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register(new URL('sw.js', root), {updateViaCache: 'none'})

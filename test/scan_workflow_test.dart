@@ -1,10 +1,14 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kartoved/data/card_reference.dart';
 import 'package:kartoved/data/catalog.dart';
+import 'package:kartoved/data/recognition_result.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/ui/collections.dart';
 import 'package:kartoved/ui/picture.dart';
@@ -28,7 +32,13 @@ const ru = Edition(
   '59',
   'ru',
 );
-const bolt = Edition('bolt', 'Lightning Bolt', 'm11', '149', 'en');
+const bolt = Edition(
+  '0a6d4380-0000-4000-8000-000000000001',
+  'Lightning Bolt',
+  'm11',
+  '149',
+  'en',
+);
 
 class _Catalog extends Catalog {
   _Catalog()
@@ -56,13 +66,21 @@ class _ScannerModel extends AppModel {
   List<Match> matches = const [
     Match([en, ru]),
   ];
+  RecognitionModel? lastEngine;
+
   @override
-  Future<List<Match>> recognize(String file) async => matches;
+  Future<List<Match>> recognize(
+    String file, {
+    RecognitionModel engine = RecognitionModel.oracle,
+  }) async {
+    lastEngine = engine;
+    return matches;
+  }
 }
 
 void main() {
   testWidgets(
-    'Скан сохраняется сразу со звуком и фото даже при скрытой рамке',
+    'Скан сохраняется сразу, а сигнал ждёт изображение и текст Scryfall',
     (tester) async {
       tester.view.physicalSize = const Size(390, 620);
       tester.view.devicePixelRatio = 1;
@@ -94,6 +112,26 @@ void main() {
           .readAsBytesSync();
       File scanPhoto(Edition card) =>
           File(p.join(directory.path, 'pictures', '${card.id}.scan.jpg'));
+      File officialPhoto(Edition card) =>
+          File(p.join(directory.path, 'pictures', '${card.id}.jpg'));
+      void cacheReference(Edition card) {
+        final file = File(
+          p.join(directory.path, 'card-reference', '${card.id}.json'),
+        );
+        file.parent.createSync(recursive: true);
+        file.writeAsStringSync(
+          jsonEncode({
+            'card': {'name': card.name, 'oracle_text': 'Draw a card.'},
+            'rulings': [],
+          }),
+        );
+      }
+
+      cacheReference(en);
+      cacheReference(ru);
+      officialPhoto(ru).parent.createSync(recursive: true);
+      officialPhoto(ru).writeAsBytesSync(photo);
+      officialPhoto(bolt).writeAsBytesSync(photo);
       final image = (await tester.runAsync(() async {
         final codec = await ui.instantiateImageCodec(photo);
         try {
@@ -103,9 +141,14 @@ void main() {
         }
       }))!;
       // Flutter Tester в Windows удерживает JPEG, декодированный из файла.
-      for (final card in [en, ru, bolt]) {
+      for (final file in [
+        for (final card in [en, ru, bolt]) ...[
+          scanPhoto(card),
+          officialPhoto(card),
+        ],
+      ]) {
         PaintingBinding.instance.imageCache.putIfAbsent(
-          FileImage(scanPhoto(card)),
+          FileImage(file),
           () => OneFrameImageStreamCompleter(
             Future.value(ImageInfo(image: image.clone())),
           ),
@@ -115,6 +158,7 @@ void main() {
       var sounds = 0;
       final targetSounds = <bool>[];
       var guide = true;
+      var savedEngine = RecognitionModel.oracle.name;
       messenger.setMockMethodCallHandler(paths, (_) async => directory.path);
       messenger.setMockMethodCallHandler(picker, (_) async => 'opt.jpg');
       messenger.setMockMethodCallHandler(android, (c) async {
@@ -126,6 +170,9 @@ void main() {
           case 'scannerGuide':
             guide = (c.arguments as bool?) ?? guide;
             return guide;
+          case 'scannerModel':
+            savedEngine = (c.arguments as String?) ?? savedEngine;
+            return savedEngine;
           case 'chime':
             sounds++;
             targetSounds.add(c.arguments == true);
@@ -192,9 +239,7 @@ void main() {
       expect(find.byType(ScanFrame), findsNothing);
       await tap(find.text('Из фото'));
       await waitFor(
-        () =>
-            find.text('В коллекциях: 4 · Opt').evaluate().isNotEmpty &&
-            sounds == 1,
+        () => find.text('В коллекциях: 4 · Opt').evaluate().isNotEmpty,
       );
       expect(model.state.recent.first.card.language, 'und');
       expect(model.state.reviews, isEmpty);
@@ -210,6 +255,7 @@ void main() {
       );
       await waitFor(() => thumbnail.evaluate().isNotEmpty);
       expect(scanPhoto(en).readAsBytesSync(), photo);
+      expect(sounds, 0);
       await tap(find.byTooltip('Меню сканера'));
       await tap(find.text('Показать рамку и стекло'));
       expect(tester.widget<ScanFrame>(frame).window, initialWindow);
@@ -238,8 +284,15 @@ void main() {
       expect(find.text('Остановить'), findsOneWidget);
       await tap(find.text('Из фото'));
       await waitFor(
-        () => model.state.recent.first.card.language == 'ru' && sounds == 2,
+        () => model.state.recent.first.card.language == 'ru' && sounds == 1,
       );
+      final official = find.byWidgetPredicate(
+        (widget) =>
+            widget is Image &&
+            widget.image is FileImage &&
+            (widget.image as FileImage).file.path == officialPhoto(ru).path,
+      );
+      await waitFor(() => official.evaluate().isNotEmpty);
       await tap(find.byTooltip('Отменить последнее добавление'));
       await waitFor(() => model.state.recent.length == 2);
       await waitFor(() => model.state.owned('Opt') == 4);
@@ -248,8 +301,24 @@ void main() {
         Match([bolt]),
       ];
       await tap(find.text('Из фото'));
+      await waitFor(() => model.state.owned('Lightning Bolt') == 1);
+      var noDescription = false;
+      unawaited(
+        CardReferences.shared
+            .get(bolt.id)
+            .then<void>(
+              (_) => fail('Текст карты отсутствует в тестовом кэше'),
+              onError: (Object _) {
+                noDescription = true;
+              },
+            ),
+      );
+      await waitFor(() => noDescription);
+      expect(sounds, 1);
+      cacheReference(bolt);
+      await tap(find.text('Из фото'));
       await waitFor(
-        () => model.state.owned('Lightning Bolt') == 1 && sounds == 3,
+        () => model.state.owned('Lightning Bolt') == 2 && sounds == 2,
       );
 
       await openTargets();
@@ -267,11 +336,12 @@ void main() {
       model.matches = const [
         Match([en]),
       ];
+      officialPhoto(en).writeAsBytesSync(photo);
       await tap(find.text('Из фото'));
-      await waitFor(() => model.state.owned('Opt') == 5 && sounds == 4);
+      await waitFor(() => model.state.owned('Opt') == 5 && sounds == 3);
       expect(model.state.reviews, isEmpty);
       expect(model.state.recent.first.card.language, 'en');
-      expect(targetSounds, [false, true, true, false]);
+      expect(targetSounds, [true, true, false]);
       await openTargets();
       await tap(find.byTooltip('Убрать из поиска: Lightning Bolt'));
       await tap(find.byTooltip('Back'));
@@ -282,6 +352,28 @@ void main() {
       await tap(find.byTooltip('Меню сканера'));
       await tap(find.text('Настройки стопки'));
       expect(find.text('Авто'), findsNWidgets(2));
+      expect(model.lastEngine, RecognitionModel.oracle);
+      await tap(find.text('Применить'));
+      await tap(find.byTooltip('Меню сканера'));
+      await tap(find.text('Модель распознавания'));
+      await tap(find.text(RecognitionModel.mtgIdentification.label));
+      expect(savedEngine, RecognitionModel.mtgIdentification.name);
+      await tap(find.byTooltip('К коллекции'));
+      await tap(find.text('Сканировать карту'));
+      await waitFor(() => find.text('MTG + Oracle').evaluate().isNotEmpty);
+      await tap(find.text('Из фото'));
+      await waitFor(() => model.state.owned('Opt') == 6 && sounds == 4);
+      expect(model.lastEngine, RecognitionModel.mtgIdentification);
+      await tap(find.byTooltip('Меню сканера'));
+      await tap(find.text('Модель распознавания'));
+      await tap(find.text(RecognitionModel.mtgStandalone.label));
+      expect(savedEngine, RecognitionModel.mtgStandalone.name);
+      await tap(find.byTooltip('К коллекции'));
+      await tap(find.text('Сканировать карту'));
+      await waitFor(() => find.text('MTG без Oracle').evaluate().isNotEmpty);
+      await tap(find.text('Из фото'));
+      await waitFor(() => model.state.owned('Opt') == 7 && sounds == 5);
+      expect(model.lastEngine, RecognitionModel.mtgStandalone);
       await tester.pumpWidget(const SizedBox.shrink());
       PaintingBinding.instance.imageCache
         ..clear()

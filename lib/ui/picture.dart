@@ -17,10 +17,14 @@ class CardPicture extends StatefulWidget {
 }
 
 class _CardPictureState extends State<CardPicture> {
-  late Future<ImageProvider> file = Pictures.shared.get(widget.card.id);
+  late Future<ImageProvider> file = Pictures.shared.official(widget.card.id);
+  late Future<ImageProvider?> cached = Pictures.shared.cachedThumbnail(
+    widget.card.id,
+  );
   late Future<ImageProvider>? large = _large();
-  Future<ImageProvider>? _large() =>
-      widget.large ? Pictures.shared.get(widget.card.id, large: true) : null;
+  Future<ImageProvider>? _large() => widget.large
+      ? Pictures.shared.official(widget.card.id, large: true)
+      : null;
 
   late final StreamSubscription<String> _photos;
 
@@ -30,8 +34,7 @@ class _CardPictureState extends State<CardPicture> {
     _photos = Pictures.shared.photos.listen((id) {
       if (id != widget.card.id) return;
       setState(() {
-        file = Pictures.shared.get(id);
-        large = _large();
+        cached = Pictures.shared.cachedThumbnail(id);
       });
     });
   }
@@ -46,7 +49,8 @@ class _CardPictureState extends State<CardPicture> {
   void didUpdateWidget(CardPicture old) {
     super.didUpdateWidget(old);
     if (old.card.id != widget.card.id) {
-      file = Pictures.shared.get(widget.card.id);
+      file = Pictures.shared.official(widget.card.id);
+      cached = Pictures.shared.cachedThumbnail(widget.card.id);
     }
     if (old.large != widget.large || old.card.id != widget.card.id) {
       large = _large();
@@ -90,10 +94,23 @@ class _CardPictureState extends State<CardPicture> {
         return Image(
           image: s.requireData,
           fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => _placeholder(),
+          errorBuilder: (_, _, _) => _cachedThumbnail(),
         );
       }
-      return _placeholder();
+      return _cachedThumbnail();
+    },
+  );
+
+  Widget _cachedThumbnail() => FutureBuilder<ImageProvider?>(
+    key: ValueKey(widget.card.id),
+    future: cached,
+    builder: (_, snapshot) => switch (snapshot.data) {
+      final image? => Image(
+        image: image,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => _placeholder(),
+      ),
+      null => _placeholder(),
     },
   );
 

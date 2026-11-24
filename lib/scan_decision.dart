@@ -1,6 +1,7 @@
 import 'data/catalog.dart';
 import 'data/language.dart';
 import 'data/review.dart';
+import 'data/recognition_result.dart';
 import 'model.dart';
 
 class BatchSettings {
@@ -14,8 +15,9 @@ class BatchSettings {
       (setCode == null || card.set == setCode);
 }
 
-List<Match> closeMatches(List<Match> matches) =>
-    matches.where((m) => matches.first.score - m.score < .05).toList();
+List<Match> closeMatches(List<Match> matches) => matches
+    .where((m) => matches.first.score - m.score < nearMatchWindow)
+    .toList();
 
 typedef ScanDecision = ({Edition card, ScanReview? review});
 

@@ -29,6 +29,10 @@ class CardReference {
       setName = _text(card['set_name']),
       rarity = _text(card['rarity']),
       artist = _text(card['artist']),
+      imageAvailable = switch (card['image_status']) {
+        'missing' || 'placeholder' => false,
+        _ => true,
+      },
       manaValue = card['cmc'] as num?,
       legalities = Map<String, String>.from(card['legalities'] as Map? ?? {}),
       rulings = rulings
@@ -43,6 +47,7 @@ class CardReference {
 
   final List<CardFaceText> faces;
   final String? setName, rarity, artist;
+  final bool imageAvailable;
   final num? manaValue;
   final Map<String, String> legalities;
   final List<CardRuling>? rulings;
@@ -83,7 +88,9 @@ class CardReferences {
     if (!_id.hasMatch(id)) throw const FormatException('Некорректное издание');
     return _pending.putIfAbsent(
       id,
-      () => _load(id).whenComplete(() => _pending.remove(id)),
+      () => _load(id).whenComplete(() {
+        _pending.remove(id);
+      }),
     );
   }
 
