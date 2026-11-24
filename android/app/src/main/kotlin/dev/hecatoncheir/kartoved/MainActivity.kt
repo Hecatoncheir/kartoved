@@ -28,7 +28,7 @@ class MainActivity : FlutterActivity() {
                         reply.success(visible ?: settings.getBoolean("guide", true))
                     }
                     "chime" -> {
-                        chime?.play()
+                        chime?.play(call.arguments == true)
                         reply.success(null)
                     }
                     "saveCsv" -> documents.saveCsv(call.argument("name"), call.argument("csv"), reply)

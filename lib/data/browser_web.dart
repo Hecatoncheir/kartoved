@@ -28,7 +28,7 @@ external JSPromise<JSString?> _pickBackup();
 @JS('kartoved.unlockSound')
 external void unlockBrowserSound();
 @JS('kartoved.chime')
-external JSPromise<JSAny?> _chime();
+external JSPromise<JSAny?> _chime(bool targetFound);
 @JS('URL.revokeObjectURL')
 external void releaseBrowserPhoto(String file);
 @JS('kartoved.reload')
@@ -79,7 +79,8 @@ class _BrowserCatalogStore extends CatalogStore {
 }
 
 Future<bool> browserGuide(bool? visible) async => _guide(visible?.toJS);
-Future<void> browserChime() async => await _chime().toDart;
+Future<void> browserChime(bool targetFound) async =>
+    await _chime(targetFound).toDart;
 
 Future<Uint8List> browserCrop(String file, List<double> corners) async =>
     (await _crop(file, corners.map((v) => v.toJS).toList().toJS).toDart).toDart;

@@ -4,7 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../collection_rows.dart';
 import '../data/catalog.dart';
 import '../model.dart';
-import 'catalog_search.dart';
+import 'name_search.dart';
 import 'collection_detail.dart';
 import 'collection_stack.dart';
 import 'style.dart';

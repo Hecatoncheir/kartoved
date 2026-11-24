@@ -196,7 +196,8 @@ function pickBackup() {
   });
 }
 
-let audio, sound;
+let audio;
+const sounds = new Map();
 function unlockSound() {
   try {
     audio ??= new AudioContext();
@@ -206,18 +207,21 @@ function unlockSound() {
   }
 }
 
-async function chime() {
+async function chime(targetFound) {
   if (audio?.state !== 'running') return;
+  const path = targetFound ? 'runtime/card_found.wav' : 'runtime/card_added.wav';
   try {
-    sound ??= fetch(new URL('runtime/card_added.wav', root))
-      .then((response) => response.arrayBuffer())
-      .then((bytes) => audio.decodeAudioData(bytes));
+    if (!sounds.has(path)) {
+      sounds.set(path, fetch(new URL(path, root))
+        .then((response) => response.arrayBuffer())
+        .then((bytes) => audio.decodeAudioData(bytes)));
+    }
     const source = audio.createBufferSource();
-    source.buffer = await sound;
+    source.buffer = await sounds.get(path);
     source.connect(audio.destination);
     source.start();
   } catch {
-    sound = null;
+    sounds.delete(path);
   }
 }
 

@@ -54,6 +54,7 @@ typedef ScanSession = ({
   BatchSettings batch,
   int? lastScan,
   bool showGuide,
+  String? target,
 });
 
 class ScanCubit extends Cubit<ScanSession> {
@@ -63,6 +64,7 @@ class ScanCubit extends Cubit<ScanSession> {
         batch: const BatchSettings(),
         lastScan: null,
         showGuide: true,
+        target: null,
       ));
   final gate = ScanGate();
   bool _force = false;
@@ -76,6 +78,7 @@ class ScanCubit extends Cubit<ScanSession> {
       batch: state.batch,
       lastScan: state.lastScan,
       showGuide: state.showGuide,
+      target: state.target,
     ));
   }
 
@@ -86,6 +89,7 @@ class ScanCubit extends Cubit<ScanSession> {
       batch: value,
       lastScan: state.lastScan,
       showGuide: state.showGuide,
+      target: state.target,
     ));
   }
 
@@ -94,6 +98,15 @@ class ScanCubit extends Cubit<ScanSession> {
     batch: state.batch,
     lastScan: state.lastScan,
     showGuide: visible,
+    target: state.target,
+  ));
+
+  void setTarget(String? name) => emit((
+    mode: state.mode,
+    batch: state.batch,
+    lastScan: state.lastScan,
+    showGuide: state.showGuide,
+    target: name,
   ));
 
   void recorded(int seq, Edition card, List<Match> matches) {
@@ -106,6 +119,7 @@ class ScanCubit extends Cubit<ScanSession> {
       batch: state.batch,
       lastScan: seq,
       showGuide: state.showGuide,
+      target: state.target,
     ));
   }
 
@@ -116,6 +130,7 @@ class ScanCubit extends Cubit<ScanSession> {
       batch: state.batch,
       lastScan: null,
       showGuide: state.showGuide,
+      target: state.target,
     ));
   }
 

@@ -41,6 +41,8 @@ class _Catalog extends Catalog {
   Future<List<String>> languages() async => ['en', 'ru'];
   @override
   Future<List<String>> setCodes() async => ['eld', 'dom'];
+  @override
+  Future<List<String>> searchNames(String input, {int limit = 61}) async => [];
 }
 
 class _ScannerModel extends AppModel {
@@ -110,6 +112,7 @@ void main() {
       }
       addTearDown(image.dispose);
       var sounds = 0;
+      final targetSounds = <bool>[];
       var guide = true;
       messenger.setMockMethodCallHandler(paths, (_) async => directory.path);
       messenger.setMockMethodCallHandler(picker, (_) async => 'opt.jpg');
@@ -124,6 +127,7 @@ void main() {
             return guide;
           case 'chime':
             sounds++;
+            targetSounds.add(c.arguments == true);
         }
         return null;
       });
@@ -159,6 +163,15 @@ void main() {
         await tester.tap(finder.hitTestable().first);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 350));
+      }
+
+      Future<void> pickTarget(String translation, String name) async {
+        await tap(find.byTooltip('Меню сканера'));
+        await tap(find.text('Искомая карта'));
+        await tester.enterText(find.byType(TextField), translation);
+        await tap(find.widgetWithText(ListTile, name));
+        expect(find.textContaining('Ищу · $name'), findsOneWidget);
+        expect(find.text('Остановить'), findsOneWidget);
       }
 
       await tap(find.text('Сканировать карту'));
@@ -214,6 +227,7 @@ void main() {
       await tap(find.text('ELD'));
       await tap(find.text('Применить'));
       expect(find.text('ELD · RU'), findsOneWidget);
+      await pickTarget('選択', 'Opt');
       await tap(find.text('Из фото'));
       await waitFor(
         () => model.state.recent.first.card.language == 'ru' && sounds == 2,
@@ -222,6 +236,7 @@ void main() {
       await waitFor(() => model.state.recent.length == 2);
       await waitFor(() => model.state.owned('Opt') == 4);
       expect(model.state.reviews, isEmpty);
+      await pickTarget('foudre', 'Lightning Bolt');
       model.matches = const [
         Match([en]),
       ];
@@ -229,6 +244,11 @@ void main() {
       await waitFor(() => model.state.owned('Opt') == 5 && sounds == 3);
       expect(model.state.reviews, isEmpty);
       expect(model.state.recent.first.card.language, 'en');
+      expect(targetSounds, [false, true, false]);
+      await tap(find.byTooltip('Меню сканера'));
+      await tap(find.text('Искомая карта'));
+      await tap(find.text('Сбросить'));
+      expect(find.textContaining('Ищу ·'), findsNothing);
       await tap(find.byTooltip('К коллекции'));
       await tap(find.text('Сканировать карту'));
       await tap(find.byTooltip('Меню сканера'));

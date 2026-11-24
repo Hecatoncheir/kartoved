@@ -24,6 +24,7 @@ import 'scan_frame.dart';
 import 'scan_reviews.dart';
 import 'sheets.dart';
 import 'scan_strip.dart';
+import 'scan_target.dart';
 import 'style.dart';
 
 class Scanner extends StatefulWidget {
@@ -281,7 +282,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       final seq = await library.save(card);
       if (!mounted) return;
       scan.recorded(seq, card, matches);
-      await AndroidActions.chime();
+      await AndroidActions.chime(targetFound: scan.state.target == card.name);
     } finally {
       if (mounted) setState(() => writing = false);
     }
@@ -407,6 +408,22 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     if (batch != null && mounted) scan.configure(batch);
   });
 
+  Future<void> _target() {
+    unlockBrowserSound();
+    return _paused(() async {
+      final catalog = library.catalog;
+      if (catalog == null) return;
+      final name = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder: (_) => ScanTargetPage(catalog, scan.state.target),
+        ),
+      );
+      if (!mounted || name == null) return;
+      scan.setTarget(name.isEmpty ? null : name);
+      if (name.isNotEmpty && scan.state.mode == ScanMode.manual) _mode();
+    });
+  }
+
   Future<void> _undo(int seq) => _paused(() async {
     await library.discardScan(seq);
     if (mounted) scan.undone();
@@ -446,9 +463,14 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                 fontSize: 21,
               ),
             ),
-            if (scan.state.batch.active)
+            if (scan.state.batch.active || scan.state.target != null)
               Text(
-                scan.state.batch.label,
+                [
+                  if (scan.state.target case final name?) 'Ищу · $name',
+                  if (scan.state.batch.active) scan.state.batch.label,
+                ].join('  ·  '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: butter,
                   fontSize: 13,
@@ -468,6 +490,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
           ),
           onSelected: (action) {
             switch (action) {
+              case 'target':
+                _target();
               case 'batch':
                 _settings();
               case 'guide':
@@ -477,6 +501,11 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
             }
           },
           itemBuilder: (_) => [
+            PopupMenuItem(
+              value: 'target',
+              enabled: library.catalog != null,
+              child: const Text('Искомая карта'),
+            ),
             PopupMenuItem(
               value: 'guide',
               child: Text(

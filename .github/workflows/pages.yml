@@ -8,6 +8,7 @@ on:
       - 'assets/**'
       - 'android/app/src/main/assets/tessdata/**'
       - 'android/app/src/main/res/raw/card_added.wav'
+      - 'android/app/src/main/res/raw/card_found.wav'
       - 'android/app/src/main/res/mipmap-mdpi/ic_launcher.png'
       - 'lib/**'
       - 'pubspec.*'

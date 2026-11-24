@@ -10,10 +10,10 @@ import 'browser.dart';
 
 class AndroidActions {
   static const _channel = MethodChannel('kartoved/android');
-  static Future<void> chime() async {
-    if (kIsWeb) return browserChime();
+  static Future<void> chime({bool targetFound = false}) async {
+    if (kIsWeb) return browserChime(targetFound);
     try {
-      await _channel.invokeMethod<void>('chime');
+      await _channel.invokeMethod<void>('chime', targetFound);
     } on PlatformException {
       /* Звук может быть отключён. */
     } on MissingPluginException {
