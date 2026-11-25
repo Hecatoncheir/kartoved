@@ -33,8 +33,7 @@ async function upload(action, file) {
   await (await chooser).setFiles(file);
 }
 function filter(count) {
-  const name = 'На проверке · ' + count;
-  return button(name).or(page.getByRole('checkbox', {name, exact: true}));
+  return page.getByRole('checkbox', {name: 'На проверке · ' + count, exact: true});
 }
 async function screenshot(name) {
   if (process.env.KARTOVED_QA_DIR) await page.screenshot({path: resolve(process.env.KARTOVED_QA_DIR, name + '.png')});
@@ -109,7 +108,17 @@ try {
   await button(/Bouncer's Beatdown.*×1/).waitFor();
   await screenshot('reloaded');
   await album.click();
-  await filter(1).click();
+  const reviewFilter = filter(1);
+  const selected = page.getByRole('checkbox', {name: 'На проверке · 1', exact: true, checked: true});
+  await reviewFilter.click();
+  // Во время перехода Flutter уже показывает фильтр, но ещё не принимает нажатия.
+  try {
+    await selected.waitFor({timeout: 1500});
+  } catch (error) {
+    if (error.name !== 'TimeoutError') throw error;
+    if (!await reviewFilter.isChecked()) await reviewFilter.click();
+    await selected.waitFor();
+  }
   await button('Переснять ' + second.name).waitFor();
   await button('Назад').click();
   await button('Резервная копия').click();
