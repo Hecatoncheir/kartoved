@@ -2,8 +2,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 
 import 'browser.dart';
+import 'android.dart';
 import 'catalog.dart';
 import 'frame.dart';
+import 'tray.dart';
 
 class CardLanguage {
   static const _channel = MethodChannel('kartoved/android');
@@ -68,12 +70,16 @@ class CardLanguage {
   static ({String set, String language})? _footer(
     String text,
     List<Edition> options,
-    Set<String> languages,
-  ) {
+    Set<String> languages, {
+    bool fromTray = false,
+  }) {
     // В современных выпусках обозначение языка следует сразу за кодом набора.
     for (final set in options.map((e) => e.set.toUpperCase()).toSet()) {
       final pattern = RegExp(
-        r'\b' + RegExp.escape(set) + r'[\s•·.\-|:]{1,6}([A-Z]{2,3})\b',
+        r'\b' +
+            RegExp.escape(set) +
+            (fromTray ? r'[\s•·.+\-|:]' : r'[\s•·.\-|:]') +
+            r'{1,6}([A-Z]{2,3})\b',
         caseSensitive: false,
       );
       const aliases = {
@@ -142,10 +148,7 @@ class CardLanguage {
       options,
       options.map((e) => e.language).toSet(),
     );
-    final numbers = RegExp(
-      r'\b([0-9]{1,4}[a-z]?)\s*/\s*[0-9]{3,4}\b|\b[curmspl]\s+([0-9]{3,4}[a-z]?)\b',
-      caseSensitive: false,
-    ).allMatches(text).map((m) => _number(m[1] ?? m[2]!)).toSet();
+    final numbers = _numbers(text);
     final matchingLanguage = options
         .where((e) => lang == null || e.language == lang)
         .toList();
@@ -156,6 +159,44 @@ class CardLanguage {
         .toList();
     return byNumber.isEmpty ? editions : byNumber;
   }
+
+  static List<Edition> trayCandidates(String text, List<Edition> options) {
+    final footer = _footer(
+      text,
+      options,
+      options.map((e) => e.language).toSet(),
+      fromTray: true,
+    );
+    final numbers = _numbers(text);
+    if (footer == null || numbers.length != 1) return [];
+    return [
+      for (final option in options)
+        if (option.set == footer.set &&
+            option.language == footer.language &&
+            _number(option.number) == numbers.single)
+          option,
+    ];
+  }
+
+  static Future<List<Edition>> readTrayOptions(
+    TrayPhoto photo,
+    List<Edition> options,
+  ) async {
+    if (options.length == 1) return options;
+    final quick = trayCandidates(photo.footer, options);
+    if (quick.isNotEmpty) return quick;
+    try {
+      final result = await AndroidActions.readTrayText(photo.bytes);
+      return candidates(result.text, result.language, options);
+    } catch (_) {
+      return options;
+    }
+  }
+
+  static Set<String> _numbers(String text) => RegExp(
+    r'\b([0-9]{1,4}[a-z]?)\s*/\s*[0-9]{3,4}\b|\b[curmspl]\s+([0-9]{3,4}[a-z]?)\b',
+    caseSensitive: false,
+  ).allMatches(text).map((m) => _number(m[1] ?? m[2]!)).toSet();
 
   static String _number(String value) =>
       value.toLowerCase().replaceFirst(RegExp(r'^0+(?=\d)'), '');

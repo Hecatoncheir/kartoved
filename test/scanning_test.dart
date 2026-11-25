@@ -7,6 +7,7 @@ import 'package:kartoved/data/language.dart';
 import 'package:kartoved/data/moxfield.dart';
 import 'package:kartoved/data/pictures.dart';
 import 'package:kartoved/data/recognition_result.dart';
+import 'package:kartoved/data/tray.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/scan_cubit.dart';
 import 'package:kartoved/scan_decision.dart';
@@ -104,6 +105,36 @@ void main() {
       expect(same.art, greaterThanOrEqualTo(12));
       expect(different.art, 0);
     }
+  });
+
+  test('Лоток запоминает ровную карту и отклоняет сильный наклон', () {
+    final area = TrayArea.calibrate([.2, .15, .8, .17, .79, .85, .21, .84]);
+    expect(area?.bounds, [.2, .15, .8, .85]);
+    expect(TrayArea.calibrate([.2, .15, .8, .28, .63, .85, .26, .84]), isNull);
+    expect(TrayArea.calibrate([]), isNull);
+  });
+
+  test('Лоток принимает нижнюю строку, совпавшую с каталогом', () {
+    expect(CardLanguage.trayCandidates('135/281 U\nSNC + RU', [en, ru]), [ru]);
+    expect(
+      CardLanguage.trayCandidates('138/281 U\nSNC + RU', [en, ru]),
+      isEmpty,
+    );
+    expect(CardLanguage.trayCandidates('SNC + RU', [en, ru]), isEmpty);
+  });
+
+  test('Лоток использует порог Oracle и подтверждает карту на двух кадрах', () {
+    final scanner = ScanCubit()
+      ..setModel(RecognitionModel.mtgStandalone)
+      ..setMode(ScanMode.tray);
+    addTearDown(scanner.close);
+    const uncertain = [
+      Match([en], score: .43),
+    ];
+    expect(scanner.evaluate(uncertain), isNull);
+    expect(scanner.evaluate(uncertain), isNull);
+    expect(scanner.evaluate(a), isNull);
+    expect(scanner.evaluate(a), en);
   });
 
   test(

@@ -53,6 +53,61 @@ class CardText(private val context: Context) {
         }
     }
 
+    fun warmTray(reply: MethodChannel.Result) = process(reply) {
+        if (engine == null) engine = open()
+        null
+    }
+
+    fun trayPhoto(call: MethodCall, reply: MethodChannel.Result) = process(reply) {
+        val bounds = requireNotNull(call.argument<List<Double>>("tray"))
+        val source = bitmap(call)
+        val card = try {
+            val rect = Rect(
+                (bounds[0] * source.width).toInt(), (bounds[1] * source.height).toInt(),
+                (bounds[2] * source.width).toInt(), (bounds[3] * source.height).toInt(),
+            )
+            Bitmap.createBitmap(600, 840, Bitmap.Config.ARGB_8888).also {
+                Canvas(it).drawBitmap(source, rect, Rect(0, 0, 600, 840), Paint(Paint.FILTER_BITMAP_FLAG))
+            }
+        } finally {
+            source.recycle()
+        }
+        try {
+            val footer = if (call.argument<Boolean>("readFooter") == true) {
+                runCatching { trayFooter(card) }.getOrDefault("")
+            } else ""
+            ByteArrayOutputStream().use { out ->
+                if (card.compress(Bitmap.CompressFormat.JPEG, 88, out)) {
+                    mapOf("bytes" to out.toByteArray(), "footer" to footer)
+                } else null
+            }
+        } finally {
+            card.recycle()
+        }
+    }
+
+    private fun trayFooter(card: Bitmap): String {
+        val api = engine ?: open().also { engine = it }
+        val original = api.pageSegMode
+        val footer = Bitmap.createBitmap(card, 0, 730, 440, 110)
+        try {
+            api.pageSegMode = TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK
+            api.setImage(footer)
+            return api.getUTF8Text().orEmpty()
+        } finally {
+            api.clear()
+            api.pageSegMode = original
+            footer.recycle()
+        }
+    }
+
+    fun readTrayText(call: MethodCall, reply: MethodChannel.Result) = process(reply) {
+        val bytes = requireNotNull(call.arguments as? ByteArray)
+        val card = requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
+        maskArtwork(card)
+        recognize(card)
+    }
+
     private fun recognize(bitmap: Bitmap): Map<String, String> {
         val api = engine ?: open().also { engine = it }
         try {
@@ -68,12 +123,16 @@ class CardText(private val context: Context) {
 
     private fun textRegions(source: Bitmap, points: List<Double>?): Bitmap {
         val page = straighten(source, points) ?: return source
+        source.recycle()
+        maskArtwork(page)
+        return page
+    }
+
+    private fun maskArtwork(page: Bitmap) {
         val width = page.width.toFloat()
         val height = page.height.toFloat()
         // Иллюстрация между названием и текстом правил даёт ложные буквы.
         Canvas(page).drawRect(0f, height * .15f, width, height * .53f, Paint().apply { color = Color.WHITE })
-        source.recycle()
-        return page
     }
 
     private fun straighten(source: Bitmap, points: List<Double>?): Bitmap? {

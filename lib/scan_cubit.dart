@@ -52,7 +52,13 @@ class ScanGate {
               previous.id.replaceFirst(RegExp(r'-1$'), ''));
 }
 
-enum ScanMode { manual, automatic }
+enum ScanMode {
+  manual,
+  automatic,
+  tray;
+
+  bool get isAutomatic => this != manual;
+}
 
 typedef ScanSession = ({
   ScanMode mode,
@@ -75,13 +81,14 @@ class ScanCubit extends Cubit<ScanSession> {
       ));
   final gate = ScanGate();
   bool _force = false;
-  void toggle() {
-    _force = false;
-    gate.clearCandidate();
+  void toggle() =>
+      setMode(state.mode.isAutomatic ? ScanMode.manual : ScanMode.automatic);
+
+  void setMode(ScanMode mode) {
+    if (state.mode == mode) return;
+    cancelFrame();
     emit((
-      mode: state.mode == ScanMode.manual
-          ? ScanMode.automatic
-          : ScanMode.manual,
+      mode: mode,
       batch: state.batch,
       lastScan: state.lastScan,
       showGuide: state.showGuide,
@@ -182,7 +189,9 @@ class ScanCubit extends Cubit<ScanSession> {
     return gate.accept(
       matches,
       manual: manual,
-      minimumScore: state.model.minimumScore,
+      minimumScore: state.mode == ScanMode.tray
+          ? RecognitionModel.oracle.minimumScore
+          : state.model.minimumScore,
     );
   }
 }

@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'frame.dart';
 import 'browser.dart';
 import 'recognition_result.dart';
+import 'tray.dart';
 
 class AndroidActions {
   static const _channel = MethodChannel('kartoved/android');
@@ -50,6 +51,38 @@ class AndroidActions {
           'scanPhoto',
           scanArguments(file: file, frame: frame, corners: corners),
         );
+
+  static Future<void> warmTray() =>
+      kIsWeb ? browserWarmTray() : _channel.invokeMethod<void>('warmTray');
+
+  static Future<TrayPhoto?> trayPhoto({
+    String? file,
+    PreviewFrame? frame,
+    required TrayArea area,
+    required bool readFooter,
+  }) async {
+    if (kIsWeb) return browserTrayPhoto(file!, area, readFooter);
+    final photo = await _channel.invokeMapMethod<String, Object?>('trayPhoto', {
+      ...scanArguments(file: file, frame: frame, corners: const []),
+      'tray': area.bounds,
+      'readFooter': readFooter,
+    });
+    final bytes = photo?['bytes'];
+    return bytes is Uint8List
+        ? (bytes: bytes, footer: photo?['footer'] as String? ?? '')
+        : null;
+  }
+
+  static Future<({String text, String? language})> readTrayText(
+    Uint8List bytes,
+  ) async {
+    if (kIsWeb) return (text: await browserReadTrayText(bytes), language: null);
+    final result = await _channel.invokeMapMethod<String, String>(
+      'readTrayText',
+      bytes,
+    );
+    return (text: result?['text'] ?? '', language: result?['language']);
+  }
 
   static Future<bool?> scannerGuide([bool? visible]) async {
     if (kIsWeb) return browserGuide(visible);

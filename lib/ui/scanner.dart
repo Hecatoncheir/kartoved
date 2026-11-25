@@ -17,6 +17,7 @@ import '../data/frame.dart';
 import '../data/language.dart';
 import '../data/pictures.dart';
 import '../data/recognition_result.dart';
+import '../data/tray.dart';
 import '../model.dart';
 import '../scan_cubit.dart';
 import '../scan_decision.dart';
@@ -45,6 +46,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   String? error;
   bool reading = false, modal = false, torch = false, writing = false;
   bool _modelSelected = false;
+  bool _warmingTray = false;
+  TrayArea? _trayArea;
   int epoch = 0, nextFrame = 0, frameSession = 0;
   Future<void> cameraQueue = Future.value();
   AppModel get library => context.read<AppModel>();
@@ -85,6 +88,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   void openCamera(bool open) {
     final token = ++epoch;
     frameSession++;
+    _trayArea = null;
     scan.cancelFrame();
     cameraQueue = cameraQueue.then((_) => _open(open, token)).catchError((
       Object e,
@@ -145,7 +149,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   Future<void> _syncStream() async {
     final c = camera;
     if (c == null) return;
-    final auto = scan.state.mode == ScanMode.automatic;
+    final auto = scan.state.mode.isAutomatic;
     if (kIsWeb) {
       _webFrames?.cancel();
       if (auto) {
@@ -163,15 +167,41 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     }
   }
 
-  void _mode() {
+  void _mode() => _setMode(
+    scan.state.mode.isAutomatic ? ScanMode.manual : ScanMode.automatic,
+  );
+
+  void _toggleTray() => _setMode(
+    scan.state.mode == ScanMode.tray ? ScanMode.manual : ScanMode.tray,
+  );
+
+  void _setMode(ScanMode mode) {
     unlockBrowserSound();
     frameSession++;
-    scan.toggle();
+    scan.setMode(mode);
+    if (mode == ScanMode.tray && !_warmingTray) unawaited(_warmTray());
     cameraQueue = cameraQueue.then((_) => _syncStream()).catchError((Object e) {
       if (!mounted) return;
-      if (scan.state.mode == ScanMode.automatic) scan.toggle();
+      scan.setMode(ScanMode.manual);
       message('Не удалось включить поток камеры');
     });
+  }
+
+  Future<void> _warmTray() async {
+    setState(() => _warmingTray = true);
+    try {
+      await AndroidActions.warmTray().timeout(const Duration(seconds: 30));
+    } catch (_) {
+      // Следующий кадр повторит загрузку необходимых ресурсов.
+    } finally {
+      if (mounted) setState(() => _warmingTray = false);
+    }
+  }
+
+  void _recalibrateTray() {
+    frameSession++;
+    scan.cancelFrame();
+    setState(() => _trayArea = null);
   }
 
   @override
@@ -198,7 +228,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       active &&
       token == frameSession &&
       !modal &&
-      scan.state.mode == ScanMode.automatic;
+      scan.state.mode.isAutomatic &&
+      (scan.state.mode != ScanMode.tray || !_warmingTray);
   int rotation(CameraController c) {
     final turns = switch (c.value.deviceOrientation) {
       DeviceOrientation.portraitUp => 0,
@@ -262,13 +293,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         _webCapture = null;
       }
       if (!accepts(token)) return;
-      final matches = await library.recognize(
-        photo.path,
-        engine: scan.state.model,
-      );
-      if (accepts(token) && scan.evaluate(matches) != null) {
-        await _store(matches, file: photo.path, accept: () => accepts(token));
-      }
+      await _recognizeAutomatic(token, file: photo.path);
     } catch (_) {
       if (accepts(token)) {
         _mode();
@@ -283,14 +308,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   Future<void> _automatic(PreviewFrame frame, int token) async {
     reading = true;
     try {
-      final matches = await library.recognizeFrame(
-        frame,
-        engine: scan.state.model,
-      );
-      if (!accepts(token)) return;
-      final hit = scan.evaluate(matches);
-      if (hit == null) return;
-      await _store(matches, frame: frame, accept: () => accepts(token));
+      await _recognizeAutomatic(token, frame: frame);
     } catch (e) {
       if (accepts(token)) {
         _mode();
@@ -300,6 +318,37 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       nextFrame = clock.elapsedMilliseconds + 220;
       reading = false;
     }
+  }
+
+  Future<void> _recognizeAutomatic(
+    int token, {
+    String? file,
+    PreviewFrame? frame,
+  }) async {
+    final inTray = scan.state.mode == ScanMode.tray;
+    final engine = scan.state.model;
+    final matches = inTray
+        ? await library.recognizeTray(file: file, frame: frame, area: _trayArea)
+        : frame == null
+        ? await library.recognize(file!, engine: engine)
+        : await library.recognizeFrame(frame, engine: engine);
+    if (!accepts(token)) return;
+    if (inTray && _trayArea == null) {
+      final area = TrayArea.calibrate(matches.firstOrNull?.corners ?? const []);
+      if (area == null) {
+        scan.cancelFrame();
+        return;
+      }
+      setState(() => _trayArea = area);
+    }
+    if (scan.evaluate(matches) == null) return;
+    await _store(
+      matches,
+      file: file,
+      frame: frame,
+      tray: inTray ? _trayArea : null,
+      accept: () => accepts(token),
+    );
   }
 
   Future<void> _save(
@@ -319,8 +368,13 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       if (!mounted) return;
       scan.recorded(seq, card, matches);
       final targetFound = scan.state.targets.contains(card.name);
-      if (kIsWeb) unawaited(AndroidActions.chime(targetFound: targetFound));
-      unawaited(_loadScannedCardDetails(seq, card, targetFound));
+      final soundOnSave = kIsWeb || scan.state.mode == ScanMode.tray;
+      if (soundOnSave) {
+        unawaited(AndroidActions.chime(targetFound: targetFound));
+      }
+      unawaited(
+        _loadScannedCardDetails(seq, card, targetFound, announce: !soundOnSave),
+      );
     } finally {
       if (mounted) setState(() => writing = false);
     }
@@ -329,15 +383,16 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   Future<void> _loadScannedCardDetails(
     int seq,
     Edition card,
-    bool targetFound,
-  ) async {
+    bool targetFound, {
+    required bool announce,
+  }) async {
     final token = _pendingSounds[seq] = Object();
     try {
       final (_, reference) = await (
         Pictures.shared.official(card.id),
         CardReferences.shared.get(card.id),
       ).wait;
-      if (kIsWeb ||
+      if (!announce ||
           !mounted ||
           _pendingSounds[seq] != token ||
           !reference.imageAvailable) {
@@ -377,24 +432,38 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     List<Match> matches, {
     String? file,
     PreviewFrame? frame,
+    TrayArea? tray,
     required bool Function() accept,
     ScanEntry? previous,
   }) async {
     final hit = matches.first;
-    final evidence = await CardLanguage.readOptions(
-      corners: hit.corners,
-      file: file,
-      frame: frame,
-      options: hit.editions,
-    );
+    final prepared = tray == null
+        ? null
+        : await AndroidActions.trayPhoto(
+            file: file,
+            frame: frame,
+            area: tray,
+            readFooter: hit.editions.length > 1,
+          );
+    if (!accept()) return;
+    final evidence = prepared == null
+        ? await CardLanguage.readOptions(
+            corners: hit.corners,
+            file: file,
+            frame: frame,
+            options: hit.editions,
+          )
+        : await CardLanguage.readTrayOptions(prepared, hit.editions);
     if (!accept()) return;
     final card = selectScannedEdition(evidence, scan.state.batch);
     try {
-      final photo = await AndroidActions.scanPhoto(
-        file: file,
-        frame: frame,
-        corners: hit.corners,
-      );
+      final photo =
+          prepared?.bytes ??
+          await AndroidActions.scanPhoto(
+            file: file,
+            frame: frame,
+            corners: hit.corners,
+          );
       if (photo != null && accept()) {
         await Pictures.shared.saveScan(card.id, photo);
       }
@@ -433,7 +502,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   Future<void> _manual({bool gallery = false, ScanEntry? previous}) async {
     if (modal || writing) return;
     unlockBrowserSound();
-    if (!gallery && previous == null && scan.state.mode == ScanMode.automatic) {
+    if (!gallery && previous == null && scan.state.mode.isAutomatic) {
       scan.shutter();
       nextFrame = 0;
       return;
@@ -575,6 +644,21 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     final count => 'Ищу · карт: $count',
   };
 
+  String? get _modelLabel {
+    if (scan.state.mode == ScanMode.tray) {
+      if (_warmingTray) return 'Лоток · загрузка моделей';
+      return _trayArea == null
+          ? 'Лоток · положите карту ровно'
+          : 'Лоток · Oracle';
+    }
+    return switch (scan.state.model) {
+      RecognitionModel.oracle => null,
+      RecognitionModel.mtgIdentification => 'MTG + Oracle',
+      RecognitionModel.mtgStandalone => 'MTG без Oracle',
+      RecognitionModel.keypoints => 'Ключевые точки',
+    };
+  }
+
   Widget _header(String title) => Row(
     children: [
       RoundAction(
@@ -600,15 +684,11 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
             ),
             if (scan.state.batch.active ||
                 scan.state.targets.isNotEmpty ||
-                scan.state.model != RecognitionModel.oracle)
+                scan.state.model != RecognitionModel.oracle ||
+                scan.state.mode == ScanMode.tray)
               Text(
                 [
-                  if (scan.state.model == RecognitionModel.mtgIdentification)
-                    'MTG + Oracle',
-                  if (scan.state.model == RecognitionModel.mtgStandalone)
-                    'MTG без Oracle',
-                  if (scan.state.model == RecognitionModel.keypoints)
-                    'Ключевые точки',
+                  ?_modelLabel,
                   ?_targetLabel,
                   if (scan.state.batch.active) scan.state.batch.label,
                 ].join('  ·  '),
@@ -643,6 +723,10 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                 _toggleGuide();
               case 'torch':
                 _torch();
+              case 'tray':
+                _toggleTray();
+              case 'calibrateTray':
+                _recalibrateTray();
             }
           },
           itemBuilder: (_) => [
@@ -665,6 +749,20 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
               enabled: library.catalog != null,
               child: const Text('Искомые карты'),
             ),
+            PopupMenuItem(
+              value: 'tray',
+              enabled: camera != null && library.catalog != null,
+              child: Text(
+                scan.state.mode == ScanMode.tray
+                    ? 'Остановить автоскан в лотке'
+                    : 'Автоскан в лотке',
+              ),
+            ),
+            if (scan.state.mode == ScanMode.tray && _trayArea != null)
+              const PopupMenuItem(
+                value: 'calibrateTray',
+                child: Text('Откалибровать лоток заново'),
+              ),
             PopupMenuItem(
               value: 'guide',
               child: Text(
@@ -713,12 +811,12 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                 : const Icon(Icons.center_focus_strong_rounded, size: 31),
           ),
           Semantics(
-            toggled: mode == ScanMode.automatic,
+            toggled: mode.isAutomatic,
             child: _DockAction(
-              mode == ScanMode.automatic
+              mode.isAutomatic
                   ? Icons.pause_circle_filled
                   : Icons.play_circle_outline,
-              mode == ScanMode.automatic ? 'Остановить' : 'Автоскан',
+              mode.isAutomatic ? 'Остановить' : 'Автоскан',
               camera == null || modal ? null : _mode,
             ),
           ),

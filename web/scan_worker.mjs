@@ -10,6 +10,13 @@ const open = (name, directory = models) => ort.InferenceSession.create(new URL(`
 });
 
 let manifest, detector, embed, search, mtg, pose;
+const oracleDetector = () => detector ??= open('detector').catch((error) => { detector = null; throw error; });
+const oracleEncoder = () => embed ??= open('embed').catch((error) => { embed = null; throw error; });
+const oracleIndex = () => search ??= open('search').catch((error) => { search = null; throw error; });
+
+async function warmOracle() {
+  await Promise.all([oracleDetector(), oracleEncoder(), oracleIndex()]);
+}
 async function loadManifest() {
   const response = await fetch(new URL('catalog.json', models));
   if (!response.ok) throw new Error('Каталог распознавания недоступен');
@@ -90,7 +97,7 @@ async function detect(session, scene, side, input, [cx, cy, extent]) {
 }
 
 async function identifyCard(scene, side, quad, config) {
-  const encoder = await (embed ??= open('embed').catch((error) => { embed = null; throw error; }));
+  const encoder = await oracleEncoder();
   const encoded = await encoder.run({
     scene: new ort.Tensor('uint8', new Uint8Array(scene), [side, side, 4]),
     quad: new ort.Tensor('float32', Float32Array.from(quad), [4, 2]),
@@ -100,7 +107,7 @@ async function identifyCard(scene, side, quad, config) {
   if (config.searchMask) {
     inputs.mask = new ort.Tensor('float32', new Float32Array(config.count).fill(1), [config.count]);
   }
-  const index = await (search ??= open('search').catch((error) => { search = null; throw error; }));
+  const index = await oracleIndex();
   return hitsFrom(await index.run(inputs));
 }
 
@@ -153,14 +160,35 @@ async function recognizeStandaloneMtg(blob) {
   return {hits: [], mtgHits: rotated.mtgHits, corners: relativeCorners(rotated.quad, scene)};
 }
 
-async function recognize(blob, engine) {
+const empty = {hits: [], mtgHits: [], corners: []};
+
+async function recognizeTray(scene, config, model, [left, top, right, bottom]) {
+  const {scene: side, det_input: input, rotations} = config.constants;
+  const l = scene.left + left * scene.width, r = scene.left + right * scene.width;
+  const t = scene.top + top * scene.height, b = scene.top + bottom * scene.height;
+  const size = Math.min(r - l, b - t);
+  const found = await detect(model, scene.bytes, side, input, [side / 2, side / 2, side]);
+  const near = Math.abs(found.x - (l + r) / 2) <= size * .11 &&
+    Math.abs(found.y - (t + b) / 2) <= size * .11;
+  const upright = found.quad[0] < found.x && found.quad[1] < found.y &&
+    found.quad[2] > found.x && found.quad[3] < found.y;
+  if (found.vote / rotations < .5 || !near || !upright ||
+    found.short < size * .75 || found.short > size * 1.25) return empty;
+
+  const hits = await identifyCard(scene.bytes, side, [l, t, r, t, r, b, l, b], config);
+  if (!hits.length || hits[0].score < .60) return empty;
+  return {hits, mtgHits: [], corners: [left, top, right, top, right, bottom, left, bottom]};
+}
+
+async function recognize(blob, engine, tray) {
   if (engine === 'mtgStandalone') return recognizeStandaloneMtg(blob);
   const config = await (manifest ??= loadManifest().catch((error) => { manifest = null; throw error; }));
   const constants = config.constants;
   const side = constants.scene;
   const input = constants.det_input;
   const scene = await readScene(blob, side);
-  const model = await (detector ??= open('detector').catch((error) => { detector = null; throw error; }));
+  const model = await oracleDetector();
+  if (tray) return recognizeTray(scene, config, model, tray);
   for (const region of windows(side, scene.width, scene.height)) {
     const coarse = await detect(model, scene.bytes, side, input, region);
     const extent = Math.max(coarse.short * constants.card_aspect / constants.refine_fill, constants.refine_min_side);
@@ -174,14 +202,14 @@ async function recognize(blob, engine) {
     const corners = relativeCorners(fine.quad, scene);
     return {hits, mtgHits, corners};
   }
-  return {hits: [], mtgHits: [], corners: []};
+  return empty;
 }
 
 let queue = Promise.resolve();
-self.onmessage = ({data: {id, blob, engine}}) => {
+self.onmessage = ({data: {id, blob, engine, tray, warm}}) => {
   queue = queue.then(async () => {
     try {
-      self.postMessage({id, value: await recognize(blob, engine)});
+      self.postMessage({id, value: warm ? await warmOracle() : await recognize(blob, engine, tray)});
     } catch (error) {
       self.postMessage({id, error: error.message || String(error)});
     }

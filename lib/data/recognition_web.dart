@@ -3,9 +3,14 @@ import 'dart:js_interop';
 import 'catalog.dart';
 import 'frame.dart';
 import 'recognition_result.dart';
+import 'tray.dart';
 
 @JS('kartoved.scan')
-external JSPromise<_ScanResult> _scan(String file, String engine);
+external JSPromise<_ScanResult> _scan(
+  String file,
+  String engine,
+  JSArray<JSNumber>? tray,
+);
 
 extension type _ScanResult(JSObject _) implements JSObject {
   external JSArray<_Hit> get hits;
@@ -22,8 +27,13 @@ Future<Recognition> recognizeFile(
   Catalog catalog,
   String file, [
   RecognitionModel engine = RecognitionModel.oracle,
+  TrayArea? tray,
 ]) async {
-  final result = await _scan(file, engine.name).toDart;
+  final result = await _scan(
+    file,
+    engine.name,
+    tray?.bounds.map((p) => p.toJS).toList().toJS,
+  ).toDart;
   return (
     hits: [
       for (final hit in result.hits.toDart)
@@ -43,4 +53,5 @@ Future<Recognition> recognizeCameraFrame(
   Catalog catalog,
   PreviewFrame frame, [
   RecognitionModel engine = RecognitionModel.oracle,
+  TrayArea? tray,
 ]) => throw UnsupportedError('В браузере используются снимки с камеры');

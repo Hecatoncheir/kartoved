@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'catalog.dart';
+import 'tray.dart';
 
 CatalogStore createCatalogStore() => CatalogStore();
 void unlockBrowserSound() {}
@@ -16,6 +17,13 @@ Future<Uint8List> browserCrop(String file, List<double> corners) =>
 Future<String> browserUnmirror(String file) => _unsupported();
 Future<String> browserReadText(String file, List<double> corners) =>
     _unsupported();
+Future<TrayPhoto> browserTrayPhoto(
+  String file,
+  TrayArea area,
+  bool readFooter,
+) => _unsupported();
+Future<String> browserReadTrayText(Uint8List bytes) => _unsupported();
+Future<void> browserWarmTray() => _unsupported();
 Future<Uint8List?> browserCacheRead(String key) => _unsupported();
 Future<void> browserCacheWrite(String key, Uint8List bytes) => _unsupported();
 void browserDownload(String name, String mime, Uint8List bytes) =>

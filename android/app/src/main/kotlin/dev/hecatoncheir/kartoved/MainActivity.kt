@@ -23,6 +23,9 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "readText" -> textReader.read(call, reply)
                     "scanPhoto" -> textReader.photo(call, reply)
+                    "warmTray" -> textReader.warmTray(reply)
+                    "trayPhoto" -> textReader.trayPhoto(call, reply)
+                    "readTrayText" -> textReader.readTrayText(call, reply)
                     "scannerGuide" -> {
                         val visible = call.arguments as? Boolean
                         if (visible != null) settings.edit().putBoolean("guide", visible).apply()

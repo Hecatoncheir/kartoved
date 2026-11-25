@@ -8,6 +8,7 @@ import 'package:onnxruntime_core/onnxruntime_core.dart';
 import 'package:path/path.dart' as p;
 
 import 'recognition_result.dart';
+import 'tray.dart';
 
 export 'recognition_result.dart';
 
@@ -20,6 +21,7 @@ Recognition identifyPhoto(
   String photo, {
   Uint8List? mtgGraph,
   Uint8List? poseGraph,
+  TrayArea? tray,
 }) {
   final decoded = im.decodeImage(File(photo).readAsBytesSync());
   if (decoded == null) throw const FormatException('Не удалось открыть снимок');
@@ -28,6 +30,7 @@ Recognition identifyPhoto(
     im.bakeOrientation(decoded),
     mtgGraph: mtgGraph,
     poseGraph: poseGraph,
+    tray: tray,
   );
 }
 
@@ -36,6 +39,7 @@ Recognition identifyImage(
   im.Image original, {
   Uint8List? mtgGraph,
   Uint8List? poseGraph,
+  TrayArea? tray,
 }) {
   if (poseGraph != null) return _identifyMtg(original, poseGraph, mtgGraph!);
   final config = jsonDecode(
@@ -61,6 +65,26 @@ Recognition identifyImage(
     late final embed = open('embed');
     late final search = open('search');
     late final mtg = openGraph(mtgGraph!);
+
+    if (tray != null) {
+      final center = side / 2;
+      final card = _detect(
+        detector,
+        bytes,
+        side,
+        input,
+        center,
+        center,
+        side.toDouble(),
+      );
+      final quad = _trayQuad(tray, card, side, width, height, rotations);
+      if (quad == null) return (hits: [], mtgHits: [], corners: []);
+      final hits = _identifyCard(embed, search, config, bytes, side, quad);
+      if (hits.isEmpty || hits.first.score < .60) {
+        return (hits: [], mtgHits: [], corners: []);
+      }
+      return (hits: hits, mtgHits: [], corners: tray.corners);
+    }
 
     for (final window in _windows(side, width, height)) {
       final coarse = _detect(
@@ -108,6 +132,36 @@ Recognition identifyImage(
       session.release();
     }
   }
+}
+
+Float32List? _trayQuad(
+  TrayArea area,
+  _Detection card,
+  int side,
+  int width,
+  int height,
+  int rotations,
+) {
+  final offsetX = (side - width) ~/ 2, offsetY = (side - height) ~/ 2;
+  final l = offsetX + area.left * width, r = offsetX + area.right * width;
+  final t = offsetY + area.top * height, b = offsetY + area.bottom * height;
+  final size = math.min(r - l, b - t);
+  final near =
+      (card.x - (l + r) / 2).abs() <= size * .11 &&
+      (card.y - (t + b) / 2).abs() <= size * .11;
+  final upright =
+      card.quad[0] < card.x &&
+      card.quad[1] < card.y &&
+      card.quad[2] > card.x &&
+      card.quad[3] < card.y;
+  if (card.vote / rotations < .5 ||
+      !near ||
+      !upright ||
+      card.short < size * .75 ||
+      card.short > size * 1.25) {
+    return null;
+  }
+  return Float32List.fromList([l, t, r, t, r, b, l, b]);
 }
 
 Session _openGraph(Uint8List graph) => Session.fromBytes(

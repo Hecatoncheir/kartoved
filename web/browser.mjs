@@ -25,8 +25,12 @@ function scanWorker() {
   return worker;
 }
 
-async function scan(file, engine) {
+async function scan(file, engine, tray) {
   const blob = await (await fetch(file)).blob();
+  return requestScan({blob, engine, tray});
+}
+
+function requestScan(message) {
   return new Promise((resolve, reject) => {
     const instance = scanWorker();
     const id = ++serial;
@@ -35,7 +39,7 @@ async function scan(file, engine) {
       resolve: (data) => { clearTimeout(timer); resolve(data); },
       reject: (error) => { clearTimeout(timer); reject(error); },
     });
-    instance.postMessage({id, blob, engine});
+    instance.postMessage({id, ...message});
   });
 }
 
@@ -121,14 +125,60 @@ function loadOcr() {
   });
 }
 
-async function readCardText(file, corners) {
-  const engine = await (ocr ??= loadOcr().catch((error) => { ocr = null; throw error; }));
-  const card = await straighten(file, corners);
+const ocrEngine = () => ocr ??= loadOcr().catch((error) => { ocr = null; throw error; });
+
+async function readTextOnCard(card) {
+  const engine = await ocrEngine();
   const context = card.getContext('2d');
   context.fillStyle = '#fff';
   context.fillRect(0, card.height * .15, card.width, card.height * .38);
   const result = await engine.recognize(card);
   return result.data.text;
+}
+
+async function readCardText(file, corners) {
+  return readTextOnCard(await straighten(file, corners));
+}
+
+async function readTrayFooter(card) {
+  const footer = canvasSize(440, 110);
+  footer.getContext('2d').drawImage(card, 0, 730, 440, 110, 0, 0, 440, 110);
+  const engine = await ocrEngine();
+  const result = await engine.recognize(footer, {tessedit_pageseg_mode: '6'});
+  return result.data.text;
+}
+
+async function trayPhoto(file, [left, top, right, bottom], readFooter) {
+  const image = await bitmapFrom(file);
+  const card = canvasSize(600, 840);
+  try {
+    card.getContext('2d').drawImage(image,
+      left * image.width, top * image.height,
+      (right - left) * image.width, (bottom - top) * image.height,
+      0, 0, card.width, card.height);
+  } finally {
+    image.close();
+  }
+  const [photo, footer] = await Promise.all([
+    jpeg(card),
+    readFooter ? readTrayFooter(card).catch(() => '') : '',
+  ]);
+  return {bytes: new Uint8Array(await photo.arrayBuffer()), footer};
+}
+
+async function readTrayText(bytes) {
+  const bitmap = await createImageBitmap(new Blob([bytes], {type: 'image/jpeg'}));
+  const card = canvasSize(bitmap.width, bitmap.height);
+  try {
+    card.getContext('2d').drawImage(bitmap, 0, 0);
+  } finally {
+    bitmap.close();
+  }
+  return readTextOnCard(card);
+}
+
+async function warmTray() {
+  await Promise.all([requestScan({warm: true}), ocrEngine()]);
 }
 
 async function readCache(key) {
@@ -247,7 +297,7 @@ async function reload() {
   }
 }
 
-globalThis.kartoved = {scan, crop, unmirror, readCardText, guide, scannerModel, chime, unlockSound, readCache, writeCache, unpack, download, pickBackup, reload};
+globalThis.kartoved = {scan, crop, unmirror, readCardText, trayPhoto, readTrayText, warmTray, guide, scannerModel, chime, unlockSound, readCache, writeCache, unpack, download, pickBackup, reload};
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register(new URL('sw.js', root), {updateViaCache: 'none'})

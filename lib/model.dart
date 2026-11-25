@@ -10,6 +10,7 @@ import 'data/backup.dart';
 import 'data/browser.dart';
 import 'data/recognition.dart';
 import 'data/frame.dart';
+import 'data/tray.dart';
 import 'data/keypoint_scan.dart';
 import 'data/moxfield.dart';
 import 'data/review.dart';
@@ -275,6 +276,19 @@ class AppModel extends Cubit<LibraryState> {
     engine,
     frame: frame,
   );
+
+  Future<List<Match>> recognizeTray({
+    String? file,
+    PreviewFrame? frame,
+    TrayArea? area,
+  }) async {
+    const engine = RecognitionModel.oracle;
+    final installed = catalog!;
+    final result = frame == null
+        ? await recognizeFile(installed, file!, engine, area)
+        : await recognizeCameraFrame(installed, frame, engine, area);
+    return _matches(result, engine);
+  }
 
   Future<int> save(Edition card, {ScanReview? review}) async {
     final folder = state.folder;

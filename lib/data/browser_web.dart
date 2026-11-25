@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:web/web.dart' as web;
 
 import 'catalog.dart';
+import 'tray.dart';
 
 @JS('kartoved.readCache')
 external JSPromise<JSUint8Array?> _readCache(String key);
@@ -20,6 +21,22 @@ external JSPromise<JSUint8Array> _crop(String file, JSArray<JSNumber> corners);
 external JSPromise<JSString> _unmirror(String file);
 @JS('kartoved.readCardText')
 external JSPromise<JSString> _readText(String file, JSArray<JSNumber> corners);
+@JS('kartoved.trayPhoto')
+external JSPromise<_TrayPhoto> _trayPhoto(
+  String file,
+  JSArray<JSNumber> bounds,
+  bool readFooter,
+);
+@JS('kartoved.readTrayText')
+external JSPromise<JSString> _readTrayText(JSUint8Array bytes);
+@JS('kartoved.warmTray')
+external JSPromise<JSAny?> _warmTray();
+
+extension type _TrayPhoto(JSObject _) implements JSObject {
+  external JSUint8Array get bytes;
+  external String get footer;
+}
+
 @JS('kartoved.guide')
 external bool _guide(JSBoolean? visible);
 @JS('kartoved.scannerModel')
@@ -97,6 +114,24 @@ Future<String> browserReadText(String file, List<double> corners) async =>
       file,
       corners.map((v) => v.toJS).toList().toJS,
     ).toDart).toDart;
+
+Future<TrayPhoto> browserTrayPhoto(
+  String file,
+  TrayArea area,
+  bool readFooter,
+) async {
+  final photo = await _trayPhoto(
+    file,
+    area.bounds.map((p) => p.toJS).toList().toJS,
+    readFooter,
+  ).toDart;
+  return (bytes: photo.bytes.toDart, footer: photo.footer);
+}
+
+Future<String> browserReadTrayText(Uint8List bytes) async =>
+    (await _readTrayText(bytes.toJS).toDart).toDart;
+
+Future<void> browserWarmTray() async => await _warmTray().toDart;
 
 Future<Uint8List?> browserCacheRead(String key) async =>
     (await _readCache(key).toDart)?.toDart;
