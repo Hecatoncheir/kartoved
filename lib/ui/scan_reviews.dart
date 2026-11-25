@@ -21,13 +21,11 @@ Future<void> chooseReview(BuildContext context, AppModel model, int seq) async {
   }
 }
 
-Future<void> openReviews(BuildContext context, AppModel model) =>
-    Navigator.push<void>(
-      context,
-      MaterialPageRoute(builder: (_) => _ReviewPage(model)),
-    );
-
-Future<bool> reviewBeforeExport(BuildContext context, AppModel model) async {
+Future<bool> reviewBeforeExport(
+  BuildContext context,
+  AppModel model,
+  VoidCallback showReviews,
+) async {
   final folder = model.state.folder;
   final proceed = await panel<bool>(
     context,
@@ -53,30 +51,17 @@ Future<bool> reviewBeforeExport(BuildContext context, AppModel model) async {
     ),
   );
   if (proceed == false && context.mounted && model.state.folder == folder) {
-    await openReviews(context, model);
+    showReviews();
   }
   return proceed == true;
 }
 
-class ReviewButton extends StatelessWidget {
-  const ReviewButton(this.count, this.onPressed, {super.key});
-  final int count;
-  final VoidCallback? onPressed;
-  @override
-  Widget build(BuildContext context) => TextButton.icon(
-    onPressed: onPressed,
-    icon: const Icon(Icons.fact_check_outlined),
-    label: Text('Проверить · $count'),
-    style: TextButton.styleFrom(foregroundColor: butter, backgroundColor: dark),
-  );
-}
-
-class _ReviewPage extends StatelessWidget {
-  const _ReviewPage(this.model);
-  final AppModel model;
+class ReviewList extends StatelessWidget {
+  const ReviewList({required this.onRescan, super.key});
+  final ValueChanged<ScanEntry>? onRescan;
   Future<void> open(BuildContext context, int seq) async {
     try {
-      await chooseReview(context, model, seq);
+      await chooseReview(context, context.read<AppModel>(), seq);
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -90,32 +75,33 @@ class _ReviewPage extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Проверка карт')),
-    body: BlocBuilder<AppModel, LibraryState>(
-      bloc: model,
-      builder: (_, state) {
-        final pending = state.reviews.entries.toList();
-        if (pending.isEmpty) {
-          return const Center(child: Text('Все карты проверены'));
-        }
-        return ListView.builder(
-          itemCount: pending.length,
-          itemBuilder: (_, i) {
-            final item = pending[i];
-            final card = item.value.choices.first;
-            return ListTile(
-              leading: SizedBox(width: 38, child: CardPicture(card)),
-              title: Text(card.name),
-              subtitle: Text(item.value.reason.label),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => open(context, item.key),
-            );
-          },
+  Widget build(BuildContext context) {
+    final state = context.watch<AppModel>().state;
+    final pending = state.recent
+        .where((entry) => state.reviews.containsKey(entry.sequence))
+        .toList();
+    if (pending.isEmpty) {
+      return const Center(child: Text('Все карты проверены'));
+    }
+    return ListView.builder(
+      itemCount: pending.length,
+      itemBuilder: (_, i) {
+        final item = pending[i];
+        final card = item.card;
+        return ListTile(
+          key: ValueKey(item.sequence),
+          leading: SizedBox(width: 38, child: CardPicture(card)),
+          title: Text(card.name),
+          subtitle: Text(state.reviews[item.sequence]!.reason.label),
+          trailing: TextButton(
+            onPressed: onRescan == null ? null : () => onRescan!(item),
+            child: Text('Переснять', semanticsLabel: 'Переснять ${card.name}'),
+          ),
+          onTap: () => open(context, item.sequence),
         );
       },
-    ),
-  );
+    );
+  }
 }
 
 class _ChoiceSheet extends StatefulWidget {

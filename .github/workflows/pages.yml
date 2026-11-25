@@ -46,6 +46,14 @@ jobs:
       - run: python tool/prepare_web.py
       - run: flutter build web --release --no-pub --no-web-resources-cdn --pwa-strategy=none --no-wasm-dry-run --base-href /kartoved/
       - run: python tool/prepare_web.py --seal build/web "$GITHUB_SHA"
+      - name: Проверить пересъёмку и перезагрузку без сети в Chrome
+        run: |
+          mkdir "$RUNNER_TEMP/kartoved-preview"
+          ln -s "$PWD/build/web" "$RUNNER_TEMP/kartoved-preview/kartoved"
+          python -m http.server 8080 --bind 127.0.0.1 --directory "$RUNNER_TEMP/kartoved-preview" > "$RUNNER_TEMP/kartoved-http.log" 2>&1 &
+          server=$!
+          trap 'kill "$server"' EXIT
+          node tool/web/review_test.mjs http://127.0.0.1:8080/kartoved/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build/web

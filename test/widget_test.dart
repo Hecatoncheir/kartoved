@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:kartoved/data/catalog.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/ui/sheets.dart';
+import 'package:kartoved/ui/picture.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kartoved/ui/album.dart';
 import 'package:kartoved/ui/collections.dart';
@@ -285,7 +286,17 @@ void main() {
       tester.getCenter(find.byKey(const ValueKey(2))).dx,
       lessThan(tester.getCenter(find.byKey(const ValueKey(1))).dx),
     );
-    await tester.tap(find.byKey(const ValueKey(2)));
+    final tile = find.byKey(const ValueKey(2));
+    final picture = find.descendant(
+      of: tile,
+      matching: find.byType(CardPicture),
+    );
+    final rescan = find.descendant(of: tile, matching: find.byType(TextButton));
+    expect(
+      tester.getTopLeft(rescan).dy - tester.getBottomLeft(picture).dy,
+      greaterThanOrEqualTo(8),
+    );
+    await tester.tap(picture);
     expect(edited, 2);
   });
 

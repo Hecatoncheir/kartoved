@@ -77,6 +77,7 @@ class _ScanMeshState extends State<ScanMesh>
 }
 
 const _columns = 7, _rows = 5;
+const _sweepIntensity = .45;
 typedef _Mesh = ({List<_Node> nodes, List<(int, int)> links});
 
 class _Node {
@@ -156,7 +157,7 @@ class _MeshPainter extends CustomPainter {
       final x = (point.dx - center.dx) / .36;
       final y = (point.dy - center.dy) / .43;
       final strength = math.max(0.0, 1 - x * x - y * y);
-      return strength * strength;
+      return _sweepIntensity * strength * strength;
     }
 
     final nodes = [

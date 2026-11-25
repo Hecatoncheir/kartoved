@@ -33,7 +33,8 @@ import 'style.dart';
 import 'tracked_scan_guide.dart';
 
 class Scanner extends StatefulWidget {
-  const Scanner({super.key});
+  const Scanner({super.key, this.rescan});
+  final ScanEntry? rescan;
   @override
   State<Scanner> createState() => _ScannerState();
 }
@@ -543,9 +544,19 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
           ),
         );
       }
+      if (widget.rescan != null && active) {
+        Navigator.pop(context, '${card.name}\n${_outcome(seq)}');
+      }
     } finally {
       if (mounted) setState(() => writing = false);
     }
+  }
+
+  String _outcome(int sequence) {
+    final review = library.state.reviews[sequence];
+    if (review == null) return 'Учтено в «${library.state.title}»';
+    final batch = review.batchLabel;
+    return 'На проверке · ${review.reason.label}${batch.isEmpty ? '' : ' ($batch)'}';
   }
 
   Future<void> _loadScannedCardDetails(
@@ -677,6 +688,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
 
   Future<void> _manual({bool gallery = false, ScanEntry? previous}) async {
     if (modal || writing) return;
+    previous ??= widget.rescan;
     unlockBrowserSound();
     if (!gallery && previous == null && scan.state.mode.isAutomatic) {
       scan.shutter();
@@ -925,11 +937,12 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                 ],
               ),
             ),
-            PopupMenuItem(
-              value: 'target',
-              enabled: library.catalog != null,
-              child: const Text('Искомые карты'),
-            ),
+            if (widget.rescan == null)
+              PopupMenuItem(
+                value: 'target',
+                enabled: library.catalog != null,
+                child: const Text('Искомые карты'),
+              ),
             if (scan.state.mode == ScanMode.tray && _trayArea != null)
               const PopupMenuItem(
                 value: 'calibrateTray',
@@ -971,7 +984,9 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
             modal ? null : () => _manual(gallery: true),
           ),
           IconButton.filled(
-            tooltip: 'Добавить карту',
+            tooltip: widget.rescan == null
+                ? 'Добавить карту'
+                : 'Сделать новый снимок',
             style: IconButton.styleFrom(
               backgroundColor: butter,
               foregroundColor: ink,
@@ -982,12 +997,13 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                 ? const CircularProgressIndicator()
                 : const Icon(Icons.center_focus_strong_rounded, size: 31),
           ),
-          AutoScanButton(
-            profile: _autoMode,
-            running: mode.isAutomatic,
-            onToggle: camera == null || modal || writing ? null : _toggleAuto,
-            onChoose: modal || writing ? null : _pickAutoMode,
-          ),
+          if (widget.rescan == null)
+            AutoScanButton(
+              profile: _autoMode,
+              running: mode.isAutomatic,
+              onToggle: camera == null || modal || writing ? null : _toggleAuto,
+              onChoose: modal || writing ? null : _pickAutoMode,
+            ),
         ],
       ),
     ),
@@ -996,25 +1012,23 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     final state = library.state;
     final insets = MediaQuery.paddingOf(context);
     final stripTop = insets.top + 70;
-    final strip = math.min(84.0, bounds.maxHeight * .12);
+    final strip =
+        math.min(84.0, bounds.maxHeight * .12) + 40 + ScanStrip.buttonSpacing;
     final sequence = scan.state.lastScan;
     final last = sequence == null
         ? null
         : state.recent.where((e) => e.sequence == sequence).firstOrNull;
-    final top = stripTop + strip + 8;
+    final target = widget.rescan;
+    final displayed = target ?? last;
+    final top = stripTop + strip + (displayed == null ? 8 : 65);
     final bottom = bounds.maxHeight - insets.bottom - 104;
-    // Статус скана и кнопка проверки могут появиться над нижней панелью.
-    final frameBottom = bottom - 52 - 48;
     final width = math.min(
       bounds.maxWidth * .77,
-      math.max(20.0, (frameBottom - top) * ScanFrame.aspectRatio),
+      math.max(20.0, (bottom - top) * ScanFrame.aspectRatio),
     );
     final height = width / ScanFrame.aspectRatio;
     final rect = Rect.fromCenter(
-      center: Offset(
-        bounds.maxWidth / 2,
-        math.min((top + bottom) / 2, frameBottom - height / 2),
-      ),
+      center: Offset(bounds.maxWidth / 2, (top + bottom) / 2),
       width: width,
       height: height,
     );
@@ -1044,26 +1058,45 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         ),
         Positioned(
           top: stripTop,
-          height: strip,
           left: 0,
           right: 0,
-          child: Row(
+          child: Column(
             children: [
-              Expanded(
-                child: ScanStrip(
-                  state.recent,
-                  _edit,
-                  pending: state.reviews.keys.toSet(),
+              SizedBox(
+                height: strip,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ScanStrip(
+                        target == null ? state.recent : [target],
+                        target == null ? _edit : null,
+                        pending: state.reviews.keys.toSet(),
+                        rescan: modal || writing
+                            ? null
+                            : (entry) => _manual(
+                                previous: entry,
+                                gallery: camera == null,
+                              ),
+                      ),
+                    ),
+                    if (scan.state.lastAdded case final undo?)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: RoundAction(
+                          Icons.undo_rounded,
+                          'Отменить последнее добавление',
+                          modal || writing ? null : () => _undo(undo),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              if (last != null)
-                Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: RoundAction(
-                    Icons.undo_rounded,
-                    'Отменить последнее добавление',
-                    modal || writing ? null : () => _undo(last.sequence),
-                  ),
+              if (displayed != null)
+                _ScanFeedback(
+                  name: displayed.card.name,
+                  result: target == null
+                      ? _outcome(displayed.sequence)
+                      : 'Пересъёмка спорной карты',
                 ),
             ],
           ),
@@ -1082,29 +1115,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
           left: 12,
           right: 12,
           bottom: insets.bottom + 8,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (last != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: _ScanResult(
-                    'В коллекциях: ${state.owned(last.card.name)} · ${last.card.name}',
-                    modal || writing || camera == null
-                        ? null
-                        : () => _manual(previous: last),
-                  ),
-                ),
-              if (state.reviews.isNotEmpty)
-                ReviewButton(
-                  state.reviews.length,
-                  modal || writing
-                      ? null
-                      : () => _paused(() => openReviews(context, library)),
-                ),
-              _controls(context, scan.state.mode),
-            ],
-          ),
+          child: _controls(context, scan.state.mode),
         ),
       ],
     );
@@ -1128,31 +1139,39 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   );
 }
 
-class _ScanResult extends StatelessWidget {
-  const _ScanResult(this.label, this.repeat);
-
-  final String label;
-  final VoidCallback? repeat;
+class _ScanFeedback extends StatelessWidget {
+  const _ScanFeedback({required this.name, required this.result});
+  final String name, result;
 
   @override
-  Widget build(BuildContext context) => Frost(
-    radius: 12,
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: Padding(
-            padding: const EdgeInsets.only(left: 12),
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: paper),
-            ),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    child: Semantics(
+      liveRegion: true,
+      child: Frost(
+        radius: 12,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                name,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: paper,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                result,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: butter),
+              ),
+            ],
           ),
         ),
-        TextButton(onPressed: repeat, child: const Text('Переснять')),
-      ],
+      ),
     ),
   );
 }

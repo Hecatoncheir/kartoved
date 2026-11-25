@@ -55,6 +55,11 @@ external JSPromise<JSAny?> _chime(bool targetFound);
 external void releaseBrowserPhoto(String file);
 @JS('kartoved.reload')
 external void reloadBrowser();
+@JS('kartoved.offlineScanner')
+external JSPromise<JSBoolean> _offlineScanner(bool prepare);
+
+Future<bool> browserOfflineScanner({required bool prepare}) async =>
+    (await _offlineScanner(prepare).toDart).toDart;
 
 CatalogStore createCatalogStore() {
   databaseFactory = createDatabaseFactoryFfiWeb(

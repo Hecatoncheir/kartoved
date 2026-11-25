@@ -10,6 +10,7 @@ import 'package:kartoved/data/card_reference.dart';
 import 'package:kartoved/data/catalog.dart';
 import 'package:kartoved/data/pictures.dart';
 import 'package:kartoved/data/recognition_result.dart';
+import 'package:kartoved/data/review.dart';
 import 'package:kartoved/data/scan_progress.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/scan_cubit.dart';
@@ -17,6 +18,7 @@ import 'package:kartoved/ui/auto_scan_controls.dart';
 import 'package:kartoved/ui/collections.dart';
 import 'package:kartoved/ui/picture.dart';
 import 'package:kartoved/ui/scan_frame.dart';
+import 'package:kartoved/ui/scanner.dart';
 import 'package:kartoved/ui/style.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
@@ -149,8 +151,9 @@ void main() {
     await app.openScanner();
     await app.tap(find.text('Из фото'));
     await app.waitFor(
-      () => find.text('В коллекциях: 4 · Opt').evaluate().isNotEmpty,
+      () => find.text('Учтено в «Моя коллекция»').evaluate().isNotEmpty,
     );
+    expect(find.text(en.name), findsOneWidget);
     expect(app.model.state.recent.first.card.language, 'und');
     expect(app.model.state.reviews, isEmpty);
     expect(find.text('В коллекцию'), findsNothing);
@@ -167,6 +170,52 @@ void main() {
     expect(app.scanPhoto(en).readAsBytesSync(), app.photo);
     expect(app.sounds, 0);
   });
+
+  scannerTest(
+    'Пересъёмка из фильтра заменяет выбранную запись и сохраняет соседнюю',
+    (app) async {
+      final ids = (await app.tester.runAsync(() async {
+        final first = await app.model.save(
+          en,
+          review: ScanReview(ReviewReason.language, [en, ru]),
+        );
+        final second = await app.model.save(
+          bolt,
+          review: ScanReview(ReviewReason.artwork, [bolt]),
+        );
+        return (first, second);
+      }))!;
+      app.model.matches = const [
+        Match([en]),
+      ];
+      await app.tap(find.text('Моя коллекция'));
+      await app.tap(find.text('На проверке · 2'));
+      final firstRow = find.byKey(ValueKey(ids.$1));
+      final rescan = find.descendant(
+        of: firstRow,
+        matching: find.text('Переснять'),
+      );
+      await app.tap(rescan);
+      await app.tap(find.byTooltip('К коллекции'));
+      expect(app.model.state.reviews.keys, containsAll([ids.$1, ids.$2]));
+      await app.tap(rescan);
+      await app.tap(find.text('Из фото'));
+      await app.waitFor(
+        () =>
+            find.byType(Scanner).evaluate().isEmpty &&
+            find.text('На проверке · 1').evaluate().isNotEmpty,
+      );
+      expect(app.model.state.reviews.keys, [ids.$2]);
+      expect(
+        app.model.state.recent
+            .singleWhere((e) => e.sequence == ids.$1)
+            .quantity,
+        1,
+      );
+      expect(find.byKey(ValueKey(ids.$2)), findsOneWidget);
+      expect(firstRow, findsNothing);
+    },
+  );
 
   scannerTest('Отмена убирает последнее добавление выбранного издания', (
     app,

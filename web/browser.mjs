@@ -321,7 +321,26 @@ function scannerTray(value) {
   return value ?? true;
 }
 
-globalThis.kartoved = {scan, crop, unmirror, readCardText, trayPhoto, readTrayText, warmTray, guide, scannerModel, scannerTray, chime, unlockSound, readCache, writeCache, unpack, download, pickBackup, reload};
+async function offlineScanner(prepare) {
+  const worker = (await navigator.serviceWorker?.getRegistration(root))?.active;
+  if (!worker) throw new Error('Автономный режим пока недоступен');
+  return new Promise((resolve, reject) => {
+    const {port1, port2} = new MessageChannel();
+    const timer = setTimeout(() => {
+      port1.close();
+      reject(new Error('Не удалось дождаться подготовки сканера'));
+    }, prepare ? 300000 : 5000);
+    port1.onmessage = ({data}) => {
+      clearTimeout(timer);
+      port1.close();
+      if (data.error) reject(new Error('Не удалось сохранить файлы сканера'));
+      else resolve(data.ready);
+    };
+    worker.postMessage({type: 'offline-scanner', engine: scannerModel(), prepare}, [port2]);
+  });
+}
+
+globalThis.kartoved = {scan, crop, unmirror, readCardText, trayPhoto, readTrayText, warmTray, guide, scannerModel, scannerTray, chime, unlockSound, readCache, writeCache, unpack, download, pickBackup, reload, offlineScanner};
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register(new URL('sw.js', root), {updateViaCache: 'none'})

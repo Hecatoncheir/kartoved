@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../data/catalog.dart';
+import '../data/browser.dart';
 import '../model.dart';
 import 'card_facts.dart';
 import 'style.dart';
@@ -208,6 +209,47 @@ class CatalogPanel extends StatefulWidget {
 class _CatalogPanelState extends State<CatalogPanel> {
   String? message;
   bool loading = false;
+  bool offlineReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) _checkOffline();
+  }
+
+  Future<void> _checkOffline() async {
+    try {
+      final ready = await browserOfflineScanner(prepare: false);
+      if (mounted && ready) setState(() => offlineReady = true);
+    } catch (_) {
+      // Пользователь может повторить проверку кнопкой подготовки.
+    }
+  }
+
+  Future<void> _prepareOffline() async {
+    setState(() {
+      loading = true;
+      message = 'Загружаются файлы сканера…';
+    });
+    try {
+      final ready = await browserOfflineScanner(prepare: true);
+      if (mounted) {
+        setState(() {
+          offlineReady = ready;
+          message = null;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => message = 'Не удалось сохранить файлы. Проверьте соединение и свободное место, затем повторите.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
   Future<void> update() async {
     setState(() {
       loading = true;
@@ -234,74 +276,89 @@ class _CatalogPanelState extends State<CatalogPanel> {
   Widget build(BuildContext context) {
     final spec = widget.model.catalog!.spec;
     final date = spec.created;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SheetHeading('База карт'),
-        const SizedBox(height: 18),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: raised,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Row(
-              children: [
-                const Icon(Icons.inventory_2_outlined, size: 32),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${spec.count} иллюстраций',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SheetHeading('База карт'),
+          const SizedBox(height: 18),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: raised,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                children: [
+                  const Icon(Icons.inventory_2_outlined, size: 32),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${spec.count} иллюстраций',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'От ${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year} · доступна офлайн',
-                      ),
-                    ],
+                        Text(
+                          'От ${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year} · доступна офлайн',
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-        TextButton.icon(
-          icon: const Icon(Icons.download_outlined),
-          label: const Text('Миниатюры выпуска офлайн'),
-          onPressed: loading
-              ? null
-              : () => panel<void>(context, PicturePack(widget.model.catalog!)),
-        ),
-        if (message != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Text(message!, semanticsLabel: message),
+          if (kIsWeb)
+            OutlinedButton.icon(
+              icon: Icon(
+                offlineReady ? Icons.offline_pin : Icons.download_outlined,
+              ),
+              label: Text(
+                offlineReady
+                    ? 'Сканер готов к работе без сети'
+                    : 'Подготовить сканер без сети',
+              ),
+              onPressed: loading || offlineReady ? null : _prepareOffline,
+            ),
+          TextButton.icon(
+            icon: const Icon(Icons.download_outlined),
+            label: const Text('Миниатюры выпуска офлайн'),
+            onPressed: loading
+                ? null
+                : () =>
+                      panel<void>(context, PicturePack(widget.model.catalog!)),
           ),
-        const SizedBox(height: 16),
-        FilledButton.icon(
-          onPressed: loading ? null : update,
-          icon: loading
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.sync),
-          label: Text(
-            loading
-                ? 'Обновление…'
-                : kIsWeb
-                ? 'Обновить страницу'
-                : 'Проверить обновления',
+          if (message != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(message!, semanticsLabel: message),
+            ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: loading ? null : update,
+            icon: loading
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync),
+            label: Text(
+              loading && !kIsWeb
+                  ? 'Обновление…'
+                  : kIsWeb
+                  ? 'Обновить страницу'
+                  : 'Проверить обновления',
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

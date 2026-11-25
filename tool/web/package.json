@@ -4,5 +4,8 @@
   "dependencies": {
     "onnxruntime-web": "1.29.0",
     "tesseract.js": "6.0.1"
+  },
+  "devDependencies": {
+    "playwright-core": "1.62.1"
   }
 }

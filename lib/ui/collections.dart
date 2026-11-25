@@ -485,9 +485,24 @@ class _NameDialogState extends State<_NameDialog> {
   );
 }
 
-class CollectionPage extends StatelessWidget {
+class CollectionPage extends StatefulWidget {
   const CollectionPage({super.key, this.initialName});
   final String? initialName;
+  @override
+  State<CollectionPage> createState() => _CollectionPageState();
+}
+
+class _CollectionPageState extends State<CollectionPage> {
+  bool reviewOnly = false;
+
+  Future<void> _rescan(ScanEntry entry) async {
+    final result = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => Scanner(rescan: entry)),
+    );
+    if (mounted && result != null) _message(context, result);
+  }
+
   Future<void> _flag(BuildContext context, Edition card, bool value) async {
     try {
       await context.read<AppModel>().setFlag(card, value);
@@ -542,7 +557,11 @@ class CollectionPage extends StatelessWidget {
     try {
       final folder = model.state.folder;
       if (model.state.reviews.isNotEmpty) {
-        final proceed = await reviewBeforeExport(context, model);
+        final proceed = await reviewBeforeExport(
+          context,
+          model,
+          () => setState(() => reviewOnly = true),
+        );
         if (!proceed || !context.mounted || model.state.folder != folder) {
           return;
         }
@@ -628,12 +647,15 @@ class CollectionPage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
               child: Column(
                 children: [
-                  if (state.reviews.isNotEmpty)
-                    ReviewButton(
-                      state.reviews.length,
-                      () => openReviews(context, context.read<AppModel>()),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilterChip(
+                      label: Text('На проверке · ${state.reviews.length}'),
+                      selected: reviewOnly,
+                      onSelected: (value) => setState(() => reviewOnly = value),
                     ),
-                  if (items.isNotEmpty && !keyboard)
+                  ),
+                  if (!reviewOnly && items.isNotEmpty && !keyboard)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Material(
@@ -674,7 +696,11 @@ class CollectionPage extends StatelessWidget {
                       ),
                     ),
                   Expanded(
-                    child: items.isEmpty
+                    child: reviewOnly
+                        ? ReviewList(
+                            onRescan: state.catalog == null ? null : _rescan,
+                          )
+                        : items.isEmpty
                         ? SafeArea(
                             top: false,
                             child: Center(
@@ -693,7 +719,7 @@ class CollectionPage extends StatelessWidget {
                             ),
                           )
                         : CollectionBrowser(
-                            initialName: initialName,
+                            initialName: widget.initialName,
                             key: ValueKey(state.folder),
                             catalog: state.catalog,
                             items: items,

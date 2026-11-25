@@ -4,15 +4,18 @@ import '../data/catalog.dart';
 import 'picture.dart';
 
 class ScanStrip extends StatefulWidget {
+  static const buttonSpacing = 8.0;
   const ScanStrip(
     this.entries,
     this.edit, {
     super.key,
     this.pending = const {},
+    this.rescan,
   });
   final List<ScanEntry> entries;
   final Set<int> pending;
-  final ValueChanged<ScanEntry> edit;
+  final ValueChanged<ScanEntry>? edit;
+  final ValueChanged<ScanEntry>? rescan;
   @override
   State<ScanStrip> createState() => _ScanStripState();
 }
@@ -83,34 +86,68 @@ class _ScanStripState extends State<ScanStrip>
         sizeFactor: animation,
         child: FadeTransition(
           opacity: animation,
-          child: AspectRatio(
-            aspectRatio: 63 / 88,
-            child: InkWell(
-              onTap: () => widget.edit(entry),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CardPicture(entry.card, slot: entry.sequence),
-                  if (widget.pending.contains(entry.sequence))
-                    Positioned(
-                      top: 3,
-                      right: 3,
-                      child: Semantics(
-                        label: 'Требует проверки',
-                        child: const DecoratedBox(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Color(0xfffabd2f),
-                            border: Border.fromBorderSide(
-                              BorderSide(color: Color(0xff282828)),
+          child: SizedBox(
+            width: 88,
+            child: Column(
+              children: [
+                Expanded(
+                  child: AspectRatio(
+                    aspectRatio: 63 / 88,
+                    child: InkWell(
+                      onTap: widget.edit == null
+                          ? null
+                          : () => widget.edit!(entry),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          CardPicture(entry.card, slot: entry.sequence),
+                          if (widget.pending.contains(entry.sequence))
+                            Positioned(
+                              top: 3,
+                              right: 3,
+                              child: Semantics(
+                                label: 'Требует проверки',
+                                child: const DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Color(0xfffabd2f),
+                                    border: Border.fromBorderSide(
+                                      BorderSide(color: Color(0xff282828)),
+                                    ),
+                                  ),
+                                  child: SizedBox.square(dimension: 12),
+                                ),
+                              ),
                             ),
-                          ),
-                          child: SizedBox.square(dimension: 12),
-                        ),
+                        ],
                       ),
                     ),
-                ],
-              ),
+                  ),
+                ),
+                if (entry.quantity == 1 ||
+                    widget.pending.contains(entry.sequence))
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      top: ScanStrip.buttonSpacing,
+                    ),
+                    child: TextButton(
+                      onPressed: widget.rescan == null
+                          ? null
+                          : () => widget.rescan!(entry),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: const Color(0xcc282828),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        minimumSize: const Size(80, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        'Переснять',
+                        semanticsLabel: 'Переснять ${entry.card.name}',
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),

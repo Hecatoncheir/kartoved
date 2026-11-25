@@ -77,6 +77,7 @@ class ScanSession {
     this.mode = ScanMode.manual,
     this.batch = const BatchSettings(),
     this.lastScan,
+    this.lastAdded,
     this.showGuide = true,
     this.targets = const {},
     this.model = RecognitionModel.oracle,
@@ -85,6 +86,7 @@ class ScanSession {
   final ScanMode mode;
   final BatchSettings batch;
   final int? lastScan;
+  final int? lastAdded;
   final bool showGuide;
   final Set<String> targets;
   final RecognitionModel model;
@@ -93,6 +95,7 @@ class ScanSession {
     ScanMode? mode,
     BatchSettings? batch,
     int? lastScan,
+    int? lastAdded,
     bool clearLastScan = false,
     bool? showGuide,
     Set<String>? targets,
@@ -101,6 +104,7 @@ class ScanSession {
     mode: mode ?? this.mode,
     batch: batch ?? this.batch,
     lastScan: clearLastScan ? null : lastScan ?? this.lastScan,
+    lastAdded: clearLastScan ? null : lastAdded ?? this.lastAdded,
     showGuide: showGuide ?? this.showGuide,
     targets: targets ?? this.targets,
     model: model ?? this.model,
@@ -159,16 +163,23 @@ class ScanCubit extends Cubit<ScanSession> {
       await library.replace(previous, card, review: review);
       sequence = previous.sequence;
     }
-    if (!isClosed) recorded(sequence, card, scan.matches);
+    if (!isClosed) {
+      recorded(sequence, card, scan.matches, added: previous == null);
+    }
     return sequence;
   }
 
-  void recorded(int seq, Edition card, List<Match> matches) {
+  void recorded(
+    int seq,
+    Edition card,
+    List<Match> matches, {
+    bool added = true,
+  }) {
     gate.saved(
       card,
       observedNames: closeMatches(matches).map((m) => m.editions.first.name),
     );
-    emit(state.copyWith(lastScan: seq));
+    emit(state.copyWith(lastScan: seq, lastAdded: added ? seq : null));
   }
 
   void undone() {
