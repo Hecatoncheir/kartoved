@@ -42,6 +42,10 @@ def choose_file(tests, saving):
         if focus != last_focus:
             print(f"Активное окно: {focus}", flush=True)
             last_focus = focus
+        if focus.endswith("Application Not Responding: com.android.launcher3}"):
+            # При холодном старте эмулятора Launcher иногда закрывает собой выбор файла.
+            shell("am", "force-stop", "com.android.launcher3")
+            continue
         save = next((n for n in nodes if n["text"].upper() == "SAVE"
                      or n["content-desc"].upper() == "SAVE"), None)
         if saving and save:
