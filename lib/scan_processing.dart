@@ -1,6 +1,10 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'data/android.dart';
+import 'data/browser.dart';
+import 'data/catalog.dart';
 import 'data/frame.dart';
 import 'data/language.dart';
 import 'data/pictures.dart';
@@ -21,23 +25,27 @@ Future<PreparedScan?> prepareScan(
   PreviewFrame? frame,
   TrayArea? tray,
   bool refineTrayMatch = false,
+  bool essentials = false,
   ScanProgress? onProgress,
 }) async {
   final corners = tray?.corners ?? detected.first.corners;
+  final quick = essentials && !rescan && !batch.active;
   final readFooter =
-      tray != null && (refineTrayMatch || detected.first.editions.length > 1);
+      !quick &&
+      tray != null &&
+      (refineTrayMatch || detected.first.editions.length > 1);
   if (readFooter) onProgress?.call(ScanStage.footer, corners);
-  final photo = tray == null
-      ? null
-      : await AndroidActions.trayPhoto(
-          file: file,
-          frame: frame,
-          area: tray,
-          readFooter: readFooter,
-        );
+  final photo = await _preparePhoto(
+    tray,
+    readFooter: readFooter,
+    needTitle: quick && kIsWeb,
+    file: file,
+    frame: frame,
+    corners: corners,
+  );
   if (!isCurrent()) return null;
 
-  final matches = refineTrayMatch
+  final matches = refineTrayMatch && !quick
       ? await library.refineTrayMatches(
           detected,
           file: file,
@@ -49,20 +57,63 @@ Future<PreparedScan?> prepareScan(
   if (!isCurrent()) return null;
   final options = matches.first.editions;
   void showText() => onProgress?.call(ScanStage.text, corners);
-  final evidence = photo == null
-      ? await CardLanguage.readOptions(
-          file: file,
-          frame: frame,
-          corners: corners,
-          options: options,
-          onRead: showText,
+  final englishEdition = quick
+      ? await _englishEdition(
+          matches.first,
+          photo,
+          () => onProgress?.call(ScanStage.title, corners),
         )
-      : await CardLanguage.readTrayOptions(photo, options, onRead: showText);
+      : null;
+  if (!isCurrent()) return null;
+  Future<List<Edition>> readOptions() async {
+    final candidates = quick
+        ? await _languageOptions(library.catalog, options)
+        : options;
+    if (!isCurrent()) return candidates;
+    return photo == null
+        ? CardLanguage.readOptions(
+            file: file,
+            frame: frame,
+            corners: corners,
+            options: candidates,
+            onRead: showText,
+            languageOnly: quick,
+          )
+        : CardLanguage.readTrayOptions(
+            photo,
+            candidates,
+            onRead: showText,
+            languageOnly: quick,
+          );
+  }
+
+  final evidence = englishEdition == null
+      ? await readOptions()
+      : [englishEdition];
   if (!isCurrent()) return null;
 
-  final decision = rescan || matches.first.titleOnly
+  final ambiguous =
+      quick &&
+      (matches.first.score < .75 ||
+          closeMatches(matches)
+              .any((m) => m.editions.first.name != options.first.name));
+  var decision = rescan || matches.first.titleOnly || ambiguous
       ? decideScan(matches, evidence, batch)
       : (card: selectScannedEdition(evidence, batch), review: null);
+  if (quick && decision.review == null) {
+    final card = decision.card;
+    final candidates = closeMatches(matches)
+        .expand((m) => m.editions)
+        .where(
+          (e) =>
+              e.name == card.name &&
+              (card.language == 'und' || e.language == card.language),
+        );
+    final printings = candidates.map((e) => (e.set, e.number)).toSet();
+    if (printings.length != 1 || !printings.contains((card.set, card.number))) {
+      decision = (card: card.withoutPrinting(), review: null);
+    }
+  }
   await _saveThumbnail(
     decision.card.id,
     photo?.bytes,
@@ -72,6 +123,68 @@ Future<PreparedScan?> prepareScan(
     isCurrent,
   );
   return (decision: decision, matches: matches);
+}
+
+Future<TrayPhoto?> _preparePhoto(
+  TrayArea? tray, {
+  required bool readFooter,
+  required bool needTitle,
+  String? file,
+  PreviewFrame? frame,
+  required List<double> corners,
+}) async {
+  if (tray != null) {
+    return AndroidActions.trayPhoto(
+      file: file,
+      frame: frame,
+      area: tray,
+      readFooter: readFooter,
+    );
+  }
+  if (!needTitle) return null;
+  try {
+    final bytes = await AndroidActions.scanPhoto(
+      file: file,
+      frame: frame,
+      corners: corners,
+    );
+    return bytes == null ? null : (bytes: bytes, footer: '');
+  } on Exception {
+    return null;
+  }
+}
+
+Future<Edition?> _englishEdition(
+  Match match,
+  TrayPhoto? photo,
+  void Function() onRead,
+) async {
+  final english = match.editions.where((e) => e.language == 'en').firstOrNull;
+  if (english == null || match.englishTitle) return english;
+  if (!kIsWeb || photo == null) return null;
+  onRead();
+  try {
+    final title = await browserEnglishTitle(photo.bytes);
+    return CardLanguage.matchesEnglishTitle(title, english.name)
+        ? english
+        : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<List<Edition>> _languageOptions(
+  Catalog? catalog,
+  List<Edition> options,
+) async {
+  if (catalog == null || options.any((e) => e.language != 'en')) return options;
+  // У одного рисунка иногда есть только английская запись. Перевод ищем по названию.
+  final languages = {'en'};
+  return [
+    ...options,
+    for (final e in await catalog.byName(options.first.name))
+      if (languages.add(e.language)) e,
+  ];
 }
 
 Future<void> _saveThumbnail(

@@ -152,6 +152,20 @@ class _ResultSheetState extends State<ResultSheet> {
   );
 }
 
+Future<Edition?> choosePrinting(
+  BuildContext context,
+  Catalog catalog,
+  Edition card,
+) async {
+  final editions = await catalog.byName(card.name);
+  if (!context.mounted) return null;
+  final options = editions
+      .where((e) => card.language == 'und' || e.language == card.language)
+      .toList();
+  final selected = await panel<Edition>(context, EditionPicker(options, card));
+  return selected?.withFoil(card.foil || selected.foil);
+}
+
 class EditionPicker extends StatefulWidget {
   const EditionPicker(this.options, this.selected, {super.key});
   final List<Edition> options;
@@ -186,7 +200,9 @@ class _EditionPickerState extends State<EditionPicker> {
               itemCount: options.length,
               itemBuilder: (c, i) => ListTile(
                 title: Text(options[i].detail, style: codeText),
-                trailing: options[i].id == widget.selected.id
+                trailing:
+                    !widget.selected.needsPrinting &&
+                        options[i].id == widget.selected.id
                     ? const Icon(Icons.check)
                     : null,
                 onTap: () => Navigator.pop(c, options[i]),

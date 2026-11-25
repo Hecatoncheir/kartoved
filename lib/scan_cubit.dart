@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'model.dart';
@@ -24,6 +26,7 @@ class ScanGate {
   Edition? accept(
     List<Match> matches, {
     bool manual = false,
+    bool fast = false,
     double minimumScore = .60,
   }) {
     if (matches.isEmpty) {
@@ -54,6 +57,9 @@ class ScanGate {
             .join('\n');
     final stable = _candidate == key;
     _candidate = key;
+    if (fast && !best.titleOnly && best.score >= .90 && close.length == 1) {
+      return card;
+    }
     return stable ? card : null;
   }
 
@@ -72,6 +78,14 @@ enum ScanMode {
   bool get isAutomatic => this != manual;
 }
 
+enum ScanOption {
+  essentials('Только необходимое'),
+  consecutive('Одинаковые подряд');
+
+  const ScanOption(this.label);
+  final String label;
+}
+
 class ScanSession {
   const ScanSession({
     this.mode = ScanMode.manual,
@@ -81,6 +95,8 @@ class ScanSession {
     this.showGuide = true,
     this.targets = const {},
     this.model = RecognitionModel.oracle,
+    this.options = const {},
+    this.repeatSeconds = 0,
   });
 
   final ScanMode mode;
@@ -90,6 +106,8 @@ class ScanSession {
   final bool showGuide;
   final Set<String> targets;
   final RecognitionModel model;
+  final Set<ScanOption> options;
+  final int repeatSeconds;
 
   ScanSession copyWith({
     ScanMode? mode,
@@ -100,6 +118,8 @@ class ScanSession {
     bool? showGuide,
     Set<String>? targets,
     RecognitionModel? model,
+    Set<ScanOption>? options,
+    int? repeatSeconds,
   }) => ScanSession(
     mode: mode ?? this.mode,
     batch: batch ?? this.batch,
@@ -108,23 +128,60 @@ class ScanSession {
     showGuide: showGuide ?? this.showGuide,
     targets: targets ?? this.targets,
     model: model ?? this.model,
+    options: options ?? this.options,
+    repeatSeconds: repeatSeconds ?? this.repeatSeconds,
   );
 }
 
 class ScanCubit extends Cubit<ScanSession> {
   ScanCubit() : super(const ScanSession());
   final gate = ScanGate();
+  Timer? _countdown;
+  Edition? _repeatCard;
+  bool get repeatReady => _repeatCard != null && state.repeatSeconds == 0;
+
+  Edition? repeatFor(List<Match> matches) {
+    if (_force || !repeatReady || matches.isEmpty) return null;
+    final best = matches.first;
+    if (best.score < .75 || best.editions.first.name != _repeatCard!.name) {
+      return null;
+    }
+    return _repeatCard;
+  }
+
+  void stopRepeats() {
+    _countdown?.cancel();
+    _repeatCard = null;
+    if (state.repeatSeconds != 0) emit(state.copyWith(repeatSeconds: 0));
+  }
+
+  void setOption(ScanOption option, bool enabled) {
+    if (state.options.contains(option) == enabled) return;
+    cancelFrame();
+    if (option == ScanOption.consecutive) stopRepeats();
+    final options = {...state.options};
+    if (enabled) {
+      options.add(option);
+    } else {
+      options.remove(option);
+    }
+    emit(state.copyWith(options: Set.unmodifiable(options)));
+  }
+
   bool _force = false;
+  bool get needsFullFrame => _force || gate.awaitingConfirmation;
   void toggle() =>
       setMode(state.mode.isAutomatic ? ScanMode.manual : ScanMode.automatic);
 
   void setMode(ScanMode mode) {
     if (state.mode == mode) return;
+    stopRepeats();
     cancelFrame();
     emit(state.copyWith(mode: mode));
   }
 
   void configure(BatchSettings value) {
+    stopRepeats();
     cancelFrame();
     emit(state.copyWith(batch: value));
   }
@@ -154,6 +211,7 @@ class ScanCubit extends Cubit<ScanSession> {
     AppModel library,
     PreparedScan scan, {
     ScanEntry? previous,
+    bool trayScan = false,
   }) async {
     final (:card, :review) = scan.decision;
     final int sequence;
@@ -164,7 +222,13 @@ class ScanCubit extends Cubit<ScanSession> {
       sequence = previous.sequence;
     }
     if (!isClosed) {
-      recorded(sequence, card, scan.matches, added: previous == null);
+      recorded(
+        sequence,
+        card,
+        scan.matches,
+        added: previous == null,
+        repeatable: trayScan && previous == null && review == null,
+      );
     }
     return sequence;
   }
@@ -174,15 +238,36 @@ class ScanCubit extends Cubit<ScanSession> {
     Edition card,
     List<Match> matches, {
     bool added = true,
+    bool repeatable = false,
   }) {
     gate.saved(
       card,
       observedNames: closeMatches(matches).map((m) => m.editions.first.name),
     );
-    emit(state.copyWith(lastScan: seq, lastAdded: added ? seq : null));
+    _countdown?.cancel();
+    final repeat =
+        repeatable &&
+        state.mode == ScanMode.tray &&
+        state.options.contains(ScanOption.consecutive);
+    _repeatCard = repeat ? card : null;
+    emit(
+      state.copyWith(
+        lastScan: seq,
+        lastAdded: added ? seq : null,
+        repeatSeconds: repeat ? 2 : 0,
+      ),
+    );
+    if (repeat) {
+      _countdown = Timer.periodic(const Duration(seconds: 1), (timer) {
+        final left = 2 - timer.tick;
+        if (left <= 0) timer.cancel();
+        emit(state.copyWith(repeatSeconds: left.clamp(0, 2)));
+      });
+    }
   }
 
   void undone() {
+    stopRepeats();
     cancelFrame();
     emit(state.copyWith(clearLastScan: true));
   }
@@ -199,7 +284,15 @@ class ScanCubit extends Cubit<ScanSession> {
     return gate.accept(
       matches,
       manual: manual,
+      fast:
+          state.options.contains(ScanOption.essentials) && !state.batch.active,
       minimumScore: state.model.minimumScore,
     );
+  }
+
+  @override
+  Future<void> close() {
+    _countdown?.cancel();
+    return super.close();
   }
 }

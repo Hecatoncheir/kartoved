@@ -13,6 +13,7 @@ import 'style.dart';
 import 'sheets.dart';
 import 'collection_light.dart';
 import 'collection_browser.dart';
+import 'collection_menu.dart';
 import 'album.dart';
 import 'backup_panel.dart';
 import 'catalog_search.dart';
@@ -28,7 +29,7 @@ class CollectionsPage extends StatelessWidget {
   Future<void> _create(BuildContext context) async {
     final title = await showDialog<String>(
       context: context,
-      builder: (_) => const _NameDialog(),
+      builder: (_) => const CollectionNameDialog(),
     );
     if (title == null || !context.mounted) return;
     await context.read<AppModel>().create(title);
@@ -116,9 +117,9 @@ class CollectionsPage extends StatelessWidget {
             ),
             IconButton(
               tooltip: 'Резервная копия',
-              onPressed: state.groups.isEmpty
-                  ? null
-                  : () => panel<void>(context, BackupPanel(model)),
+              onPressed: model.libraryReady
+                  ? () => panel<void>(context, BackupPanel(model))
+                  : null,
               icon: const Icon(Icons.settings_backup_restore_rounded),
             ),
             IconButton(
@@ -143,7 +144,7 @@ class CollectionsPage extends StatelessWidget {
                 state: state,
                 onRetry: model.initialize,
                 onScan: scan,
-                onCreate: state.groups.isEmpty ? null : () => _create(context),
+                onCreate: model.libraryReady ? () => _create(context) : null,
                 onOpenAlbum: (id) => _openAlbum(context, id),
                 onBrowse: ready ? () => _catalog(context, mine: true) : null,
                 onOpenRecent: (entry) =>
@@ -449,42 +450,6 @@ class _ScanDestination extends StatelessWidget {
   );
 }
 
-class _NameDialog extends StatefulWidget {
-  const _NameDialog();
-  @override
-  State<_NameDialog> createState() => _NameDialogState();
-}
-
-class _NameDialogState extends State<_NameDialog> {
-  String value = '';
-  void submit() {
-    if (value.isNotEmpty) Navigator.pop(context, value);
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Новая коллекция'),
-    content: TextField(
-      autofocus: true,
-      maxLength: 80,
-      textInputAction: TextInputAction.done,
-      decoration: const InputDecoration(labelText: 'Название'),
-      onChanged: (v) => setState(() => value = v.trim()),
-      onSubmitted: (_) => submit(),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Отмена'),
-      ),
-      FilledButton(
-        onPressed: value.isEmpty ? null : submit,
-        child: const Text('Создать'),
-      ),
-    ],
-  );
-}
-
 class CollectionPage extends StatefulWidget {
   const CollectionPage({super.key, this.initialName});
   final String? initialName;
@@ -639,6 +604,7 @@ class _CollectionPageState extends State<CollectionPage> {
                     : () => _export(context),
                 icon: const Icon(Icons.ios_share_outlined),
               ),
+              if (state.groups.isNotEmpty) CollectionMenu(state),
             ],
           ),
           body: SafeArea(

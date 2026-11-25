@@ -11,6 +11,42 @@ class CardMove {
 }
 
 extension CardTransfers on History {
+  Future<void> resolvePrinting(
+    int folder,
+    Edition unknown,
+    Edition selected, {
+    int? sequence,
+  }) => _db.transaction((db) async {
+    if (!unknown.needsPrinting ||
+        selected.needsPrinting ||
+        unknown.name != selected.name) {
+      throw ArgumentError('Выберите издание этой карты');
+    }
+    final rows = await db.query(
+      'scans',
+      where: sequence == null ? _printing : '$_printing AND seq=?',
+      whereArgs: [..._printingArgs(folder, unknown), ?sequence],
+      orderBy: 'seq DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) throw StateError('Издание уже уточнено');
+    final row = rows.single;
+    final flagged = await _flag(
+      db,
+      folder,
+      selected,
+      fallback: row['flagged'] == 1,
+    );
+    await _movePortion(
+      db,
+      row['seq'] as int,
+      selected,
+      {...selected.row, 'folder': folder, 'flagged': flagged},
+      1,
+      row['qty'] as int,
+    );
+  });
+
   Future<CardMove> moveCards(int from, int to, Edition card, int quantity) =>
       _db.transaction((db) => _move(db, from, to, card, quantity));
 
@@ -69,7 +105,7 @@ extension CardTransfers on History {
     Transaction db,
     int seq,
     Edition card,
-    Map<String, int> target,
+    Map<String, Object?> target,
     int amount,
     int available,
   ) async {

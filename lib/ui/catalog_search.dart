@@ -278,6 +278,7 @@ class _PrintingsState extends State<_Printings> {
             return const Center(child: CircularProgressIndicator());
           }
           final terms = filter.split(RegExp(r'\s+'));
+          final canAdd = widget.model.state.groups.isNotEmpty;
           final cards = snap.requireData
               .where((c) => terms.every(c.detail.toLowerCase().contains))
               .toList();
@@ -295,6 +296,10 @@ class _PrintingsState extends State<_Printings> {
                 ),
               ),
               if (cards.isEmpty) const Text('Совпадений нет'),
+              if (!canAdd)
+                const Text(
+                  'Чтобы добавлять карты, создайте коллекцию на главном экране.',
+                ),
               Expanded(
                 child: ListView.builder(
                   itemCount: cards.length,
@@ -307,8 +312,8 @@ class _PrintingsState extends State<_Printings> {
                       ),
                       title: Text(card.detail, style: codeText),
                       subtitle: card.foil ? const Text('Только фольга') : null,
-                      trailing: const Icon(Icons.add_rounded),
-                      onTap: () => _add(card),
+                      trailing: canAdd ? const Icon(Icons.add_rounded) : null,
+                      onTap: canAdd ? () => _add(card) : null,
                     );
                   },
                 ),

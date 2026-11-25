@@ -30,7 +30,29 @@ external JSPromise<_TrayPhoto> _trayPhoto(
 @JS('kartoved.readTrayText')
 external JSPromise<JSString> _readTrayText(JSUint8Array bytes);
 @JS('kartoved.warmTray')
-external JSPromise<JSAny?> _warmTray(String engine);
+external JSPromise<JSAny?> _warmTray(String engine, bool essentials);
+@JS('kartoved.readEnglishTitle')
+external JSPromise<JSString> _readEnglishTitle(JSUint8Array bytes);
+@JS('kartoved.traySample')
+external JSPromise<JSUint8Array> _traySample(
+  String file,
+  JSArray<JSNumber> bounds,
+  int side,
+);
+Future<Uint8List?> browserTraySample(String file, TrayArea area) async {
+  try {
+    return (await _traySample(
+      file,
+      area.artwork.map((n) => n.toJS).toList().toJS,
+      TrayArea.sampleSide,
+    ).toDart).toDart;
+  } catch (_) {
+    return null;
+  }
+}
+
+@JS('kartoved.scannerOption')
+external bool browserScannerOption(String name, bool? value);
 
 extension type _TrayPhoto(JSObject _) implements JSObject {
   external JSUint8Array get bytes;
@@ -50,7 +72,7 @@ external JSPromise<JSString?> _pickBackup();
 @JS('kartoved.unlockSound')
 external void unlockBrowserSound();
 @JS('kartoved.chime')
-external JSPromise<JSAny?> _chime(bool targetFound);
+external JSPromise<JSAny?> _chime(String sound);
 @JS('URL.revokeObjectURL')
 external void releaseBrowserPhoto(String file);
 @JS('kartoved.reload')
@@ -107,8 +129,7 @@ class _BrowserCatalogStore extends CatalogStore {
 
 Future<bool> browserGuide(bool? visible) async => _guide(visible?.toJS);
 bool browserTrayPreference(bool? value) => browserScannerTray(value?.toJS);
-Future<void> browserChime(bool targetFound) async =>
-    await _chime(targetFound).toDart;
+Future<void> browserChime(String sound) async => await _chime(sound).toDart;
 
 void openBrowserScryfall(String url) =>
     web.window.open(url, '_blank', 'noopener,noreferrer');
@@ -139,7 +160,10 @@ Future<TrayPhoto> browserTrayPhoto(
 Future<String> browserReadTrayText(Uint8List bytes) async =>
     (await _readTrayText(bytes.toJS).toDart).toDart;
 
-Future<void> browserWarmTray(String engine) async => await _warmTray(engine).toDart;
+Future<void> browserWarmTray(String engine, bool essentials) async =>
+    await _warmTray(engine, essentials).toDart;
+Future<String> browserEnglishTitle(Uint8List bytes) async =>
+    (await _readEnglishTitle(bytes.toJS).toDart).toDart;
 
 Future<Uint8List?> browserCacheRead(String key) async =>
     (await _readCache(key).toDart)?.toDart;

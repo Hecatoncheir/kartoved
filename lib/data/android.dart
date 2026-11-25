@@ -11,12 +11,14 @@ import 'browser.dart';
 import 'recognition_result.dart';
 import 'tray.dart';
 
+enum ScanSound { added, found, review }
+
 class AndroidActions {
   static const _channel = MethodChannel('kartoved/android');
-  static Future<void> chime({bool targetFound = false}) async {
-    if (kIsWeb) return browserChime(targetFound);
+  static Future<void> chime(ScanSound sound) async {
+    if (kIsWeb) return browserChime(sound.name);
     try {
-      await _channel.invokeMethod<void>('chime', targetFound);
+      await _channel.invokeMethod<void>('chime', sound.name);
     } on PlatformException {
       /* Звук может быть отключён. */
     } on MissingPluginException {
@@ -68,9 +70,13 @@ class AndroidActions {
     }
   }
 
-  static Future<void> warmTray(RecognitionModel engine) => kIsWeb
-      ? browserWarmTray(engine.name)
-      : _channel.invokeMethod<void>('warmTray');
+  static Future<void> warmTray(
+    RecognitionModel engine, {
+    bool essentials = false,
+  }) async {
+    if (kIsWeb) return browserWarmTray(engine.name, essentials);
+    if (!essentials) await _channel.invokeMethod<void>('warmTray');
+  }
 
   static Future<TrayPhoto?> trayPhoto({
     String? file,
@@ -146,6 +152,21 @@ class AndroidActions {
       return value ?? true;
     } on MissingPluginException {
       return value ?? true;
+    }
+  }
+
+  static Future<bool> scannerOption(String name, [bool? value]) async {
+    if (kIsWeb) return browserScannerOption(name, value);
+    try {
+      return await _channel.invokeMethod<bool>('scannerOption', {
+            'name': name,
+            'value': value,
+          }) ??
+          false;
+    } on PlatformException {
+      return value ?? false;
+    } on MissingPluginException {
+      return value ?? false;
     }
   }
 

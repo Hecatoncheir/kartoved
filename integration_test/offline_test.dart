@@ -8,7 +8,9 @@ import 'package:kartoved/data/frame.dart';
 import 'package:kartoved/data/android.dart';
 import 'package:kartoved/scan_cubit.dart';
 import 'package:kartoved/scan_decision.dart';
+import 'package:kartoved/scan_processing.dart';
 import 'package:kartoved/data/review.dart';
+import 'package:kartoved/data/tray.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -79,6 +81,22 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
       final russian = File(p.join(temp.path, 'ru.jpg'));
       await russian.writeAsBytes(base64Decode(russianPhoto));
       final russianMatch = (await model.recognize(russian.path)).first;
+      for (final (file, matches, language) in [
+        (photo, cards, 'en'),
+        (russian, [russianMatch], 'ru'),
+      ]) {
+        final quick = await prepareScan(
+          matches,
+          library: model,
+          batch: const BatchSettings(),
+          isCurrent: () => true,
+          rescan: false,
+          essentials: true,
+          file: file.path,
+        );
+        expect(quick?.decision.card.language, language);
+        expect(quick?.decision.card.name, english.name);
+      }
       final candidates = russianMatch.editions;
       final ru = await CardLanguage.identify(
         file: russian.path,
@@ -88,7 +106,22 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
       expect(ru.language, 'ru');
       debugPrint('Автономная проверка: распознавание кадра NV21');
       final frame = _cameraFrame(await russian.readAsBytes());
+      const area = TrayArea(.1, .1, .9, .9);
+      final detector = TrayChangeDetector();
+      final timer = Stopwatch()..start();
+      expect(detector.shouldInspect(area.sampleFrame(frame), 0, 1), isTrue);
       final liveMatches = await model.recognizeFrame(frame);
+      final recognitionMs = timer.elapsedMilliseconds;
+      timer.reset();
+      for (var i = 1; i <= 10; i++) {
+        expect(
+          detector.shouldInspect(area.sampleFrame(frame), i * 100, 1),
+          isFalse,
+        );
+      }
+      debugPrint(
+        'Лоток NV21: распознавание $recognitionMs мс, пропущено 10 одинаковых кадров за ${timer.elapsedMicroseconds} мкс',
+      );
       final scan = ScanCubit()..toggle();
       expect(scan.evaluate(liveMatches), isNull);
       expect(scan.evaluate(liveMatches)?.name, "Bouncer's Beatdown");

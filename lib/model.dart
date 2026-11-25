@@ -12,6 +12,7 @@ import 'data/recognition.dart';
 import 'data/frame.dart';
 import 'data/tray.dart';
 import 'data/keypoint_scan.dart';
+import 'data/language.dart';
 import 'data/moxfield.dart';
 import 'data/review.dart';
 
@@ -22,11 +23,13 @@ class Match {
     this.corners = const [],
     this.fromTitle = false,
     this.titleOnly = false,
+    this.englishTitle = false,
   });
   final List<double> corners;
   final List<Edition> editions;
   final double score;
   final bool fromTitle, titleOnly;
+  final bool englishTitle;
 
   static List<Match> preferMtg(
     List<Match> matches,
@@ -114,6 +117,7 @@ class AppModel extends Cubit<LibraryState> {
   int _folder;
   int _revision = 0;
   int _loadedRevision = 0;
+  bool get libraryReady => _loadedRevision > 0 || state.groups.isNotEmpty;
   Catalog? _base;
   Catalog? get catalog => state.catalog;
   String? get initialError => state.error;
@@ -124,7 +128,7 @@ class AppModel extends Cubit<LibraryState> {
   });
 
   Future<void> _initialize() async {
-    if (state.groups.isEmpty) {
+    if (!libraryReady) {
       try {
         await history.open();
         await _refresh();
@@ -152,14 +156,17 @@ class AppModel extends Cubit<LibraryState> {
   }
 
   Future<void> _refresh() async {
-    final folder = _folder;
     final revision = ++_revision;
     final groups = await history.folders();
+    final folder = groups.any((group) => group.id == _folder)
+        ? _folder
+        : groups.lastOrNull?.id ?? 1;
     final timeline = await history.timeline(folder);
     final additions = await history.latestAdditions();
     final flags = await history.flags(folder);
     final holdings = await history.holdings();
     if (revision != _revision || isClosed) return;
+    _folder = folder;
     _loadedRevision = revision;
     emit(
       LibraryState(
@@ -186,6 +193,18 @@ class AppModel extends Cubit<LibraryState> {
 
   Future<void> create(String title) async =>
       select(await history.create(title));
+
+  Future<void> renameFolder(int folder, String title) async {
+    await history.renameFolder(folder, title);
+    await _refresh();
+  }
+
+  Future<void> deleteFolder(int folder, {int? moveTo}) async {
+    await history.deleteFolder(folder, moveTo: moveTo);
+    _undoable = null;
+    if (_folder == folder && moveTo != null) _folder = moveTo;
+    await _refresh();
+  }
 
   Future<bool> saveBackup() async {
     if (kIsWeb) {
@@ -280,12 +299,13 @@ class AppModel extends Cubit<LibraryState> {
     try {
       final allowOneEdit =
           title.confidence >= .89 && (visual.firstOrNull?.score ?? 0) < .74;
-      final query = (catalog, color, alternate, allowOneEdit);
-      if (_lastTitleQuery != query || _lastTitle == null) {
-        _lastTitleQuery = query;
-        _lastTitle = _scanTitle(catalog, color, alternate, allowOneEdit);
-      }
-      final choice = await _lastTitle;
+      final choice = await _matchTitle(
+        catalog,
+        visual,
+        color,
+        alternate,
+        allowOneEdit,
+      );
       if (choice == null) return visual;
       final (name: name, :fromContrast) = choice;
       final confidence = fromContrast ? contrast!.confidence : title.confidence;
@@ -314,12 +334,37 @@ class AppModel extends Cubit<LibraryState> {
           corners: title.corners,
           fromTitle: true,
           titleOnly: matching.isEmpty,
+          englishTitle: CardLanguage.matchesEnglishTitle(
+            fromContrast ? alternate : color,
+            name,
+          ),
         ),
       ];
     } catch (_) {
       _lastTitle = null;
       return visual;
     }
+  }
+
+  Future<({String name, bool fromContrast})?> _matchTitle(
+    Catalog catalog,
+    List<Match> visual,
+    String? color,
+    String? contrast,
+    bool allowOneEdit,
+  ) async {
+    for (final match in visual) {
+      final name = match.editions.first.name;
+      if (CardLanguage.matchesEnglishTitle(color, name)) {
+        return (name: name, fromContrast: false);
+      }
+    }
+    final query = (catalog, color, contrast, allowOneEdit);
+    if (_lastTitleQuery != query || _lastTitle == null) {
+      _lastTitleQuery = query;
+      _lastTitle = _scanTitle(catalog, color, contrast, allowOneEdit);
+    }
+    return _lastTitle;
   }
 
   Future<({String name, bool fromContrast})?> _scanTitle(
@@ -604,6 +649,22 @@ class AppModel extends Cubit<LibraryState> {
     await _refresh();
   }
 
+  Future<void> resolvePrinting(
+    int folder,
+    Edition unknown,
+    Edition selected, {
+    int? sequence,
+  }) async {
+    await history.resolvePrinting(
+      folder,
+      unknown,
+      selected,
+      sequence: sequence,
+    );
+    _undoable = null;
+    await _refresh();
+  }
+
   Future<RemovedPrinting> remove(Edition card) async {
     _undoable = null;
     final removed = await history.remove(state.folder, card);
@@ -630,9 +691,10 @@ class AppModel extends Cubit<LibraryState> {
     );
     final byPrinting = <String, CardCount>{};
     for (final row in rows) {
-      final card = (await base!.front(row.card))
+      final front = (await base!.front(row.card))
           .withLanguage(row.card.language)
           .withFoil(row.card.foil);
+      final card = row.card.needsPrinting ? front.withoutPrinting() : front;
       final key = card.printingKey;
       final total = (byPrinting[key]?.quantity ?? 0) + row.quantity;
       byPrinting[key] = (card: card, quantity: total);

@@ -45,6 +45,13 @@ const bolt = Edition(
   '149',
   'en',
 );
+const domOpt = Edition(
+  '00000000-0000-4000-8000-000000000123',
+  'Opt',
+  'dom',
+  '60',
+  'en',
+);
 
 class _Catalog extends Catalog {
   _Catalog()
@@ -56,6 +63,9 @@ class _Catalog extends Catalog {
       );
   @override
   Future<List<String>> languages() async => ['en', 'ru'];
+  @override
+  Future<List<Edition>> byName(String name) async =>
+      name == en.name ? [en, ru, domOpt] : [];
   @override
   Future<List<String>> setCodes() async => ['eld', 'dom'];
   @override
@@ -153,7 +163,16 @@ void main() {
     await app.waitFor(
       () => find.text('Учтено в «Моя коллекция»').evaluate().isNotEmpty,
     );
-    expect(find.text(en.name), findsOneWidget);
+    final feedback = find
+        .ancestor(
+          of: find.text('Учтено в «Моя коллекция»'),
+          matching: find.byType(Column),
+        )
+        .first;
+    expect(
+      find.descendant(of: feedback, matching: find.text(en.name)),
+      findsOneWidget,
+    );
     expect(app.model.state.recent.first.card.language, 'und');
     expect(app.model.state.reviews, isEmpty);
     expect(find.text('В коллекцию'), findsNothing);
@@ -168,7 +187,7 @@ void main() {
     );
     await app.waitFor(() => thumbnail.evaluate().isNotEmpty);
     expect(app.scanPhoto(en).readAsBytesSync(), app.photo);
-    expect(app.sounds, 0);
+    expect(app.targetSounds, ['added']);
   });
 
   scannerTest(
@@ -252,33 +271,74 @@ void main() {
     expect(find.text('Авто'), findsNWidgets(2));
   });
 
-  scannerTest('Сигнал ждёт изображение и текст карты', (app) async {
-    await app.openScanner();
-    app.model.matches = const [
-      Match([bolt]),
-    ];
-    await app.tap(find.text('Из фото'));
-    await app.waitFor(() => app.model.state.owned('Lightning Bolt') == 1);
-    var noDescription = false;
-    unawaited(
-      CardReferences.shared
-          .get(bolt.id)
-          .then<void>(
-            (_) => fail('Текст карты отсутствует в тестовом кэше'),
-            onError: (Object _) {
-              noDescription = true;
-            },
-          ),
-    );
-    await app.waitFor(() => noDescription);
-    expect(app.sounds, 0);
-    app.cacheReference(bolt);
-    await app.tap(find.text('Из фото'));
-    await app.waitFor(
-      () => app.model.state.owned('Lightning Bolt') == 2 && app.sounds == 1,
-    );
-    expect(app.model.state.recent.first.card.language, 'en');
-  });
+  scannerTest(
+    'Сигнал сохранения работает без описания, спорный снимок звучит иначе',
+    (app) async {
+      await app.openScanner();
+      app.model.matches = const [
+        Match([bolt]),
+      ];
+      await app.tap(find.text('Из фото'));
+      await app.waitFor(() => app.model.state.owned('Lightning Bolt') == 1);
+      var noDescription = false;
+      unawaited(
+        CardReferences.shared
+            .get(bolt.id)
+            .then<void>(
+              (_) => fail('Текст карты отсутствует в тестовом кэше'),
+              onError: (Object _) {
+                noDescription = true;
+              },
+            ),
+      );
+      await app.waitFor(() => noDescription);
+      expect(app.targetSounds, ['added']);
+      app.model.matches = const [
+        Match([bolt], titleOnly: true, score: .70),
+      ];
+      await app.tap(find.text('Из фото'));
+      await app.waitFor(
+        () => app.model.state.reviews.length == 1 && app.sounds == 2,
+      );
+      expect(app.targetSounds, ['added', 'review']);
+      expect(app.model.state.owned('Lightning Bolt'), 1);
+      expect(app.model.state.recent.first.card.language, 'en');
+    },
+  );
+
+  scannerTest(
+    'Только необходимое пропускает языковой OCR при английском названии и возвращается к нему для русского',
+    (app) async {
+      await app.openScanner();
+      await app.tap(find.byTooltip('Меню сканера'));
+      final quick = find.widgetWithText(
+        CheckedPopupMenuItem<String>,
+        'Только необходимое',
+      );
+      await app.tester.ensureVisible(quick);
+      await app.tap(quick);
+      app.model.matches = const [
+        Match([ru, en], englishTitle: true),
+      ];
+      await app.tap(find.text('Из фото'));
+      await app.waitFor(
+        () => app.model.state.owned('Opt') == 4 && app.sounds == 1,
+      );
+      expect(app.model.state.recent.first.card.language, 'en');
+      expect(app.textReads, 0);
+      await app.reopenScanner();
+      app.model.matches = const [
+        Match([en]),
+      ];
+      app.cardText = 'Целевое существо получает усиление до конца хода';
+      await app.tap(find.text('Из фото'));
+      await app.waitFor(
+        () => app.model.state.owned('Opt') == 5 && app.sounds == 2,
+      );
+      expect(app.model.state.recent.first.card.language, 'ru');
+      expect(app.textReads, 1);
+    },
+  );
 
   scannerTest('Искомые карты включают автоскан и получают отдельный сигнал', (
     app,
@@ -314,7 +374,7 @@ void main() {
     );
     expect(app.model.state.reviews, isEmpty);
     expect(app.model.state.recent.first.card.language, 'ru');
-    expect(app.targetSounds, [true, false]);
+    expect(app.targetSounds, ['found', 'added']);
     await app.openTargets();
     await app.tap(find.byTooltip('Убрать из поиска: Lightning Bolt'));
     await app.tap(find.byTooltip('Back'));
@@ -324,6 +384,40 @@ void main() {
       isTrue,
     );
   });
+
+  scannerTest(
+    'Быстрый скан учитывает карту до уточнения издания и не дублирует её после выбора',
+    (app) async {
+      await app.openScanner();
+      await app.tap(find.byTooltip('Меню сканера'));
+      final quick = find.widgetWithText(
+        CheckedPopupMenuItem<String>,
+        'Только необходимое',
+      );
+      await app.tester.ensureVisible(quick);
+      await app.tap(quick);
+      app.model.matches = const [
+        Match([en, domOpt], englishTitle: true),
+      ];
+      await app.tap(find.text('Из фото'));
+      await app.waitFor(() => app.model.state.recent.first.card.needsPrinting);
+      expect(app.model.state.owned('Opt'), 4);
+      expect(app.model.state.reviews, isEmpty);
+      final entry = app.model.state.recent.first;
+      await app.tap(
+        find.descendant(
+          of: find.byKey(ValueKey(entry.sequence)),
+          matching: find.byType(CardPicture),
+        ),
+      );
+      await app.tap(find.text(domOpt.detail));
+      await app.waitFor(
+        () => app.model.state.recent.first.card.id == domOpt.id,
+      );
+      expect(app.model.state.recent.first.sequence, entry.sequence);
+      expect(app.model.state.owned('Opt'), 4);
+    },
+  );
 
   scannerTest('Выбранная модель сохраняется между сеансами', (app) async {
     await app.openScanner();
@@ -357,7 +451,10 @@ class _ScannerFixture {
   late final model = _ScannerModel(history);
   late final photo = File('test/fixtures/bouncers-beatdown.jpg')
       .readAsBytesSync();
-  final targetSounds = <bool>[];
+  final targetSounds = <String>[];
+  final options = <String, bool>{};
+  String cardText = '';
+  int textReads = 0;
   int get sounds => targetSounds.length;
   var guide = true;
   var savedEngine = RecognitionModel.oracle.name;
@@ -423,7 +520,7 @@ class _ScannerFixture {
     }))!;
     // Flutter Tester в Windows удерживает JPEG, декодированный из файла.
     for (final file in [
-      for (final card in [en, ru, bolt]) ...[
+      for (final card in [en, ru, bolt, domOpt]) ...[
         scanPhoto(card),
         officialPhoto(card),
       ],
@@ -442,7 +539,12 @@ class _ScannerFixture {
     messenger.setMockMethodCallHandler(android, (c) async {
       switch (c.method) {
         case 'readText':
-          return <String, String>{};
+          textReads++;
+          return <String, String>{'text': cardText};
+        case 'scannerOption':
+          final key = c.arguments['name'] as String;
+          return options[key] =
+              c.arguments['value'] as bool? ?? options[key] ?? false;
         case 'scanPhoto':
           return photo;
         case 'scannerGuide':
@@ -452,7 +554,7 @@ class _ScannerFixture {
           savedEngine = (c.arguments as String?) ?? savedEngine;
           return savedEngine;
         case 'chime':
-          targetSounds.add(c.arguments == true);
+          targetSounds.add(c.arguments as String);
       }
       return null;
     });
@@ -523,6 +625,12 @@ class _ScannerFixture {
 
   Future<void> stop() async {
     await tester.pumpWidget(const SizedBox.shrink());
+    // После сигнала чтение описания может ещё держать файл открытым.
+    var descriptionsReady = false;
+    Future.wait([
+      for (final card in [en, ru]) CardReferences.shared.get(card.id),
+    ]).then((_) => descriptionsReady = true);
+    await waitFor(() => descriptionsReady);
     // Даём завершиться чтению миниатюр, начатому перед закрытием сканера.
     for (var i = 0; i < 3; i++) {
       await tester.runAsync(

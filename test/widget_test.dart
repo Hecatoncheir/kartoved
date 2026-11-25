@@ -230,6 +230,10 @@ void main() {
         .state<ScrollableState>(find.byType(Scrollable))
         .position;
     expect(position.pixels, greaterThan(0));
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey(11)), findsOneWidget);
+    expect(find.byKey(const ValueKey(10)), findsNothing);
     await tester.pumpWidget(
       strip([(sequence: 21, card: card, quantity: 1), ...rows]),
     );
@@ -274,8 +278,14 @@ void main() {
     final entering = width(1);
     await show([2, 1]);
     expect(entering, greaterThan(0));
-    expect(entering, lessThan(width(1)));
-    expect(width(2), 0);
+    expect(entering, width(1));
+    expect(width(2), width(1));
+    expect(
+      tester
+          .widgetList<CardPicture>(find.byType(CardPicture))
+          .every((card) => !card.tilt),
+      isTrue,
+    );
     await tester.pump(const Duration(milliseconds: 60));
     final secondWidth = width(2);
     await show([2, 1]);

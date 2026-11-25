@@ -235,13 +235,20 @@ class Edition {
   });
   final String id, name, set, number, language;
   final bool foil;
+  bool get needsPrinting => set.isEmpty && number.isEmpty;
+  Edition withoutPrinting() => Edition(id, name, '', '', language, foil: foil);
   Edition withLanguage(String lang) =>
       Edition(id, name, set, number, lang, foil: foil);
   Edition withFoil(bool value) =>
       Edition(id, name, set, number, language, foil: value);
-  static String keyOf(String id, String language, bool foil) =>
-      '$id/$language/$foil';
-  String get printingKey => keyOf(id, language, foil);
+  static String keyOf(
+    String id,
+    String language,
+    bool foil, {
+    bool needsPrinting = false,
+  }) => '$id/$language/$foil${needsPrinting ? '/?' : ''}';
+  String get printingKey =>
+      keyOf(id, language, foil, needsPrinting: needsPrinting);
   Uri get scryfallPage => Uri(
     scheme: 'https',
     host: 'scryfall.com',
@@ -252,8 +259,13 @@ class Edition {
       if (language != 'en' && language != 'und') language,
     ],
   );
-  String get detail =>
-      '${set.toUpperCase()}  ·  № $number  ·  ${language == 'und' ? 'язык не определён' : language.toUpperCase()}';
+  String get detail {
+    final printing = needsPrinting
+        ? 'Издание не уточнено'
+        : '${set.toUpperCase()}  ·  № $number';
+    return '$printing  ·  ${language == 'und' ? 'язык не определён' : language.toUpperCase()}';
+  }
+
   factory Edition.fromRow(Map<String, Object?> row) => Edition(
     row['id'] as String,
     row['name'] as String,

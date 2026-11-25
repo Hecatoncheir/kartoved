@@ -43,7 +43,6 @@ class LibraryBackup {
           'title': _string(row['title']),
         },
     ];
-    if (!folderIds.contains(1)) throw _invalid;
     final sequences = <int>{};
     final scans = [
       for (final row in _rows(json['scans'])) _scan(row, folderIds, sequences),

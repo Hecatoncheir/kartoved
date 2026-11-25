@@ -120,25 +120,67 @@ async function crop(file, corners) {
   return new Uint8Array(await (await jpeg(photo)).arrayBuffer());
 }
 
-let ocr;
-function loadOcr() {
+let sampleCanvas;
+async function traySample(file, [l, t, r, b], side) {
+  const image = await bitmapFrom(file);
+  try {
+    sampleCanvas ??= canvasSize(side, side);
+    const ctx = sampleCanvas.getContext('2d', {willReadFrequently: true});
+    ctx.drawImage(image, l * image.width, t * image.height, (r-l) * image.width,
+      (b-t) * image.height, 0, 0, side, side);
+    const rgba = ctx.getImageData(0, 0, side, side).data;
+    const light = new Uint8Array(side * side);
+    for (let i = 0; i < light.length; i++) {
+      light[i] = (rgba[4*i] * 77 + rgba[4*i+1] * 150 + rgba[4*i+2] * 29) >> 8;
+    }
+    return light;
+  } finally {
+    image.close();
+  }
+}
+
+let ocr, englishOcr, ocrScript;
+function loadOcrScript() {
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = new URL('runtime/ocr/tesseract.min.js', root);
-    script.onload = () => resolve(globalThis.Tesseract.createWorker(['eng', 'rus'], 1, {
+    script.onload = resolve;
+    script.onerror = () => { script.remove(); reject(new Error('Распознавание текста недоступно')); };
+    document.head.append(script);
+  });
+}
+
+async function loadOcr(languages) {
+  await (ocrScript ??= loadOcrScript().catch(error => { ocrScript = null; throw error; }));
+  return globalThis.Tesseract.createWorker(languages, 1, {
       workerPath: new URL('runtime/ocr/worker.min.js', root).href,
       corePath: new URL('runtime/ocr/core/', root).href,
       langPath: new URL('runtime/ocr/data/', root).href,
       cachePath: 'kartoved-ocr',
       workerBlobURL: false,
       logger: () => {},
-    }));
-    script.onerror = () => { script.remove(); reject(new Error('Распознавание текста недоступно')); };
-    document.head.append(script);
   });
 }
 
-const ocrEngine = () => ocr ??= loadOcr().catch((error) => { ocr = null; throw error; });
+const ocrEngine = () => ocr ??= loadOcr(['eng', 'rus']).catch((error) => { ocr = null; throw error; });
+const englishEngine = () => englishOcr ??= loadOcr(['eng']).then(async worker => {
+  await worker.setParameters({tessedit_pageseg_mode: '7'});
+  return worker;
+}).catch(error => { englishOcr = null; throw error; });
+
+async function readEnglishTitle(bytes) {
+  const bitmap = await createImageBitmap(new Blob([bytes], {type: 'image/jpeg'}));
+  try {
+    const title = canvasSize(520, 64);
+    const {width, height} = bitmap;
+    title.getContext('2d').drawImage(bitmap, width * .062, height * .026, width * .74,
+      height * .051, 0, 0, title.width, title.height);
+    const engine = await englishEngine();
+    return (await engine.recognize(title)).data.text;
+  } finally {
+    bitmap.close();
+  }
+}
 
 async function readTextOnCard(card) {
   const engine = await ocrEngine();
@@ -190,8 +232,8 @@ async function readTrayText(bytes) {
   return readTextOnCard(card);
 }
 
-async function warmTray(engine) {
-  await Promise.all([requestScan({warm: true, engine}), ocrEngine()]);
+async function warmTray(engine, essentials) {
+  await Promise.all([requestScan({warm: true, engine}), essentials ? englishEngine() : ocrEngine()]);
 }
 
 async function readCache(key) {
@@ -274,30 +316,38 @@ function pickBackup() {
 
 let audio;
 const sounds = new Map();
+function loadSound(sound) {
+  if (!sounds.has(sound)) {
+    const buffer = fetch(new URL('runtime/card_' + sound + '.wav', root))
+      .then((response) => response.arrayBuffer())
+      .then((bytes) => audio.decodeAudioData(bytes))
+      .catch(() => { sounds.delete(sound); return null; });
+    sounds.set(sound, buffer);
+  }
+  return sounds.get(sound);
+}
+
 function unlockSound() {
   try {
     audio ??= new AudioContext();
     if (audio.state !== 'running') audio.resume().catch(() => {});
+    for (const sound of ['added', 'found', 'review']) loadSound(sound);
   } catch {
     // Воспроизведение зависит от настроек браузера.
   }
 }
 
-async function chime(targetFound) {
+async function chime(sound) {
   if (audio?.state !== 'running') return;
-  const path = targetFound ? 'runtime/card_found.wav' : 'runtime/card_added.wav';
+  const buffer = await loadSound(sound);
+  if (!buffer) return;
   try {
-    if (!sounds.has(path)) {
-      sounds.set(path, fetch(new URL(path, root))
-        .then((response) => response.arrayBuffer())
-        .then((bytes) => audio.decodeAudioData(bytes)));
-    }
     const source = audio.createBufferSource();
-    source.buffer = await sounds.get(path);
+    source.buffer = buffer;
     source.connect(audio.destination);
     source.start();
   } catch {
-    sounds.delete(path);
+    // Браузер мог приостановить звук после ухода вкладки в фон.
   }
 }
 
@@ -321,6 +371,15 @@ function scannerTray(value) {
   return value ?? true;
 }
 
+function scannerOption(name, value) {
+  const key = 'kartoved-scanner-' + name + ':' + root.pathname;
+  try {
+    if (value == null) return localStorage.getItem(key) === 'true';
+    localStorage.setItem(key, String(value));
+  } catch (_) {}
+  return value ?? false;
+}
+
 async function offlineScanner(prepare) {
   const worker = (await navigator.serviceWorker?.getRegistration(root))?.active;
   if (!worker) throw new Error('Автономный режим пока недоступен');
@@ -340,7 +399,7 @@ async function offlineScanner(prepare) {
   });
 }
 
-globalThis.kartoved = {scan, crop, unmirror, readCardText, trayPhoto, readTrayText, warmTray, guide, scannerModel, scannerTray, chime, unlockSound, readCache, writeCache, unpack, download, pickBackup, reload, offlineScanner};
+globalThis.kartoved = {scan, crop, unmirror, readCardText, readEnglishTitle, traySample, trayPhoto, readTrayText, warmTray, guide, scannerModel, scannerTray, scannerOption, chime, unlockSound, readCache, writeCache, unpack, download, pickBackup, reload, offlineScanner};
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register(new URL('sw.js', root), {updateViaCache: 'none'})

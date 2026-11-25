@@ -8,10 +8,17 @@ import 'style.dart';
 import 'card_tilt.dart';
 
 class CardPicture extends StatefulWidget {
-  const CardPicture(this.card, {super.key, this.slot = 0, this.large = false});
+  const CardPicture(
+    this.card, {
+    super.key,
+    this.slot = 0,
+    this.large = false,
+    this.tilt = true,
+  });
   final Edition card;
   final int slot;
   final bool large;
+  final bool tilt;
   @override
   State<CardPicture> createState() => _CardPictureState();
 }
@@ -71,19 +78,20 @@ class _CardPictureState extends State<CardPicture> {
   }
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    label:
-        '${widget.card.name}, ${widget.card.detail}${widget.card.foil ? ', фольга' : ''}',
-    image: true,
-    child: TiltCard(
-      slot: widget.slot,
-      foil: widget.card.foil,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(5),
-        child: widget.large ? _image(large, _thumbnail) : _thumbnail(),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final picture = ClipRRect(
+      borderRadius: BorderRadius.circular(5),
+      child: widget.large ? _image(large, _thumbnail) : _thumbnail(),
+    );
+    return Semantics(
+      label:
+          '${widget.card.name}, ${widget.card.detail}${widget.card.foil ? ', фольга' : ''}',
+      image: true,
+      child: widget.tilt
+          ? TiltCard(slot: widget.slot, foil: widget.card.foil, child: picture)
+          : picture,
+    );
+  }
 
   Widget _thumbnail() => _image(small, () => _image(scan, _placeholder));
 

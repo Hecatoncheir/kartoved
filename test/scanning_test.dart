@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kartoved/data/catalog.dart';
@@ -14,6 +15,19 @@ import 'package:kartoved/scan_decision.dart';
 import 'package:kartoved/data/review.dart';
 
 void main() {
+  test('Лоток пропускает шум, сразу проверяет смену карты, подтверждение и свежий повтор', () {
+    final changes = TrayChangeDetector();
+    final image = Uint8List.fromList(List.filled(256, 96));
+    final noise = Uint8List.fromList(List.filled(256, 101));
+    expect(changes.shouldInspect(image, 0, 1), isTrue);
+    expect(changes.shouldInspect(noise, 80, 1), isFalse);
+    final changed = Uint8List.fromList(image)..fillRange(48, 96, 60);
+    expect(changes.shouldInspect(changed, 160, 1), isTrue);
+    expect(changes.shouldInspect(changed, 240, 1, force: true), isTrue);
+    expect(changes.shouldInspect(changed, 400, 1), isFalse);
+    expect(changes.shouldInspect(changed, 2250, 1), isTrue);
+    expect(changes.shouldInspect(changed, 2260, 2), isTrue);
+  });
   const en = Edition('en', 'A, "B"', 'snc', '135', 'en');
   const ru = Edition('ru', 'A, "B"', 'snc', '135', 'ru');
   const next = Edition('different', 'Island', 'm21', '265', 'en');
@@ -57,6 +71,54 @@ void main() {
     scan.removeTarget(next.name);
     expect(scan.state.targets, isEmpty);
     expect(scan.state.mode, ScanMode.automatic);
+  });
+
+  testWidgets(
+    'Лоток повторяет подтверждённую карту только по свежему совпадению после отсчёта',
+    (tester) async {
+      final scan = ScanCubit()..setMode(ScanMode.tray);
+      addTearDown(scan.close);
+      scan.recorded(1, ru, a, repeatable: true);
+      expect(scan.repeatFor(a), isNull);
+      scan.setOption(ScanOption.consecutive, true);
+      scan.recorded(2, ru, a, repeatable: true);
+      expect(scan.state.repeatSeconds, 2);
+      await tester.pump(const Duration(seconds: 1));
+      expect(scan.state.repeatSeconds, 1);
+      expect(scan.repeatFor(a), isNull);
+      await tester.pump(const Duration(seconds: 1));
+      expect(scan.state.lastScan, 2);
+      expect(scan.repeatFor([]), isNull);
+      expect(scan.repeatFor(b), isNull);
+      expect(
+        scan.repeatFor(const [
+          Match([en], score: .65),
+        ]),
+        isNull,
+      );
+      expect(scan.repeatFor(a), ru);
+      scan.recorded(3, ru, a, repeatable: true);
+      expect(scan.repeatFor(a), isNull);
+      scan.setMode(ScanMode.automatic);
+      await tester.pump(const Duration(seconds: 3));
+      expect(scan.repeatFor(a), isNull);
+      scan.setMode(ScanMode.tray);
+      scan.recorded(4, ru, a);
+      expect(scan.repeatFor(a), isNull);
+    },
+  );
+
+  test('Быстрый режим сразу принимает уверенное совпадение и сохраняет защиту от дублей', () {
+    final scan = ScanCubit()..setOption(ScanOption.essentials, true);
+    addTearDown(scan.close);
+    expect(scan.evaluate(a), en);
+    scan.recorded(1, en, a);
+    expect(scan.evaluate(a), isNull);
+    const uncertain = [
+      Match([next], score: .70),
+    ];
+    expect(scan.evaluate(uncertain), isNull);
+    expect(scan.evaluate(uncertain), next);
   });
 
   test('MTG уточняет близкие совпадения и сохраняет границу Oracle', () {

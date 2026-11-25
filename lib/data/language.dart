@@ -8,6 +8,16 @@ import 'frame.dart';
 import 'tray.dart';
 
 class CardLanguage {
+  static bool matchesEnglishTitle(String? text, String name) {
+    if (text == null || text.trim().isEmpty) return false;
+    String normalize(String value) =>
+        value.toLowerCase().replaceAll('’', "'").replaceAll(RegExp(r'\s+'), '');
+    final read = normalize(text);
+    final expected = normalize(name);
+    return read == expected ||
+        read.replaceFirst(RegExp(r'[0-9]+[©¢@®™*.+]*$'), '') == expected;
+  }
+
   static const _channel = MethodChannel('kartoved/android');
   static Future<Edition> identify({
     String? file,
@@ -31,12 +41,18 @@ class CardLanguage {
     required List<Edition> options,
     List<double> corners = const [],
     void Function()? onRead,
+    bool languageOnly = false,
   }) async {
     if (options.length == 1) return options;
     onRead?.call();
     if (kIsWeb) {
       try {
-        return candidates(await browserReadText(file!, corners), null, options);
+        return candidates(
+          await browserReadText(file!, corners),
+          null,
+          options,
+          languageOnly: languageOnly,
+        );
       } catch (e) {
         debugPrint('Не удалось прочитать текст карты в браузере: $e');
         return options;
@@ -47,7 +63,12 @@ class CardLanguage {
         'readText',
         scanArguments(file: file, frame: frame, corners: corners),
       );
-      return candidates(result?['text'] ?? '', result?['language'], options);
+      return candidates(
+        result?['text'] ?? '',
+        result?['language'],
+        options,
+        languageOnly: languageOnly,
+      );
     } on PlatformException {
       return options;
     }
@@ -140,9 +161,14 @@ class CardLanguage {
   static List<Edition> candidates(
     String text,
     String? detected,
-    List<Edition> options,
-  ) {
+    List<Edition> options, {
+    bool languageOnly = false,
+  }) {
     final lang = resolve(text, detected, options);
+    final matchingLanguage = options
+        .where((e) => lang == null || e.language == lang)
+        .toList();
+    if (languageOnly) return matchingLanguage;
     // Слова из текста правил могут совпасть с кодом набора (например, ONE).
     // Используем только обозначения, похожие на выходные данные карты.
     final footer = _footer(
@@ -151,9 +177,6 @@ class CardLanguage {
       options.map((e) => e.language).toSet(),
     );
     final numbers = _numbers(text);
-    final matchingLanguage = options
-        .where((e) => lang == null || e.language == lang)
-        .toList();
     final bySet = matchingLanguage.where((e) => e.set == footer?.set).toList();
     final editions = bySet.isEmpty ? matchingLanguage : bySet;
     final byNumber = editions
@@ -184,6 +207,7 @@ class CardLanguage {
     TrayPhoto photo,
     List<Edition> options, {
     void Function()? onRead,
+    bool languageOnly = false,
   }) async {
     if (options.length == 1) return options;
     final quick = trayCandidates(photo.footer, options);
@@ -191,7 +215,12 @@ class CardLanguage {
     onRead?.call();
     try {
       final result = await AndroidActions.readTrayText(photo.bytes);
-      return candidates(result.text, result.language, options);
+      return candidates(
+        result.text,
+        result.language,
+        options,
+        languageOnly: languageOnly,
+      );
     } catch (_) {
       return options;
     }

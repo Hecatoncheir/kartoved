@@ -16,6 +16,7 @@ class ScanChime(context: Context) {
     private val pending = mutableSetOf<Int>()
     private val added: Int
     private val found: Int
+    private val review: Int
 
     init {
         pool.setOnLoadCompleteListener { player, id, status ->
@@ -27,10 +28,15 @@ class ScanChime(context: Context) {
         }
         added = pool.load(context, R.raw.card_added, 1)
         found = pool.load(context, R.raw.card_found, 1)
+        review = pool.load(context, R.raw.card_review, 1)
     }
 
-    fun play(targetFound: Boolean) {
-        val sound = if (targetFound) found else added
+    fun play(outcome: String?) {
+        val sound = when (outcome) {
+            "found" -> found
+            "review" -> review
+            else -> added
+        }
         if (sound in ready) pool.play(sound, 1f, 1f, 1, 0, 1f)
         else pending.add(sound)
     }

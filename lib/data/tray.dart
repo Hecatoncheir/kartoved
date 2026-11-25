@@ -1,7 +1,39 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'frame.dart';
+
 typedef TrayPhoto = ({Uint8List bytes, String footer});
+
+// Эталон меняем только при распознавании: медленный сдвиг карты не потеряется.
+class TrayChangeDetector {
+  Uint8List? _last;
+  int _checked = 0;
+  int? _session;
+
+  bool shouldInspect(
+    Uint8List sample,
+    int now,
+    int session, {
+    bool force = false,
+  }) {
+    final last = _last;
+    if (!force &&
+        _session == session &&
+        last != null &&
+        now - _checked < 2000) {
+      var changed = 0;
+      for (var i = 0; i < sample.length; i++) {
+        if ((sample[i] - last[i]).abs() >= 12) changed++;
+      }
+      if (changed < sample.length ~/ 12) return false;
+    }
+    _last = sample;
+    _checked = now;
+    _session = session;
+    return true;
+  }
+}
 
 class TrayArea {
   const TrayArea(this.left, this.top, this.right, this.bottom);
@@ -9,6 +41,34 @@ class TrayArea {
   final double left, top, right, bottom;
 
   List<double> get bounds => [left, top, right, bottom];
+  // Смотрим внутрь иллюстрации, чтобы движение руки у края лотка не мешало.
+  List<double> get artwork => [
+    left + .14 * (right - left),
+    top + .18 * (bottom - top),
+    left + .86 * (right - left),
+    top + .48 * (bottom - top),
+  ];
+  static const sampleSide = 16;
+
+  Uint8List sampleFrame(PreviewFrame frame) {
+    final [l, t, r, b] = artwork;
+    final sample = Uint8List(sampleSide * sampleSide);
+    for (var i = 0; i < sample.length; i++) {
+      final x = l + (r - l) * ((i % sampleSide) + .5) / sampleSide;
+      final y = t + (b - t) * ((i ~/ sampleSide) + .5) / sampleSide;
+      final (sx, sy) = switch (frame.rotation) {
+        90 => (y, 1 - x),
+        180 => (1 - x, 1 - y),
+        270 => (1 - y, x),
+        _ => (x, y),
+      };
+      sample[i] =
+          frame.bytes[(sy * frame.height).floor() * frame.width +
+              (sx * frame.width).floor()];
+    }
+    return sample;
+  }
+
   List<double> get corners => [
     left,
     top,

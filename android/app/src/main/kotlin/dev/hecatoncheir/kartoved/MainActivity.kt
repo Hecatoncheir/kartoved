@@ -41,8 +41,14 @@ class MainActivity : FlutterActivity() {
                         if (tray != null) settings.edit().putBoolean("tray", tray).apply()
                         reply.success(tray ?: settings.getBoolean("tray", true))
                     }
+                    "scannerOption" -> {
+                        val key = requireNotNull(call.argument<String>("name"))
+                        val value = call.argument<Boolean>("value")
+                        if (value != null) settings.edit().putBoolean(key, value).apply()
+                        reply.success(value ?: settings.getBoolean(key, false))
+                    }
                     "chime" -> {
-                        chime?.play(call.arguments == true)
+                        chime?.play(call.arguments as? String)
                         reply.success(null)
                     }
                     "openScryfall" -> reply.success(openScryfall(call.arguments as? String))

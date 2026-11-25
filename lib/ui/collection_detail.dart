@@ -114,6 +114,14 @@ class _CollectionDetailState extends State<CollectionDetail> {
     );
   }
 
+  Future<void> _resolve(AppModel model) async {
+    final folder = model.state.folder;
+    final card = await choosePrinting(context, model.catalog!, selected);
+    if (!mounted || card == null || model.state.folder != folder) return;
+    await model.resolvePrinting(folder, selected, card);
+    if (mounted) setState(() => selected = card);
+  }
+
   @override
   Widget build(BuildContext context) => BlocBuilder<AppModel, LibraryState>(
     builder: (context, state) {
@@ -169,6 +177,14 @@ class _CollectionDetailState extends State<CollectionDetail> {
                 style: codeText,
               ),
               const SizedBox(height: 12),
+              if (selected.needsPrinting)
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.style_outlined),
+                  label: const Text('Уточнить издание экземпляра'),
+                  onPressed: saving || quantity == 0 || model.catalog == null
+                      ? null
+                      : () => _write(() => _resolve(model)),
+                ),
               Center(
                 child: Frost(
                   radius: 24,
@@ -242,7 +258,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                   ),
               ],
               const SizedBox(height: 12),
-              ScryfallLink(selected),
+              if (!selected.needsPrinting) ScryfallLink(selected),
               CardFacts(selected.id, key: ValueKey(selected.id)),
             ],
           ),

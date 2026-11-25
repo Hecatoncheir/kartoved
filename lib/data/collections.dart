@@ -20,12 +20,14 @@ typedef RemovedPrinting = ({
   bool flagged,
 });
 
-const _printing = 'folder=? AND id=? AND lang=? AND foil=? AND review IS NULL';
+const _printing =
+    'folder=? AND id=? AND lang=? AND foil=? AND set_code=? AND review IS NULL';
 List<Object> _printingArgs(int folder, Edition card) => [
   folder,
   card.id,
   card.language,
   card.foil ? 1 : 0,
+  card.set,
 ];
 
 class History {
@@ -115,13 +117,68 @@ class History {
 
   Future<int> create(String name) => _createFolder(_db, name);
 
-  Future<int> _createFolder(DatabaseExecutor db, String name) {
+  String _folderTitle(String name) {
     final title = name.trim();
     if (title.isEmpty) {
       throw const FormatException('Введите название коллекции');
     }
-    return db.insert('folders', {'title': title});
+    return title;
   }
+
+  Future<int> _createFolder(DatabaseExecutor db, String name) =>
+      db.insert('folders', {'title': _folderTitle(name)});
+
+  Future<void> renameFolder(int folder, String name) async {
+    final changed = await _db.update(
+      'folders',
+      {'title': _folderTitle(name)},
+      where: 'folder=?',
+      whereArgs: [folder],
+    );
+    if (changed == 0) throw StateError('Коллекция уже удалена');
+  }
+
+  Future<void> deleteFolder(int folder, {int? moveTo}) => _db.transaction((
+    db,
+  ) async {
+    if (moveTo == null) {
+      await db.delete('scans', where: 'folder=?', whereArgs: [folder]);
+    } else {
+      if (moveTo == folder) throw ArgumentError('Выберите другую коллекцию');
+      final target = await db.query(
+        'folders',
+        columns: ['folder'],
+        where: 'folder=?',
+        whereArgs: [moveTo],
+      );
+      if (target.isEmpty) {
+        throw StateError('Коллекция для переноса уже удалена');
+      }
+      // Как при переносе одной карты, у совпадающих изданий сохраняем флажок получателя.
+      await db.rawUpdate(
+        '''
+        UPDATE scans SET flagged = COALESCE((
+          SELECT target.flagged FROM scans AS target
+          WHERE target.folder = ? AND target.id = scans.id AND target.lang = scans.lang
+            AND target.foil = scans.foil AND target.set_code = scans.set_code AND target.review IS NULL LIMIT 1
+        ), flagged) WHERE folder = ? AND review IS NULL
+      ''',
+        [moveTo, folder],
+      );
+      await db.update(
+        'scans',
+        {'folder': moveTo},
+        where: 'folder=?',
+        whereArgs: [folder],
+      );
+    }
+    final deleted = await db.delete(
+      'folders',
+      where: 'folder=?',
+      whereArgs: [folder],
+    );
+    if (deleted == 0) throw StateError('Коллекция уже удалена');
+  });
 
   Future<List<CardGroup>> folders() async {
     final rows = await _db.rawQuery(
@@ -257,13 +314,18 @@ class History {
     final rows = await _db.query(
       'scans',
       distinct: true,
-      columns: ['id', 'lang', 'foil'],
+      columns: ['id', 'lang', 'foil', 'set_code', 'number'],
       where: 'folder=? AND flagged=1 AND review IS NULL',
       whereArgs: [folder],
     );
     return {
       for (final r in rows)
-        Edition.keyOf(r['id'] as String, r['lang'] as String, r['foil'] == 1),
+        Edition.keyOf(
+          r['id'] as String,
+          r['lang'] as String,
+          r['foil'] == 1,
+          needsPrinting: r['set_code'] == '' && r['number'] == '',
+        ),
     };
   }
 
@@ -382,7 +444,7 @@ class History {
   }) async {
     final flagFilter = flaggedOnly ? 'AND flagged=1' : '';
     final rows = await _db.rawQuery(
-      'SELECT id,name,set_code,number,lang,foil,sum(qty) AS total FROM scans WHERE folder=? AND review IS NULL $flagFilter GROUP BY id,lang,foil ORDER BY max(seq) DESC',
+      'SELECT id,name,set_code,number,lang,foil,sum(qty) AS total FROM scans WHERE folder=? AND review IS NULL $flagFilter GROUP BY id,lang,foil,set_code ORDER BY max(seq) DESC',
       [folder],
     );
     return rows

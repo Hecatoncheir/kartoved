@@ -42,7 +42,6 @@ class Scanner extends StatefulWidget {
 class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   final scan = ScanCubit();
   final clock = Stopwatch()..start();
-  final _pendingSounds = <int, Object>{};
   CameraController? camera;
   Future<XFile>? _webCapture;
   Timer? _webFrames;
@@ -50,9 +49,17 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   bool reading = false, modal = false, torch = false, writing = false;
   bool _modelSelected = false;
   bool _autoModeChosen = false;
+  final _changedOptions = <ScanOption>{};
+  bool get essentials =>
+      widget.rescan == null &&
+      !scan.state.batch.active &&
+      scan.state.options.contains(ScanOption.essentials);
+  RecognitionModel get engine =>
+      essentials ? RecognitionModel.oracle : scan.state.model;
   RecognitionModel? _warmingTray;
   ScanMode _autoMode = ScanMode.tray;
   TrayArea? _trayArea;
+  final _trayChanges = TrayChangeDetector();
   ScanOutline? _outline;
   (ScanStage, ScanOutline)? _focus;
   Size _frameSize = Size.zero;
@@ -69,6 +76,9 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     unawaited(_restoreGuide());
     unawaited(_restoreModel());
     unawaited(_restoreAutoMode());
+    for (final option in ScanOption.values) {
+      unawaited(_restoreOption(option));
+    }
     unawaited(warmTitleRecognition());
     openCamera(true);
   }
@@ -93,6 +103,24 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     final tray = await AndroidActions.scannerTray();
     if (!mounted || _autoModeChosen) return;
     setState(() => _autoMode = tray ? ScanMode.tray : ScanMode.automatic);
+  }
+
+  Future<void> _restoreOption(ScanOption option) async {
+    final enabled = await AndroidActions.scannerOption(option.name);
+    if (mounted && enabled && !_changedOptions.contains(option)) {
+      frameSession++;
+      scan.setOption(option, true);
+    }
+  }
+
+  void _toggleOption(ScanOption option) {
+    final enabled = !scan.state.options.contains(option);
+    _changedOptions.add(option);
+    frameSession++;
+    nextFrame = 0;
+    _sweep(false);
+    scan.setOption(option, enabled);
+    unawaited(AndroidActions.scannerOption(option.name, enabled));
   }
 
   void _toggleGuide() {
@@ -124,6 +152,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     _sweeping = false;
     nextFrame = 0;
     scan.cancelFrame();
+    scan.stopRepeats();
     cameraQueue = cameraQueue.then((_) => _open(open, token)).catchError((
       Object e,
     ) {
@@ -186,13 +215,13 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     if (c == null) return;
     final watch = scan.state.mode.isAutomatic || scan.state.showGuide;
     if (kIsWeb) {
+      _webFrames?.cancel();
+      _webFrames = null;
       if (watch) {
-        _webFrames ??= Timer.periodic(const Duration(milliseconds: 300), (_) {
+        final interval = scan.state.mode.isAutomatic ? 100 : 300;
+        _webFrames = Timer.periodic(Duration(milliseconds: interval), (_) {
           unawaited(_webFrame(c));
         });
-      } else {
-        _webFrames?.cancel();
-        _webFrames = null;
       }
       return;
     }
@@ -247,15 +276,16 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   }
 
   void _warmSelectedModel() {
-    final engine = scan.state.model;
     if (_warmingTray != engine) unawaited(_warmTray(engine));
   }
 
   Future<void> _warmTray(RecognitionModel engine) async {
     setState(() => _warmingTray = engine);
     try {
-      await AndroidActions.warmTray(engine)
-          .timeout(const Duration(seconds: 30));
+      await AndroidActions.warmTray(
+        engine,
+        essentials: essentials,
+      ).timeout(const Duration(seconds: 30));
     } catch (_) {
       // Следующий кадр повторит загрузку необходимых ресурсов.
     } finally {
@@ -268,6 +298,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   void _recalibrateTray() {
     frameSession++;
     scan.cancelFrame();
+    scan.stopRepeats();
     _sweep(false);
     setState(() => _trayArea = null);
   }
@@ -400,7 +431,11 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     reading = false;
     if (token != frameSession) return;
     if (mounted && _focus != null) setState(() => _focus = null);
-    final interval = scan.state.mode.isAutomatic ? (kIsWeb ? 0 : 220) : 850;
+    final interval = switch (scan.state.mode) {
+      ScanMode.manual => 850,
+      ScanMode.tray => kIsWeb ? 0 : 80,
+      ScanMode.automatic => essentials || kIsWeb ? 0 : 220,
+    };
     nextFrame = clock.elapsedMilliseconds + interval;
   }
 
@@ -426,7 +461,23 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       return;
     }
     final inTray = scan.state.mode == ScanMode.tray;
-    final engine = scan.state.model;
+    final canRepeat = inTray && scan.repeatReady;
+    final area = inTray ? _trayArea : null;
+    if (area != null) {
+      final sample = frame == null
+          ? await browserTraySample(file!, area)
+          : area.sampleFrame(frame);
+      if (!accepts(token)) return;
+      if (sample != null &&
+          !_trayChanges.shouldInspect(
+            sample,
+            clock.elapsedMilliseconds,
+            token,
+            force: canRepeat || scan.needsFullFrame,
+          )) {
+        return;
+      }
+    }
     var showStages = scan.gate.awaitingConfirmation;
     void showProgress(ScanStage stage, List<double> corners) {
       if (!accepts(token) || !scan.state.showGuide) return;
@@ -452,6 +503,14 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         return;
       }
       setState(() => _trayArea = area);
+    }
+    final repeat = canRepeat ? scan.repeatFor(matches) : null;
+    if (repeat != null) {
+      await _save((
+        decision: (card: repeat, review: null),
+        matches: matches,
+      ), trayScan: true);
+      return;
     }
     final ready = scan.evaluate(matches) != null;
     _sweep(ready || scan.gate.awaitingConfirmation);
@@ -527,22 +586,22 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     final (:card, :review) = result.decision;
     setState(() => writing = true);
     try {
-      final seq = await scan.save(library, result, previous: previous);
+      final seq = await scan.save(
+        library,
+        result,
+        previous: previous,
+        trayScan: trayScan,
+      );
       if (!mounted) return;
       final targetFound = scan.state.targets.contains(card.name);
-      final soundOnSave = kIsWeb || trayScan || review != null;
-      if (soundOnSave) {
-        unawaited(AndroidActions.chime(targetFound: targetFound));
-      }
-      if (review == null) {
-        unawaited(
-          _loadScannedCardDetails(
-            seq,
-            card,
-            targetFound,
-            announce: !soundOnSave,
-          ),
-        );
+      final sound = review != null
+          ? ScanSound.review
+          : targetFound
+          ? ScanSound.found
+          : ScanSound.added;
+      unawaited(AndroidActions.chime(sound));
+      if (review == null && !essentials) {
+        unawaited(_loadScannedCardDetails(card));
       }
       if (widget.rescan != null && active) {
         Navigator.pop(context, '${card.name}\n${_outcome(seq)}');
@@ -554,38 +613,26 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
 
   String _outcome(int sequence) {
     final review = library.state.reviews[sequence];
-    if (review == null) return 'Учтено в «${library.state.title}»';
+    if (review == null) {
+      final card = library.state.recent
+          .where((entry) => entry.sequence == sequence)
+          .firstOrNull
+          ?.card;
+      final note = card?.needsPrinting == true ? ' · Издание не уточнено' : '';
+      return 'Учтено в «${library.state.title}»$note';
+    }
     final batch = review.batchLabel;
     return 'На проверке · ${review.reason.label}${batch.isEmpty ? '' : ' ($batch)'}';
   }
 
-  Future<void> _loadScannedCardDetails(
-    int seq,
-    Edition card,
-    bool targetFound, {
-    required bool announce,
-  }) async {
-    final token = _pendingSounds[seq] = Object();
+  Future<void> _loadScannedCardDetails(Edition card) async {
     try {
-      final (_, reference) = await (
+      await (
         Pictures.shared.official(card.id),
         CardReferences.shared.get(card.id),
       ).wait;
-      if (!announce ||
-          !mounted ||
-          _pendingSounds[seq] != token ||
-          !reference.imageAvailable) {
-        return;
-      }
-      final kept = library.state.recent.any(
-        (entry) =>
-            entry.sequence == seq && entry.card.printingKey == card.printingKey,
-      );
-      if (kept) await AndroidActions.chime(targetFound: targetFound);
     } catch (_) {
       // Данные Scryfall можно загрузить позже.
-    } finally {
-      if (_pendingSounds[seq] == token) _pendingSounds.remove(seq);
     }
   }
 
@@ -616,7 +663,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     final onProgress = live ? _manualProgress() : null;
     final matches = await library.recognize(
       file.path,
-      engine: scan.state.model,
+      engine: previous == null ? engine : scan.state.model,
       onProgress: onProgress,
     );
     if (!active) return;
@@ -650,6 +697,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       batch: scan.state.batch,
       isCurrent: accept,
       rescan: previous != null,
+      essentials: essentials,
       file: file,
       frame: frame,
       tray: tray,
@@ -698,7 +746,6 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     frameSession++;
     scan.cancelFrame();
     _sweep(false);
-    if (previous != null) _pendingSounds.remove(previous.sequence);
     setState(() => modal = true);
     XFile? file;
     try {
@@ -723,8 +770,22 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   }
 
   Future<void> _edit(ScanEntry entry) => _paused(() async {
+    scan.stopRepeats();
     if (library.state.reviews.containsKey(entry.sequence)) {
       await chooseReview(context, library, entry.sequence);
+      return;
+    }
+    if (entry.card.needsPrinting) {
+      final folder = library.state.folder;
+      final card = await choosePrinting(context, library.catalog!, entry.card);
+      if (card != null && active && folder == library.state.folder) {
+        await library.resolvePrinting(
+          folder,
+          entry.card,
+          card,
+          sequence: entry.sequence,
+        );
+      }
       return;
     }
     final variants = await library.catalog!.variants(entry.card);
@@ -734,7 +795,6 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       ResultSheet([Match(variants)], entry.card, action: 'Сохранить'),
     );
     if (edition != null && active) {
-      _pendingSounds.remove(entry.sequence);
       await library.replace(entry, edition);
     }
   });
@@ -815,7 +875,6 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   }
 
   Future<void> _undo(int seq) => _paused(() async {
-    _pendingSounds.remove(seq);
     await library.discardScan(seq);
     if (mounted) scan.undone();
   });
@@ -838,18 +897,20 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   };
 
   String? get _modelLabel {
-    final model = switch (scan.state.model) {
-      RecognitionModel.oracle => 'Oracle',
-      RecognitionModel.mtgIdentification => 'MTG + Oracle',
-      RecognitionModel.keypoints => 'Ключевые точки',
-    };
+    final model = essentials
+        ? 'Только необходимое'
+        : switch (scan.state.model) {
+            RecognitionModel.oracle => 'Oracle',
+            RecognitionModel.mtgIdentification => 'MTG + Oracle',
+            RecognitionModel.keypoints => 'Ключевые точки',
+          };
     if (scan.state.mode == ScanMode.tray) {
       if (_warmingTray != null) return 'Лоток · загрузка моделей';
       return _trayArea == null
           ? 'Лоток · положите карту ровно'
           : 'Лоток · $model';
     }
-    return scan.state.model == RecognitionModel.oracle ? null : model;
+    return engine == RecognitionModel.oracle && !essentials ? null : model;
   }
 
   Widget _header(String title) => Row(
@@ -878,6 +939,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
             if ((scan.state.showGuide && _focus != null) ||
                 scan.state.batch.active ||
                 scan.state.targets.isNotEmpty ||
+                essentials ||
                 scan.state.model != RecognitionModel.oracle ||
                 scan.state.mode == ScanMode.tray)
               Text(
@@ -920,9 +982,32 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                 _torch();
               case 'calibrateTray':
                 _recalibrateTray();
+              case 'essentials':
+                _toggleOption(ScanOption.essentials);
+              case 'consecutive':
+                _toggleOption(ScanOption.consecutive);
             }
           },
           itemBuilder: (_) => [
+            if (widget.rescan == null)
+              for (final option in ScanOption.values)
+                CheckedPopupMenuItem<String>(
+                  value: option.name,
+                  checked: scan.state.options.contains(option),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(option.label),
+                      Text(
+                        option == ScanOption.consecutive
+                            ? 'В лотке · повтор через 2 с'
+                            : 'Сначала английское название',
+                        style: const TextStyle(color: muted, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
             PopupMenuItem(
               value: 'model',
               enabled: library.catalog != null,
@@ -1070,7 +1155,13 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                       child: ScanStrip(
                         target == null ? state.recent : [target],
                         target == null ? _edit : null,
-                        pending: state.reviews.keys.toSet(),
+                        pending: {
+                          for (final e
+                              in (target == null ? state.recent : [target])
+                                  .take(ScanStrip.limit))
+                            if (state.reviews.containsKey(e.sequence))
+                              e.sequence,
+                        },
                         rescan: modal || writing
                             ? null
                             : (entry) => _manual(
@@ -1095,7 +1186,9 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                 _ScanFeedback(
                   name: displayed.card.name,
                   result: target == null
-                      ? _outcome(displayed.sequence)
+                      ? (scan.state.repeatSeconds > 0
+                            ? '${_outcome(displayed.sequence)} · Повтор через ${scan.state.repeatSeconds} с'
+                            : _outcome(displayed.sequence))
                       : 'Пересъёмка спорной карты',
                 ),
             ],

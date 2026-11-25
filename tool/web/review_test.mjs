@@ -59,6 +59,14 @@ try {
   }), false, 'У браузера осталось соединение');
   await page.reload();
   await enableSemantics();
+  for (const sound of ['added', 'found', 'review']) {
+    const header = await page.evaluate(async (name) => {
+      const response = await fetch('runtime/card_' + name + '.wav');
+      const bytes = await response.arrayBuffer();
+      return new TextDecoder().decode(bytes.slice(0, 4));
+    }, sound);
+    assert.equal(header, 'RIFF', 'Сигнал должен быть доступен без сети: ' + sound);
+  }
   await album.click();
   await filter(2).click();
   await button('Переснять ' + second.name).waitFor();
