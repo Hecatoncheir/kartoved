@@ -15,6 +15,8 @@ import 'scan_decision.dart';
 
 typedef PreparedScan = ({ScanDecision decision, List<Match> matches});
 
+enum TrayRepeatCheck { firstCopy, replacement }
+
 Future<PreparedScan?> prepareScan(
   List<Match> detected, {
   required AppModel library,
@@ -26,16 +28,23 @@ Future<PreparedScan?> prepareScan(
   TrayArea? tray,
   bool refineTrayMatch = false,
   bool essentials = false,
+  TrayRepeatCheck? repeatCheck,
   ScanProgress? onProgress,
 }) async {
   final corners = tray?.corners ?? detected.first.corners;
-  final quick = essentials && !rescan && !batch.active;
+  final quick =
+      essentials &&
+      !rescan &&
+      !batch.active &&
+      repeatCheck != TrayRepeatCheck.replacement;
   final readFooter =
       !quick &&
       tray != null &&
-      (refineTrayMatch || detected.first.editions.length > 1);
+      (repeatCheck != null ||
+          refineTrayMatch ||
+          detected.first.editions.length > 1);
   if (readFooter) onProgress?.call(ScanStage.footer, corners);
-  final photo = await _preparePhoto(
+  var photo = await _preparePhoto(
     tray,
     readFooter: readFooter,
     needTitle: quick && kIsWeb,
@@ -65,25 +74,42 @@ Future<PreparedScan?> prepareScan(
         )
       : null;
   if (!isCurrent()) return null;
+  // Прежде чем запомнить экземпляр для серии, проверяем непрочитанное название по выходным данным.
+  final verifyPrinting = repeatCheck != null && englishEdition == null;
+  if (verifyPrinting && tray != null && !readFooter) {
+    onProgress?.call(ScanStage.footer, corners);
+    photo =
+        await AndroidActions.trayPhoto(
+          file: file,
+          frame: frame,
+          area: tray,
+          readFooter: true,
+        ) ??
+        photo;
+    if (!isCurrent()) return null;
+  }
   Future<List<Edition>> readOptions() async {
-    final candidates = quick
+    final candidates = verifyPrinting
+        ? await _printingOptions(library.catalog, options)
+        : quick
         ? await _languageOptions(library.catalog, options)
         : options;
     if (!isCurrent()) return candidates;
-    return photo == null
+    final currentPhoto = photo;
+    return currentPhoto == null
         ? CardLanguage.readOptions(
             file: file,
             frame: frame,
             corners: corners,
             options: candidates,
             onRead: showText,
-            languageOnly: quick,
+            languageOnly: quick && !verifyPrinting,
           )
         : CardLanguage.readTrayOptions(
-            photo,
+            currentPhoto,
             candidates,
             onRead: showText,
-            languageOnly: quick,
+            languageOnly: quick && !verifyPrinting,
           );
   }
 
@@ -97,10 +123,12 @@ Future<PreparedScan?> prepareScan(
       (matches.first.score < .75 ||
           closeMatches(matches)
               .any((m) => m.editions.first.name != options.first.name));
-  var decision = rescan || matches.first.titleOnly || ambiguous
+  var decision = verifyPrinting
+      ? decideTrayRepeat(matches, evidence, batch)
+      : rescan || matches.first.titleOnly || ambiguous
       ? decideScan(matches, evidence, batch)
       : (card: selectScannedEdition(evidence, batch), review: null);
-  if (quick && decision.review == null) {
+  if (quick && !verifyPrinting && decision.review == null) {
     final card = decision.card;
     final candidates = closeMatches(matches)
         .expand((m) => m.editions)
@@ -123,6 +151,17 @@ Future<PreparedScan?> prepareScan(
     isCurrent,
   );
   return (decision: decision, matches: matches);
+}
+
+Future<List<Edition>> _printingOptions(
+  Catalog? catalog,
+  List<Edition> artwork,
+) async {
+  final editions =
+      await catalog?.byName(artwork.first.name) ?? const <Edition>[];
+  return {
+    for (final e in [...artwork, ...editions]) e.id: e,
+  }.values.toList();
 }
 
 Future<TrayPhoto?> _preparePhoto(

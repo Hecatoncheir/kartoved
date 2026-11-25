@@ -121,15 +121,21 @@ async function crop(file, corners) {
 }
 
 let sampleCanvas;
-async function traySample(file, [l, t, r, b], side) {
+async function traySample(file, bounds, side) {
   const image = await bitmapFrom(file);
   try {
-    sampleCanvas ??= canvasSize(side, side);
+    const height = side * (bounds.length / 4);
+    if (sampleCanvas?.width !== side || sampleCanvas.height !== height) {
+      sampleCanvas = canvasSize(side, height);
+    }
     const ctx = sampleCanvas.getContext('2d', {willReadFrequently: true});
-    ctx.drawImage(image, l * image.width, t * image.height, (r-l) * image.width,
-      (b-t) * image.height, 0, 0, side, side);
-    const rgba = ctx.getImageData(0, 0, side, side).data;
-    const light = new Uint8Array(side * side);
+    for (let i = 0; i < bounds.length; i += 4) {
+      const [l,t,r,b] = bounds.slice(i, i+4);
+      ctx.drawImage(image, l * image.width, t * image.height, (r-l) * image.width,
+        (b-t) * image.height, 0, side * (i / 4), side, side);
+    }
+    const rgba = ctx.getImageData(0, 0, side, height).data;
+    const light = new Uint8Array(side * height);
     for (let i = 0; i < light.length; i++) {
       light[i] = (rgba[4*i] * 77 + rgba[4*i+1] * 150 + rgba[4*i+2] * 29) >> 8;
     }

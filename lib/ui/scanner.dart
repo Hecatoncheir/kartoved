@@ -462,12 +462,16 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     }
     final inTray = scan.state.mode == ScanMode.tray;
     final canRepeat = inTray && scan.repeatReady;
+    final consecutive =
+        inTray && scan.state.options.contains(ScanOption.consecutive);
+    Future<Uint8List?> sampleTray(TrayArea area) async => frame == null
+        ? browserTraySample(file!, area, details: consecutive)
+        : area.sampleFrame(frame, details: consecutive);
     final area = inTray ? _trayArea : null;
     if (area != null) {
-      final sample = frame == null
-          ? await browserTraySample(file!, area)
-          : area.sampleFrame(frame);
+      final sample = await sampleTray(area);
       if (!accepts(token)) return;
+      if (consecutive) scan.observeTray(sample);
       if (sample != null &&
           !_trayChanges.shouldInspect(
             sample,
@@ -495,6 +499,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       onProgress: scan.state.showGuide ? showProgress : null,
     );
     if (!accepts(token)) return;
+    if (consecutive && matches.isEmpty) scan.observeTray(null);
     if (inTray && _trayArea == null) {
       final area = TrayArea.calibrate(matches.firstOrNull?.corners ?? const []);
       if (area == null) {
@@ -503,16 +508,21 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         return;
       }
       setState(() => _trayArea = area);
+      if (consecutive) {
+        final sample = await sampleTray(area);
+        if (!accepts(token)) return;
+        scan.observeTray(sample);
+      }
     }
     final repeat = canRepeat ? scan.repeatFor(matches) : null;
-    if (repeat != null) {
+    if (repeat != null && repeat.reuse) {
       await _save((
-        decision: (card: repeat, review: null),
+        decision: (card: repeat.card, review: null),
         matches: matches,
       ), trayScan: true);
       return;
     }
-    final ready = scan.evaluate(matches) != null;
+    final ready = repeat != null || scan.evaluate(matches) != null;
     _sweep(ready || scan.gate.awaitingConfirmation);
     if (!ready) return;
     showStages = true;
@@ -522,6 +532,11 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         file: file,
         frame: frame,
         tray: inTray ? _trayArea : null,
+        repeatCheck: !consecutive
+            ? null
+            : repeat == null
+            ? TrayRepeatCheck.firstCopy
+            : TrayRepeatCheck.replacement,
         refineTrayMatch: inTray && engine == RecognitionModel.keypoints,
         accept: () => accepts(token),
         onProgress: showProgress,
@@ -686,6 +701,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     String? file,
     PreviewFrame? frame,
     TrayArea? tray,
+    TrayRepeatCheck? repeatCheck,
     bool refineTrayMatch = false,
     required bool Function() accept,
     ScanEntry? previous,
@@ -701,6 +717,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       file: file,
       frame: frame,
       tray: tray,
+      repeatCheck: repeatCheck,
       refineTrayMatch: refineTrayMatch,
       onProgress: onProgress,
     );

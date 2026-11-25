@@ -55,6 +55,7 @@ jobs:
           server=$!
           trap 'kill "$server"' EXIT
           node tool/web/review_test.mjs http://127.0.0.1:8080/kartoved/
+          node tool/web/tray_repeat_test.mjs http://127.0.0.1:8080/kartoved/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build/web

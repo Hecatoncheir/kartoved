@@ -81,6 +81,9 @@ void main() {
       scan.recorded(1, ru, a, repeatable: true);
       expect(scan.repeatFor(a), isNull);
       scan.setOption(ScanOption.consecutive, true);
+      final image = Uint8List(4 * TrayArea.detailSide * TrayArea.detailSide)
+        ..fillRange(0, 4096, 100);
+      scan.observeTray(image);
       scan.recorded(2, ru, a, repeatable: true);
       expect(scan.state.repeatSeconds, 2);
       await tester.pump(const Duration(seconds: 1));
@@ -96,7 +99,18 @@ void main() {
         ]),
         isNull,
       );
-      expect(scan.repeatFor(a), ru);
+      expect(scan.repeatFor(a), (card: ru, reuse: true));
+      expect(
+        scan.repeatFor(const [
+          Match([en]),
+        ])?.reuse,
+        isFalse,
+      );
+      final textChanged = Uint8List.fromList(image)..fillRange(3072, 3092, 55);
+      scan.observeTray(textChanged);
+      expect(scan.repeatFor(a)?.reuse, isFalse);
+      scan.observeTray(image);
+      expect(scan.repeatFor(a)?.reuse, isFalse);
       scan.recorded(3, ru, a, repeatable: true);
       expect(scan.repeatFor(a), isNull);
       scan.setMode(ScanMode.automatic);
@@ -107,6 +121,27 @@ void main() {
       expect(scan.repeatFor(a), isNull);
     },
   );
+
+  test('Свежие выходные данные различают две Opt и сохраняют неясный выпуск без номера', () {
+    const first = Edition('eld-en', 'Opt', 'eld', '59', 'en');
+    const second = Edition('dom-ru', 'Opt', 'dom', '60', 'ru');
+    const other = Edition('eld-ru', 'Opt', 'eld', '59', 'ru');
+    const variants = [first, second, other];
+    const matches = [
+      Match([first]),
+    ];
+    ScanDecision read(String text) => decideTrayRepeat(
+      matches,
+      CardLanguage.candidates(text, null, variants),
+      const BatchSettings(),
+    );
+    expect(read('060/269 C DOM • RU').card, second);
+    final unknown = read('Целевое существо под вашим контролем');
+    expect(unknown.review, isNull);
+    expect(unknown.card.language, 'ru');
+    expect(unknown.card.needsPrinting, isTrue);
+    expect(read('').review?.reason, ReviewReason.language);
+  });
 
   test('Быстрый режим сразу принимает уверенное совпадение и сохраняет защиту от дублей', () {
     final scan = ScanCubit()..setOption(ScanOption.essentials, true);

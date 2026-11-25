@@ -21,6 +21,20 @@ List<Match> closeMatches(List<Match> matches) => matches
 
 typedef ScanDecision = ({Edition card, ScanReview? review});
 
+ScanDecision decideTrayRepeat(
+  List<Match> matches,
+  List<Edition> evidence,
+  BatchSettings batch,
+) {
+  final best = matches.first;
+  final sameName = closeMatches(matches)
+      .every((m) => m.editions.first.name == best.editions.first.name);
+  final decision = decideScan(sameName ? [best] : matches, evidence, batch);
+  return decision.review?.reason == ReviewReason.printing
+      ? (card: decision.card.withoutPrinting(), review: null)
+      : decision;
+}
+
 Edition selectScannedEdition(List<Edition> evidence, BatchSettings batch) {
   final matching = evidence.where(batch.accepts).toList();
   final options = matching.isEmpty ? evidence : matching;

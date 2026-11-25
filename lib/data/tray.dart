@@ -21,6 +21,7 @@ class TrayChangeDetector {
     if (!force &&
         _session == session &&
         last != null &&
+        last.length == sample.length &&
         now - _checked < 2000) {
       var changed = 0;
       for (var i = 0; i < sample.length; i++) {
@@ -35,36 +36,72 @@ class TrayChangeDetector {
   }
 }
 
+bool sameTrayPrinting(Uint8List saved, Uint8List current) {
+  const pixels = TrayArea.detailSide * TrayArea.detailSide;
+  if (saved.length != 4 * pixels || saved.length != current.length) {
+    return false;
+  }
+  for (var start = 0; start < saved.length; start += pixels) {
+    var changed = 0;
+    for (var i = start; i < start + pixels; i++) {
+      if ((saved[i] - current[i]).abs() >= 10) changed++;
+      // Несколько изменившихся букв в одной строке уже требуют чтения.
+      if (changed >= 6) return false;
+    }
+  }
+  return true;
+}
+
 class TrayArea {
   const TrayArea(this.left, this.top, this.right, this.bottom);
 
   final double left, top, right, bottom;
 
   List<double> get bounds => [left, top, right, bottom];
-  // Смотрим внутрь иллюстрации, чтобы движение руки у края лотка не мешало.
-  List<double> get artwork => [
-    left + .14 * (right - left),
-    top + .18 * (bottom - top),
-    left + .86 * (right - left),
-    top + .48 * (bottom - top),
-  ];
-  static const sampleSide = 16;
+  // Для повтора сравниваем также название, текст правил и выходные данные.
+  List<double> sampleRegions(bool details) {
+    final regions = [
+      (.14, .18, .86, .48),
+      if (details) ...[
+        (.07, .043, .76, .095),
+        (.08, .65, .91, .85),
+        (.045, .922, .46, .977),
+      ],
+    ];
+    return [
+      for (final (l, t, r, b) in regions) ...[
+        left + l * (right - left),
+        top + t * (bottom - top),
+        left + r * (right - left),
+        top + b * (bottom - top),
+      ],
+    ];
+  }
 
-  Uint8List sampleFrame(PreviewFrame frame) {
-    final [l, t, r, b] = artwork;
-    final sample = Uint8List(sampleSide * sampleSide);
-    for (var i = 0; i < sample.length; i++) {
-      final x = l + (r - l) * ((i % sampleSide) + .5) / sampleSide;
-      final y = t + (b - t) * ((i ~/ sampleSide) + .5) / sampleSide;
-      final (sx, sy) = switch (frame.rotation) {
-        90 => (y, 1 - x),
-        180 => (1 - x, 1 - y),
-        270 => (1 - y, x),
-        _ => (x, y),
-      };
-      sample[i] =
-          frame.bytes[(sy * frame.height).floor() * frame.width +
-              (sx * frame.width).floor()];
+  static const detailSide = 32;
+  static int sampleSide(bool details) => details ? detailSide : 16;
+
+  Uint8List sampleFrame(PreviewFrame frame, {bool details = false}) {
+    final bounds = sampleRegions(details);
+    final side = sampleSide(details);
+    final pixels = side * side;
+    final sample = Uint8List(pixels * (bounds.length ~/ 4));
+    for (var region = 0; region < bounds.length; region += 4) {
+      final l = bounds[region], t = bounds[region + 1];
+      final w = bounds[region + 2] - l, h = bounds[region + 3] - t;
+      for (var i = 0; i < pixels; i++) {
+        final x = l + w * ((i % side) + .5) / side;
+        final y = t + h * ((i ~/ side) + .5) / side;
+        final (sx, sy) = switch (frame.rotation) {
+          90 => (y, 1 - x),
+          180 => (1 - x, 1 - y),
+          270 => (1 - y, x),
+          _ => (x, y),
+        };
+        sample[(region ~/ 4) * pixels + i] =
+            frame.bytes[(sy * frame.height).floor() * frame.width +
+                (sx * frame.width).floor()];
+      }
     }
     return sample;
   }

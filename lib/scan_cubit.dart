@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'model.dart';
 import 'data/catalog.dart';
 import 'data/recognition_result.dart';
+import 'data/tray.dart';
 import 'scan_decision.dart';
 import 'scan_processing.dart';
 
@@ -138,20 +140,41 @@ class ScanCubit extends Cubit<ScanSession> {
   final gate = ScanGate();
   Timer? _countdown;
   Edition? _repeatCard;
+  Set<String> _repeatCandidates = {};
+  Uint8List? _savedSample, _currentSample;
   bool get repeatReady => _repeatCard != null && state.repeatSeconds == 0;
 
-  Edition? repeatFor(List<Match> matches) {
+  void observeTray(Uint8List? sample) {
+    _currentSample = sample;
+    final saved = _savedSample;
+    if (saved != null && (sample == null || !sameTrayPrinting(saved, sample))) {
+      _savedSample = null;
+    }
+  }
+
+  ({Edition card, bool reuse})? repeatFor(List<Match> matches) {
     if (_force || !repeatReady || matches.isEmpty) return null;
     final best = matches.first;
-    if (best.score < .75 || best.editions.first.name != _repeatCard!.name) {
+    final previous = _repeatCard!;
+    if (best.score < .75 || best.editions.first.name != previous.name) {
       return null;
     }
-    return _repeatCard;
+    final reuse =
+        _savedSample != null &&
+        !best.titleOnly &&
+        !(best.englishTitle && previous.language != 'en') &&
+        closeMatches(matches)
+            .every((m) => m.editions.first.name == previous.name) &&
+        best.editions.length == _repeatCandidates.length &&
+        best.editions.every((e) => _repeatCandidates.contains(e.id));
+    return (card: previous, reuse: reuse);
   }
 
   void stopRepeats() {
     _countdown?.cancel();
     _repeatCard = null;
+    _savedSample = null;
+    _currentSample = null;
     if (state.repeatSeconds != 0) emit(state.copyWith(repeatSeconds: 0));
   }
 
@@ -250,6 +273,10 @@ class ScanCubit extends Cubit<ScanSession> {
         state.mode == ScanMode.tray &&
         state.options.contains(ScanOption.consecutive);
     _repeatCard = repeat ? card : null;
+    _repeatCandidates = repeat
+        ? {for (final e in matches.first.editions) e.id}
+        : {};
+    _savedSample = repeat ? (_savedSample ?? _currentSample) : null;
     emit(
       state.copyWith(
         lastScan: seq,

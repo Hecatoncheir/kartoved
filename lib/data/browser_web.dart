@@ -39,12 +39,16 @@ external JSPromise<JSUint8Array> _traySample(
   JSArray<JSNumber> bounds,
   int side,
 );
-Future<Uint8List?> browserTraySample(String file, TrayArea area) async {
+Future<Uint8List?> browserTraySample(
+  String file,
+  TrayArea area, {
+  bool details = false,
+}) async {
   try {
     return (await _traySample(
       file,
-      area.artwork.map((n) => n.toJS).toList().toJS,
-      TrayArea.sampleSide,
+      area.sampleRegions(details).map((n) => n.toJS).toList().toJS,
+      TrayArea.sampleSide(details),
     ).toDart).toDart;
   } catch (_) {
     return null;

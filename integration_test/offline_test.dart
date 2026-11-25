@@ -96,6 +96,20 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
         );
         expect(quick?.decision.card.language, language);
         expect(quick?.decision.card.name, english.name);
+        final repeat = await prepareScan(
+          matches,
+          library: model,
+          batch: const BatchSettings(),
+          isCurrent: () => true,
+          rescan: false,
+          essentials: true,
+          repeatCheck: TrayRepeatCheck.replacement,
+          tray: const TrayArea(0, 0, 1, 1),
+          file: file.path,
+        );
+        expect(repeat?.decision.review, isNull);
+        expect(repeat?.decision.card.language, language);
+        expect(repeat?.decision.card.name, english.name);
       }
       final candidates = russianMatch.editions;
       final ru = await CardLanguage.identify(

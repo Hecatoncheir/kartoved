@@ -27,8 +27,11 @@ Future<TrayPhoto> browserTrayPhoto(
 Future<String> browserReadTrayText(Uint8List bytes) => _unsupported();
 Future<void> browserWarmTray(String engine, bool essentials) => _unsupported();
 Future<String> browserEnglishTitle(Uint8List bytes) => _unsupported();
-Future<Uint8List?> browserTraySample(String file, TrayArea area) =>
-    _unsupported();
+Future<Uint8List?> browserTraySample(
+  String file,
+  TrayArea area, {
+  bool details = false,
+}) => _unsupported();
 bool browserScannerOption(String name, bool? value) => _unsupported();
 Future<Uint8List?> browserCacheRead(String key) => _unsupported();
 Future<void> browserCacheWrite(String key, Uint8List bytes) => _unsupported();
