@@ -29,9 +29,9 @@ class ScryfallLink extends StatelessWidget {
 }
 
 class CardFacts extends StatefulWidget {
-  const CardFacts(this.printingId, {super.key});
+  const CardFacts(this.edition, {super.key});
 
-  final String printingId;
+  final Edition edition;
 
   @override
   State<CardFacts> createState() => _CardFactsState();
@@ -39,11 +39,11 @@ class CardFacts extends StatefulWidget {
 
 class _CardFactsState extends State<CardFacts> {
   late Future<CardReference> reference = CardReferences.shared.get(
-    widget.printingId,
+    widget.edition.id,
   );
 
   void _retry() => setState(() {
-    reference = CardReferences.shared.get(widget.printingId);
+    reference = CardReferences.shared.get(widget.edition.id);
   });
 
   @override
@@ -75,8 +75,9 @@ class _CardFactsState extends State<CardFacts> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final face in card.faces) _FaceText(face),
-          _EditionFacts(card),
+          for (final face in card.faces)
+            _FaceText(face, showPrinting: !widget.edition.needsPrinting),
+          if (!widget.edition.needsPrinting) _EditionFacts(card),
           _Rules(card.rulings, _retry),
           if (card.legalities.isNotEmpty) _Formats(card.legalities),
           const Padding(
@@ -93,14 +94,15 @@ class _CardFactsState extends State<CardFacts> {
 }
 
 class _FaceText extends StatelessWidget {
-  const _FaceText(this.face);
+  const _FaceText(this.face, {required this.showPrinting});
 
   final CardFaceText face;
+  final bool showPrinting;
 
   @override
   Widget build(BuildContext context) {
     final details = [face.type, face.mana, face.stats].nonNulls.join(' · ');
-    final rules = face.printed ?? face.oracle;
+    final rules = showPrinting ? face.printed ?? face.oracle : face.oracle;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
@@ -131,11 +133,11 @@ class _FaceText extends StatelessWidget {
                 ),
               ],
             ),
-          if (face.flavor case final text?)
+          if (showPrinting && face.flavor != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                text,
+                face.flavor!,
                 style: const TextStyle(
                   color: muted,
                   fontStyle: FontStyle.italic,

@@ -259,7 +259,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
               ],
               const SizedBox(height: 12),
               if (!selected.needsPrinting) ScryfallLink(selected),
-              CardFacts(selected.id, key: ValueKey(selected.id)),
+              CardFacts(selected, key: ValueKey(selected.id)),
             ],
           ),
         ),

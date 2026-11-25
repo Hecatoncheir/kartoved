@@ -145,7 +145,7 @@ class _ResultSheetState extends State<ResultSheet> {
           key: ValueKey(card.id),
           tilePadding: EdgeInsets.zero,
           title: const Text('Текст и правила'),
-          children: [CardFacts(card.id)],
+          children: [CardFacts(card, key: ValueKey(card.id))],
         ),
       ],
     ),
