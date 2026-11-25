@@ -40,6 +40,10 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: |
+            adb shell settings put system screen_off_timeout 1800000
+            adb shell input keyevent KEYCODE_WAKEUP
+            adb shell wm dismiss-keyguard
+            adb shell cmd connectivity airplane-mode enable
             adb shell svc wifi disable
             adb shell svc data disable
             timeout 30s adb shell 'until dumpsys connectivity | grep -F "Active default network: none"; do sleep 1; done'

@@ -16,12 +16,12 @@ def shell(*args):
 def dialog():
     focus = shell("dumpsys window | grep mCurrentFocus || true")
     if "documentsui" not in focus.lower():
-        return []
+        return focus.strip(), []
     result = shell("uiautomator", "dump", "/sdcard/kartoved-picker.xml")
     if "dumped" not in result.lower():
-        return []
+        return focus.strip(), []
     root = ET.fromstring(shell("cat", "/sdcard/kartoved-picker.xml"))
-    return [n.attrib for n in root.iter("node") if n.get("enabled") == "true"]
+    return focus.strip(), [n.attrib for n in root.iter("node") if n.get("enabled") == "true"]
 
 
 def tap(node):
@@ -35,10 +35,15 @@ def backup_entry(nodes):
 
 
 def choose_file(tests, saving):
+    last_focus = None
     while tests.poll() is None:
         time.sleep(2)
-        nodes = dialog()
-        save = next((n for n in nodes if n["text"].upper() == "SAVE"), None)
+        focus, nodes = dialog()
+        if focus != last_focus:
+            print(f"Активное окно: {focus}", flush=True)
+            last_focus = focus
+        save = next((n for n in nodes if n["text"].upper() == "SAVE"
+                     or n["content-desc"].upper() == "SAVE"), None)
         if saving and save:
             tap(save)
             print("Файл сохранён через системный диалог", flush=True)
