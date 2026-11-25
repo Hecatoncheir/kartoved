@@ -22,10 +22,10 @@
 
 | Коллекции и поиск | Открытая коллекция | Сканер |
 | :---: | :---: | :---: |
-| <img src="docs/collections-album.png" alt="Коллекции с количеством карт и строкой поиска" width="220"> | <img src="docs/collection.png" alt="Вечерний драфт со счётчиками экземпляров и фольгированных карт" width="220"> | <img src="docs/scanner.png" alt="Карта в рамке сканера и лента последних добавлений" width="220"> |
+| <img src="docs/collections-album.png" alt="Библиотека с четырьмя альбомами, поиском и счётчиком карт на проверке" width="220"> | <img src="docs/collection.png" alt="Альбом «Вечерний драфт» с группировкой карт по названию" width="220"> | <img src="docs/scanner.png" alt="Карта в рамке сканера и лента последних снимков" width="220"> |
 
 <details>
-<summary>Посмотреть прокрутку коллекции, обложку и миниатюры</summary>
+<summary>Посмотреть анимации прежних версий</summary>
 
 <img src="docs/collections-motion.gif" alt="Появление списка и движение подсветки обложки" width="220">
 <img src="docs/collection-stack.gif" alt="Карты складываются у верхнего края, свайп открывает флажок и удаление" width="220">
