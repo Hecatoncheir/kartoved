@@ -28,6 +28,7 @@ import 'scan_frame.dart';
 import 'scan_outline.dart';
 import 'scan_reviews.dart';
 import 'sheets.dart';
+import 'glass_sheet.dart';
 import 'scan_strip.dart';
 import 'scan_target.dart';
 import 'style.dart';
@@ -250,7 +251,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   Future<void> _pickAutoMode() {
     unlockBrowserSound();
     return _paused(() async {
-      final selected = await panel<ScanMode>(
+      final selected = await showGlassSheet<ScanMode>(
         context,
         AutoScanModeSheet(_autoMode),
       );
@@ -798,7 +799,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   Future<void> _edit(ScanEntry entry) => _paused(() async {
     scan.stopRepeats();
     if (library.state.reviews.containsKey(entry.sequence)) {
-      await chooseReview(context, library, entry.sequence);
+      await chooseReview(context, library, entry.sequence, scanner: true);
       return;
     }
     if (entry.card.needsPrinting) {
@@ -816,7 +817,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     }
     final variants = await library.catalog!.variants(entry.card);
     if (!mounted || !active || variants.isEmpty) return;
-    final edition = await panel<Edition>(
+    final edition = await showGlassSheet<Edition>(
       context,
       ResultSheet([Match(variants)], entry.card, action: 'Сохранить'),
     );
@@ -890,7 +891,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   }
 
   Future<void> _chooseFolder() => _paused(() async {
-    final folder = await panel<int>(
+    final folder = await showGlassSheet<int>(
       context,
       ScanDestination(library.state.groups),
     );
@@ -1209,21 +1210,27 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) => BlocBuilder<AppModel, LibraryState>(
-    builder: (context, state) => Scaffold(
-      backgroundColor: scanInk,
-      resizeToAvoidBottomInset: false,
-      body: DecoratedBox(
-        decoration: const BoxDecoration(gradient: scanBackdrop),
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                child: BlocBuilder<ScanCubit, ScanSession>(
-                  bloc: scan,
-                  builder: (_, _) => LayoutBuilder(
-                    builder: (_, bounds) => _layout(state, bounds),
+    builder: (context, state) => AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Theme(
+        data: scannerTheme,
+        child: Scaffold(
+          backgroundColor: scanInk,
+          resizeToAvoidBottomInset: false,
+          body: DecoratedBox(
+            decoration: const BoxDecoration(gradient: scanBackdrop),
+            child: SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 900),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                    child: BlocBuilder<ScanCubit, ScanSession>(
+                      bloc: scan,
+                      builder: (_, _) => LayoutBuilder(
+                        builder: (_, bounds) => _layout(state, bounds),
+                      ),
+                    ),
                   ),
                 ),
               ),

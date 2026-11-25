@@ -90,9 +90,9 @@ class _ScanStripState extends State<ScanStrip> {
                               child: const DecoratedBox(
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: Color(0xfffabd2f),
+                                  color: scanOrange,
                                   border: Border.fromBorderSide(
-                                    BorderSide(color: Color(0xff282828)),
+                                    BorderSide(color: scanInk),
                                   ),
                                 ),
                                 child: SizedBox.square(dimension: 12),

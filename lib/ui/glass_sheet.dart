@@ -4,7 +4,9 @@ import 'package:material_ui/material_ui.dart';
 
 import 'library_style.dart';
 import 'scanner_style.dart';
-import 'style.dart';
+
+Future<T?> showLibrarySheet<T>(BuildContext context, Widget child) =>
+    showGlassSheet<T>(context, child, library: true);
 
 Future<T?> showGlassSheet<T>(
   BuildContext context,
@@ -28,7 +30,7 @@ class GlassSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = Theme(
-      data: library ? libraryTheme : _scannerTheme(Theme.of(context)),
+      data: library ? libraryTheme : scannerTheme,
       child: SafeArea(
         top: false,
         child: Padding(
@@ -59,31 +61,3 @@ class GlassSheet extends StatelessWidget {
     );
   }
 }
-
-ThemeData _scannerTheme(ThemeData base) => base.copyWith(
-  colorScheme: base.colorScheme.copyWith(
-    primary: scanOrange,
-    onSurface: scanPaper,
-    onSurfaceVariant: scanMuted,
-    surface: scanInk,
-    outlineVariant: const Color(0xff66647c),
-    outline: const Color(0xff9792aa),
-    secondaryContainer: const Color(0xff4b405c),
-  ),
-  dividerColor: const Color(0x557f849f),
-  listTileTheme: const ListTileThemeData(
-    textColor: scanPaper,
-    iconColor: scanMuted,
-    titleTextStyle: TextStyle(
-      fontFamily: bodyFont,
-      fontSize: 17,
-      fontWeight: FontWeight.w800,
-      color: scanPaper,
-    ),
-    subtitleTextStyle: TextStyle(
-      fontFamily: bodyFont,
-      fontSize: 14,
-      color: scanMuted,
-    ),
-  ),
-);

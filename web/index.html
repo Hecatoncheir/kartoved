@@ -4,13 +4,14 @@
   <base href="$FLUTTER_BASE_HREF">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#282828">
-  <link rel="icon" type="image/png" href="runtime/favicon.png">
+  <meta name="theme-color" content="#e9ddf6">
+  <link rel="icon" type="image/svg+xml" href="kartoved.svg">
   <meta name="description" content="Картовед распознаёт бумажные карты Magic и ведёт коллекции прямо в браузере.">
   <title>Картовед</title>
   <style>
-    html, body { margin: 0; height: 100%; background: #282828; color: #fbf1c7; }
+    html, body { margin: 0; height: 100%; background: linear-gradient(135deg, #d5c2f4, #eddef7, #e4e8fa); color: #24183f; }
     #loading { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; font: 1rem system-ui, sans-serif; padding: 1rem; }
+    #loading::before { content: ""; width: 3.5rem; height: 3.5rem; margin: 0 auto 1rem; background: url(kartoved.svg) center / contain no-repeat; }
   </style>
 </head>
 <body>

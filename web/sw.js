@@ -3,7 +3,7 @@ const prefix = `kartoved-site:${scope.pathname}:`;
 const name = `${prefix}__KARTOVED_BUILD__`;
 const shell = [
   'index.html', 'browser.mjs', 'flutter_bootstrap.js', 'main.dart.js',
-  'runtime/favicon.png', 'sqlite3.wasm', 'sqflite_sw.js', 'assets/FontManifest.json',
+  'kartoved.svg', 'sqlite3.wasm', 'sqflite_sw.js', 'assets/FontManifest.json',
   'assets/AssetManifest.bin.json', 'assets/assets/oracle/scan_names.json',
   'runtime/card_added.wav', 'runtime/card_found.wav', 'runtime/card_review.wav',
 ];

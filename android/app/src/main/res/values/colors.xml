@@ -1,1 +1,4 @@
-<resources><color name="kartoved_ink">#282828</color></resources>
+<resources>
+    <color name="kartoved_ink">#24183F</color>
+    <color name="kartoved_sky">#E9DDF6</color>
+</resources>

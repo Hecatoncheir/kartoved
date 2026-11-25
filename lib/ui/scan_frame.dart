@@ -5,7 +5,7 @@ import 'package:camera_view_mask/mask/mask.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'style.dart';
+import 'scanner_style.dart';
 
 class ScanFrame extends StatelessWidget {
   const ScanFrame({
@@ -40,8 +40,8 @@ class ScanFrame extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      raised.withValues(alpha: .30),
-                      dark.withValues(alpha: .56),
+                      scanInk.withValues(alpha: .30),
+                      scanInk.withValues(alpha: .56),
                     ],
                   ),
                 ),
@@ -91,7 +91,7 @@ class _Corners extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     const radius = ScanFrame.radius;
     final paint = Paint()
-      ..color = butter
+      ..color = scanOrange
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeWidth = 3;

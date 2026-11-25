@@ -41,7 +41,7 @@ class _BrowserGlassState extends State<BrowserGlass> {
       ..width = '100%'
       ..height = '100%'
       ..pointerEvents = 'none'
-      ..backgroundImage = 'linear-gradient(140deg, #5049454d, #1d20218f)'
+      ..backgroundImage = 'linear-gradient(140deg, #11162b4d, #11162b8f)'
       ..setProperty('backdrop-filter', 'blur(15px)')
       ..setProperty('-webkit-backdrop-filter', 'blur(15px)');
     _updateVisibility();

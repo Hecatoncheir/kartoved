@@ -9,30 +9,9 @@ import '../data/browser.dart';
 import '../model.dart';
 import 'card_facts.dart';
 import 'edition_picker.dart';
+import 'glass_sheet.dart';
+import 'library_style.dart';
 import 'style.dart';
-
-Future<T?> panel<T>(BuildContext context, Widget child) =>
-    showModalBottomSheet<T>(
-      context: context,
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      clipBehavior: Clip.antiAlias,
-      showDragHandle: false,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-      ),
-      builder: (c) => Frost(
-        radius: 0,
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
-            child: child,
-          ),
-        ),
-      ),
-    );
 
 class ResultSheet extends StatefulWidget {
   const ResultSheet(
@@ -252,11 +231,7 @@ class _CatalogPanelState extends State<CatalogPanel> {
         children: [
           const SheetHeading('База карт'),
           const SizedBox(height: 18),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: raised,
-              borderRadius: BorderRadius.circular(16),
-            ),
+          LibraryGlass(
             child: Padding(
               padding: const EdgeInsets.all(18),
               child: Row(
@@ -284,6 +259,7 @@ class _CatalogPanelState extends State<CatalogPanel> {
               ),
             ),
           ),
+          const SizedBox(height: 14),
           if (kIsWeb)
             OutlinedButton.icon(
               icon: Icon(
@@ -301,8 +277,11 @@ class _CatalogPanelState extends State<CatalogPanel> {
             label: const Text('Миниатюры выпуска офлайн'),
             onPressed: loading
                 ? null
-                : () =>
-                      panel<void>(context, PicturePack(widget.model.catalog!)),
+                : () => showGlassSheet<void>(
+                    context,
+                    PicturePack(widget.model.catalog!),
+                    library: true,
+                  ),
           ),
           if (message != null)
             Padding(
@@ -376,12 +355,12 @@ class _PicturePackState extends State<PicturePack> {
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
-    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
     child: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SheetHeading('Миниатюры выпуска'),
+        const SizedBox(height: 16),
         TextField(
           enabled: !loading,
           decoration: const InputDecoration(
@@ -390,6 +369,7 @@ class _PicturePackState extends State<PicturePack> {
           ),
           onChanged: (v) => setState(() => code = v),
         ),
+        const SizedBox(height: 12),
         TextFormField(
           initialValue: language,
           enabled: !loading,
@@ -404,11 +384,13 @@ class _PicturePackState extends State<PicturePack> {
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Text(status),
           ),
-        FilledButton(
+        const SizedBox(height: 14),
+        LibraryActionButton(
+          icon: Icons.download_rounded,
           onPressed: code.trim().isEmpty || language.trim().isEmpty || loading
               ? null
               : download,
-          child: const Text('Скачать'),
+          label: 'Скачать',
         ),
       ],
     ),

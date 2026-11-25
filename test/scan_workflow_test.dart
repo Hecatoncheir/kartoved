@@ -20,7 +20,7 @@ import 'package:kartoved/ui/picture.dart';
 import 'package:kartoved/ui/scan_frame.dart';
 import 'package:kartoved/ui/scanner.dart';
 import 'package:kartoved/ui/scanner_menu.dart';
-import 'package:kartoved/ui/style.dart';
+import 'package:kartoved/ui/library_style.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -710,10 +710,7 @@ class _ScannerFixture {
     await tester.pumpWidget(
       BlocProvider<AppModel>.value(
         value: model,
-        child: MaterialApp(
-          theme: kartovedTheme(),
-          home: const CollectionsPage(),
-        ),
+        child: MaterialApp(theme: libraryTheme, home: const CollectionsPage()),
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/backup.dart';
 import '../model.dart';
+import 'library_style.dart';
 import 'style.dart';
 
 class BackupPanel extends StatefulWidget {
@@ -59,13 +60,22 @@ class _BackupPanelState extends State<BackupPanel> {
         ),
         const SizedBox(height: 12),
         if (preview case final backup?) ...[
-          Text(
-            'Коллекций: ${backup.folders.length}  ·  Карт: ${backup.copies}  ·  На проверке: ${backup.pending}',
+          LibraryGlass(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Text(
+                'Коллекций: ${backup.folders.length}  ·  Карт: ${backup.copies}  ·  На проверке: ${backup.pending}',
+              ),
+            ),
           ),
           const SizedBox(height: 10),
           const Text('Текущие коллекции будут заменены данными из файла.'),
           const SizedBox(height: 16),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
             onPressed: busy ? null : () => _restore(backup),
             child: const Text('Заменить коллекции'),
           ),
@@ -74,20 +84,28 @@ class _BackupPanelState extends State<BackupPanel> {
             child: const Text('Отмена'),
           ),
         ] else ...[
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.save_alt_rounded),
-            title: const Text('Сохранить в файл'),
-            subtitle: const Text('Все коллекции и карты на проверке'),
-            onTap: busy ? null : _save,
+          LibraryGlass(
+            radius: 16,
+            child: ListTile(
+              leading: const Icon(Icons.save_alt_rounded),
+              title: const Text('Сохранить в файл'),
+              subtitle: const Text('Все коллекции и карты на проверке'),
+              onTap: busy ? null : _save,
+              trailing: const Icon(Icons.chevron_right),
+            ),
           ),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.restore_rounded),
-            title: const Text('Восстановить из файла'),
-            onTap: busy ? null : _open,
+          const SizedBox(height: 8),
+          LibraryGlass(
+            radius: 16,
+            child: ListTile(
+              leading: const Icon(Icons.restore_rounded),
+              title: const Text('Восстановить из файла'),
+              onTap: busy ? null : _open,
+              trailing: const Icon(Icons.chevron_right),
+            ),
           ),
         ],
+        if (busy || message != null) const SizedBox(height: 12),
         if (busy) const LinearProgressIndicator(),
         if (message case final text?)
           Semantics(liveRegion: true, child: Text(text)),

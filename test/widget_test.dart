@@ -8,7 +8,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kartoved/ui/album.dart';
 import 'package:kartoved/ui/library_style.dart';
 import 'package:kartoved/ui/collections.dart';
-import 'package:kartoved/ui/style.dart';
 import 'package:kartoved/ui/scan_strip.dart';
 
 void main() {
@@ -63,7 +62,7 @@ void main() {
     addTearDown(model.close);
     await tester.pumpWidget(
       MaterialApp(
-        theme: kartovedTheme(),
+        theme: libraryTheme,
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(textScaler: const TextScaler.linear(1.6)),
@@ -109,7 +108,7 @@ void main() {
     addTearDown(model.close);
     await tester.pumpWidget(
       MaterialApp(
-        theme: kartovedTheme(),
+        theme: libraryTheme,
         home: BlocProvider.value(value: model, child: const CollectionsPage()),
       ),
     );
@@ -140,7 +139,7 @@ void main() {
     addTearDown(model.close);
     await tester.pumpWidget(
       MaterialApp(
-        theme: kartovedTheme(),
+        theme: libraryTheme,
         home: BlocProvider.value(value: model, child: const CollectionsPage()),
       ),
     );
@@ -191,7 +190,7 @@ void main() {
       Edition? chosen;
       await tester.pumpWidget(
         MaterialApp(
-          theme: kartovedTheme(),
+          theme: libraryTheme,
           home: Scaffold(
             body: Builder(
               builder: (context) => TextButton(
@@ -280,7 +279,7 @@ void main() {
     final model = AppModel(CatalogStore(), History());
     await tester.pumpWidget(
       MaterialApp(
-        theme: kartovedTheme(),
+        theme: libraryTheme,
         home: BlocProvider.value(value: model, child: const CollectionPage()),
       ),
     );

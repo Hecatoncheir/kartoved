@@ -86,24 +86,26 @@ class AutoScanModeSheet extends StatelessWidget {
   final ScanMode profile;
 
   @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      const SheetHeading('Режим автоскана'),
-      for (final mode in [ScanMode.tray, ScanMode.automatic])
-        ListTile(
-          leading: Icon(mode.icon),
-          title: Text(mode.label),
-          subtitle: Text(
-            mode == ScanMode.tray
-                ? 'Card Slinger · фиксированная область'
-                : 'Для карт в руке · выравнивание кадра',
+  Widget build(BuildContext context) => SingleChildScrollView(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SheetHeading('Режим автоскана'),
+        for (final mode in [ScanMode.tray, ScanMode.automatic])
+          ListTile(
+            leading: Icon(mode.icon),
+            title: Text(mode.label),
+            subtitle: Text(
+              mode == ScanMode.tray
+                  ? 'Card Slinger · фиксированная область'
+                  : 'Для карт в руке · выравнивание кадра',
+            ),
+            selected: mode == profile,
+            trailing: mode == profile ? const Icon(Icons.check) : null,
+            onTap: () => Navigator.pop(context, mode),
           ),
-          selected: mode == profile,
-          trailing: mode == profile ? const Icon(Icons.check) : null,
-          onTap: () => Navigator.pop(context, mode),
-        ),
-    ],
+      ],
+    ),
   );
 }

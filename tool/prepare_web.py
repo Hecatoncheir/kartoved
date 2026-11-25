@@ -41,7 +41,6 @@ def prepare():
         (data / f"{language}.traineddata.gz").write_bytes(gzip.compress(source.read_bytes(), mtime=0))
     for name in ("card_added.wav", "card_found.wav", "card_review.wav"):
         copy(NATIVE / "res" / "raw" / name, runtime / name)
-    copy(NATIVE / "res" / "mipmap-mdpi" / "ic_launcher.png", runtime / "favicon.png")
 
 
 def seal(build, build_id):

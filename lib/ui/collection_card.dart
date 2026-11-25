@@ -170,10 +170,10 @@ class _CollectionCardState extends State<CollectionCard>
                               decoration: const BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [
-                                    surface,
-                                    Color(0xff494735),
-                                    Color(0xff584538),
-                                    Color(0xff654039),
+                                    libraryInk,
+                                    Color(0xff44385c),
+                                    Color(0xff533957),
+                                    Color(0xff653b50),
                                   ],
                                   stops: [0, .37, .70, 1],
                                 ),
@@ -197,7 +197,7 @@ class _CollectionCardState extends State<CollectionCard>
                                         tooltip: widget.flagged
                                             ? 'Снять флажок'
                                             : 'Поставить флажок',
-                                        accent: butter,
+                                        accent: const Color(0xffffb569),
                                         onTap: () {
                                           _settle(false);
                                           widget.flag();

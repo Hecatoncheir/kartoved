@@ -8,18 +8,18 @@ import 'ui/collections.dart';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import 'ui/style.dart';
+import 'ui/library_style.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
+  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);
   final model = AppModel(createCatalogStore(), History())..initialize();
   runApp(
     BlocProvider.value(
       value: model,
       child: MaterialApp(
         title: 'Картовед',
-        theme: kartovedTheme(),
+        theme: libraryTheme,
         debugShowCheckedModeBanner: false,
         locale: const Locale('ru'),
         supportedLocales: const [Locale('ru')],

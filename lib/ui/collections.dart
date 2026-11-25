@@ -13,6 +13,7 @@ import 'scan_destination.dart';
 import 'scan_reviews.dart';
 import 'style.dart';
 import 'sheets.dart';
+import 'glass_sheet.dart';
 import 'collection_light.dart';
 import 'collection_browser.dart';
 import 'collection_menu.dart';
@@ -71,7 +72,7 @@ class CollectionsPage extends StatelessWidget {
     if (groups.isEmpty) return;
     final folder = groups.length == 1
         ? groups.single.id
-        : await panel<int>(context, ScanDestination(groups));
+        : await showLibrarySheet<int>(context, ScanDestination(groups));
     if (!context.mounted || folder == null) return;
     await model.select(folder);
     if (context.mounted &&
@@ -99,7 +100,7 @@ class CollectionsPage extends StatelessWidget {
     if (groups.isEmpty) return;
     final id = groups.length == 1
         ? groups.single.id
-        : await panel<int>(
+        : await showLibrarySheet<int>(
             context,
             Column(
               mainAxisSize: MainAxisSize.min,
@@ -162,7 +163,7 @@ class CollectionsPage extends StatelessWidget {
         IconButton(
           tooltip: 'База карт',
           onPressed: ready
-              ? () => panel<void>(context, CatalogPanel(model))
+              ? () => showLibrarySheet<void>(context, CatalogPanel(model))
               : null,
           icon: const Icon(Icons.storage_rounded),
         ),
@@ -173,7 +174,7 @@ class CollectionsPage extends StatelessWidget {
             child: IconButton(
               tooltip: 'Резервная копия',
               onPressed: model.libraryReady
-                  ? () => panel<void>(context, BackupPanel(model))
+                  ? () => showLibrarySheet<void>(context, BackupPanel(model))
                   : null,
               icon: const Icon(Icons.cloud_upload_outlined),
             ),
@@ -643,7 +644,7 @@ class _CollectionPageState extends State<CollectionPage> {
       }
       final flaggedOnly = model.state.flags.isEmpty
           ? false
-          : await panel<bool>(
+          : await showLibrarySheet<bool>(
               context,
               Builder(
                 builder: (sheet) => Column(

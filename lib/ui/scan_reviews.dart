@@ -6,14 +6,23 @@ import '../data/review.dart';
 import '../model.dart';
 import 'library_style.dart';
 import 'picture.dart';
-import 'sheets.dart';
+import 'glass_sheet.dart';
 import 'style.dart';
 
-Future<void> chooseReview(BuildContext context, AppModel model, int seq) async {
+Future<void> chooseReview(
+  BuildContext context,
+  AppModel model,
+  int seq, {
+  bool scanner = false,
+}) async {
   final review = model.state.reviews[seq];
   if (review == null) return;
   final folder = model.state.folder;
-  final choice = await panel<({Edition? card})>(context, _ChoiceSheet(review));
+  final choice = await showGlassSheet<({Edition? card})>(
+    context,
+    _ChoiceSheet(review),
+    library: !scanner,
+  );
   if (choice == null || folder != model.state.folder) return;
   if (choice.card case final card?) {
     await model.confirmReview(seq, card);
@@ -28,7 +37,7 @@ Future<bool> reviewBeforeExport(
   VoidCallback showReviews,
 ) async {
   final folder = model.state.folder;
-  final proceed = await panel<bool>(
+  final proceed = await showLibrarySheet<bool>(
     context,
     Builder(
       builder: (sheet) => Column(
@@ -200,88 +209,54 @@ class _ChoiceSheet extends StatefulWidget {
 class _ChoiceSheetState extends State<_ChoiceSheet> {
   Edition? chosen;
   @override
-  Widget build(BuildContext context) => ConstrainedBox(
-    constraints: BoxConstraints(
-      maxHeight: MediaQuery.sizeOf(context).height * .82,
-    ),
-    child: Column(
+  Widget build(BuildContext context) {
+    final review = widget.review;
+    final colors = Theme.of(context).colorScheme;
+    return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          widget.review.reason.label,
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        if (widget.review.batchLabel.isNotEmpty)
-          Text('Стопка · ${widget.review.batchLabel}'),
-        const SizedBox(height: 12),
+        SheetHeading(review.reason.label),
+        if (review.batchLabel.isNotEmpty) Text('Стопка · ${review.batchLabel}'),
+        const SizedBox(height: 8),
         Flexible(
-          child: GridView.builder(
+          child: ListView.separated(
             shrinkWrap: true,
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 210,
-              mainAxisExtent: 176,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-            ),
-            itemCount: widget.review.choices.length,
-            itemBuilder: (_, i) {
-              final card = widget.review.choices[i];
+            itemCount: review.choices.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 6),
+            itemBuilder: (_, index) {
+              final card = review.choices[index];
               final selected = chosen == card;
-              return Semantics(
-                selected: selected,
-                button: true,
-                child: InkWell(
-                  onTap: () => setState(() => chosen = card),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: selected ? butter : strongOutline,
-                        width: selected ? 2 : .5,
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: Stack(
-                              alignment: Alignment.center,
-                              fit: StackFit.expand,
-                              children: [
-                                Center(
-                                  child: AspectRatio(
-                                    aspectRatio: 63 / 88,
-                                    child: CardPicture(card),
-                                  ),
-                                ),
-                                if (selected)
-                                  const Align(
-                                    alignment: Alignment.topRight,
-                                    child: Icon(
-                                      Icons.check_circle,
-                                      color: butter,
-                                      size: 19,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            card.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            card.foil ? '${card.detail} · Фольга' : card.detail,
-                            textAlign: TextAlign.center,
-                            style: codeText,
-                          ),
-                        ],
-                      ),
-                    ),
+              return Material(
+                color: selected
+                    ? colors.secondaryContainer
+                    : colors.surface.withValues(alpha: .72),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(
+                    color: selected ? colors.primary : colors.outlineVariant,
                   ),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ListTile(
+                  selected: selected,
+                  selectedColor: colors.onSecondaryContainer,
+                  leading: SizedBox(
+                    width: 42,
+                    height: 56,
+                    child: CardPicture(card, tilt: false),
+                  ),
+                  title: Text(card.name),
+                  subtitle: Text(
+                    card.foil ? '${card.detail} · Фольга' : card.detail,
+                    style: codeText,
+                  ),
+                  trailing: Icon(
+                    selected
+                        ? Icons.check_circle_rounded
+                        : Icons.radio_button_unchecked,
+                  ),
+                  onTap: () => setState(() => chosen = card),
                 ),
               );
             },
@@ -299,6 +274,6 @@ class _ChoiceSheetState extends State<_ChoiceSheet> {
           child: const Text('Убрать из очереди'),
         ),
       ],
-    ),
-  );
+    );
+  }
 }

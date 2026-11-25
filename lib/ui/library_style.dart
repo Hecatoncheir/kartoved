@@ -28,9 +28,8 @@ const librarySky = BoxDecoration(
   ),
 );
 
-final libraryTheme = ThemeData(
-  fontFamily: bodyFont,
-  colorScheme: ColorScheme.fromSeed(seedColor: libraryInk).copyWith(
+final libraryTheme = appTheme(
+  ColorScheme.fromSeed(seedColor: libraryInk).copyWith(
     primary: libraryInk,
     onSurface: libraryInk,
     onSurfaceVariant: libraryMuted,

@@ -1,101 +1,69 @@
-import 'dart:ui' as ui;
-
 import 'package:material_ui/material_ui.dart';
-
-const ink = Color(0xff282828);
-const dark = Color(0xff1d2021);
-const surface = Color(0xff32302f);
-const raised = Color(0xff3c3836);
-const outline = Color(0xff504945);
-const strongOutline = Color(0xff7c6f64);
-const paper = Color(0xfffbf1c7);
-const cream = Color(0xffebdbb2);
-const muted = Color(0xffbdae93);
-const butter = Color(0xfffabd2f);
-const amberSurface = Color(0xff443a27);
-const aqua = Color(0xff8ec07c);
-const blue = Color(0xff83a598);
-const red = Color(0xfffb8a67);
 
 const headingFont = 'Nunito';
 const bodyFont = 'Nunito Sans';
 const monoFont = 'JetBrains Mono';
-const codeText = TextStyle(fontFamily: monoFont, color: muted);
+const codeText = TextStyle(fontFamily: monoFont);
 const noticeDuration = Duration(seconds: 3);
 
-ThemeData kartovedTheme() {
-  final scheme =
-      ColorScheme.fromSeed(
-        seedColor: butter,
-        brightness: Brightness.dark,
-      ).copyWith(
-        primary: butter,
-        onPrimary: ink,
-        primaryContainer: amberSurface,
-        onPrimaryContainer: butter,
-        secondary: aqua,
-        onSecondary: ink,
-        secondaryContainer: amberSurface,
-        onSecondaryContainer: butter,
-        tertiary: blue,
-        onTertiary: ink,
-        error: red,
-        onError: ink,
-        surface: surface,
-        onSurface: paper,
-        onSurfaceVariant: muted,
-        surfaceDim: dark,
-        surfaceBright: outline,
-        surfaceContainerLowest: dark,
-        surfaceContainerLow: ink,
-        surfaceContainer: surface,
-        surfaceContainerHigh: raised,
-        surfaceContainerHighest: outline,
-        surfaceTint: Colors.transparent,
-        outline: strongOutline,
-        outlineVariant: outline,
-        inverseSurface: paper,
-        onInverseSurface: ink,
-      );
+ThemeData appTheme(ColorScheme colors) {
+  final border = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(16),
+    borderSide: BorderSide(color: colors.outlineVariant),
+  );
   final theme = ThemeData(
-    colorScheme: scheme,
+    colorScheme: colors,
     fontFamily: bodyFont,
-    scaffoldBackgroundColor: ink,
-    appBarTheme: const AppBarThemeData(
-      backgroundColor: ink,
-      foregroundColor: paper,
-      surfaceTintColor: Colors.transparent,
+    scaffoldBackgroundColor: colors.surface,
+    inputDecorationTheme: InputDecorationThemeData(
+      filled: true,
+      fillColor: colors.surface.withValues(alpha: .78),
+      border: border,
+      enabledBorder: border,
+      focusedBorder: border.copyWith(
+        borderSide: BorderSide(color: colors.primary, width: 2),
+      ),
     ),
-    navigationBarTheme: const NavigationBarThemeData(
-      backgroundColor: dark,
-      indicatorColor: amberSurface,
-      surfaceTintColor: Colors.transparent,
-    ),
-    focusColor: blue.withValues(alpha: .28),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size(48, 50),
+        minimumSize: const Size(48, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         textStyle: const TextStyle(
           fontFamily: bodyFont,
-          fontSize: 16,
           fontWeight: FontWeight.w800,
+          fontSize: 16,
         ),
       ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: colors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(color: colors.outlineVariant),
+      ),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: colors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
   );
   final text = theme.textTheme;
   return theme.copyWith(
     textTheme: text.copyWith(
-      headlineLarge: text.headlineLarge?.copyWith(fontFamily: headingFont),
-      headlineMedium: text.headlineMedium?.copyWith(fontFamily: headingFont),
-      headlineSmall: text.headlineSmall?.copyWith(fontFamily: headingFont),
-      titleLarge: text.titleLarge?.copyWith(fontFamily: headingFont),
+      titleLarge: text.titleLarge?.copyWith(
+        fontFamily: headingFont,
+        fontWeight: FontWeight.w800,
+      ),
+      headlineSmall: text.headlineSmall?.copyWith(
+        fontFamily: headingFont,
+        fontWeight: FontWeight.w900,
+      ),
     ),
   );
 }
 
 class Mark extends StatelessWidget {
-  const Mark({super.key, this.size = 44, this.color = butter});
+  const Mark({super.key, this.size = 44, required this.color});
   final double size;
   final Color color;
   @override
@@ -145,126 +113,33 @@ class _Mark extends CustomPainter {
   bool shouldRepaint(_Mark old) => old.color != color;
 }
 
-class Frost extends StatelessWidget {
-  const Frost({super.key, required this.child, this.radius = 26});
-  final Widget child;
-  final double radius;
-  @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(radius),
-    child: BackdropFilter(
-      filter: ui.ImageFilter.blur(sigmaX: 17, sigmaY: 17),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              raised.withValues(alpha: .86),
-              surface.withValues(alpha: .94),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(radius),
-          border: Border.all(color: strongOutline),
-        ),
-        child: child,
-      ),
-    ),
-  );
-}
-
-class RoundAction extends StatelessWidget {
-  const RoundAction(this.icon, this.label, this.tap, {super.key});
-  final IconData icon;
-  final String label;
-  final VoidCallback? tap;
-  @override
-  Widget build(BuildContext context) => Frost(
-    child: IconButton(
-      tooltip: label,
-      onPressed: tap,
-      icon: Icon(icon, color: paper),
-      constraints: const BoxConstraints.tightFor(width: 50, height: 50),
-    ),
-  );
-}
-
 class SheetHeading extends StatelessWidget {
   const SheetHeading(this.title, {super.key});
   final String title;
   @override
-  Widget build(BuildContext context) => Text(
-    title,
-    style: const TextStyle(
-      fontFamily: headingFont,
-      fontSize: 30,
-      height: 1.15,
-      fontWeight: FontWeight.w900,
-      letterSpacing: -1.0,
-    ),
-  );
-}
-
-class Folio extends StatelessWidget {
-  const Folio({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      CustomPaint(size: const Size(190, 140), painter: _Folio());
-}
-
-class _Folio extends CustomPainter {
-  @override
-  void paint(Canvas c, Size s) {
-    c.scale(s.width / 190, s.height / 140);
-    final pen = Paint()
-      ..color = ink
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5
-      ..strokeJoin = StrokeJoin.round;
-    final shadow = Paint()..color = ink;
-    c.drawOval(const Rect.fromLTWH(18, 98, 153, 18), shadow);
-    void card(double x, double y, double tilt, Color color, bool mark) {
-      c.save();
-      c.translate(x, y);
-      c.rotate(tilt);
-      final r = RRect.fromRectAndRadius(
-        const Rect.fromLTWH(-30, -43, 60, 86),
-        const Radius.circular(5),
-      );
-      c.drawRRect(r, Paint()..color = color);
-      c.drawRRect(r, pen);
-      c.drawRRect(
-        RRect.fromRectAndRadius(
-          const Rect.fromLTWH(-24, -35, 48, 61),
-          const Radius.circular(3),
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Semantics(
+          header: true,
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontFamily: headingFont,
+              fontSize: 24,
+              height: 1.12,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -.5,
+            ),
+          ),
         ),
-        pen,
-      );
-      if (mark) {
-        c.save();
-        c.translate(-23, -30);
-        _Mark(ink).paint(c, const Size.square(48));
-        c.restore();
-      }
-      c.drawLine(const Offset(-22, 32), const Offset(-4, 32), pen);
-      c.restore();
-    }
-
-    card(71, 62, -.34, cream, false);
-    card(95, 57, -.05, paper, false);
-    card(117, 61, .22, butter, true);
-    for (final pt in [const Offset(29, 42), const Offset(156, 32)]) {
-      final star = Path()
-        ..moveTo(pt.dx, pt.dy - 8)
-        ..quadraticBezierTo(pt.dx + 1, pt.dy - 1, pt.dx + 7, pt.dy)
-        ..quadraticBezierTo(pt.dx + 1, pt.dy + 1, pt.dx, pt.dy + 8)
-        ..quadraticBezierTo(pt.dx - 1, pt.dy + 1, pt.dx - 7, pt.dy)
-        ..quadraticBezierTo(pt.dx - 1, pt.dy - 1, pt.dx, pt.dy - 8)
-        ..close();
-      c.drawPath(star, shadow);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_Folio old) => false;
+      ),
+      if (ModalRoute.of(context) is PopupRoute)
+        IconButton(
+          tooltip: 'Закрыть',
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.close_rounded),
+        ),
+    ],
+  );
 }

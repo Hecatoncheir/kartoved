@@ -178,6 +178,10 @@ class _DeleteDialogState extends State<_DeleteDialog> {
     final group = library.groups.firstWhere((g) => g.id == library.folder);
     return AlertDialog(
       scrollable: true,
+      icon: Icon(
+        targets.isEmpty ? Icons.delete_outline : Icons.drive_file_move_outline,
+        color: Theme.of(context).colorScheme.error,
+      ),
       title: Text('Удалить «${group.name}»?'),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,6 +221,10 @@ class _DeleteDialogState extends State<_DeleteDialog> {
           child: const Text('Отмена'),
         ),
         FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+            foregroundColor: Theme.of(context).colorScheme.onError,
+          ),
           onPressed: () => Navigator.pop(context, (target: target)),
           child: Text(targets.isEmpty ? 'Удалить' : 'Перенести и удалить'),
         ),

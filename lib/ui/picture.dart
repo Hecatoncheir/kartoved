@@ -4,7 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/catalog.dart';
 import '../data/pictures.dart';
-import 'style.dart';
+import 'library_style.dart';
 import 'card_tilt.dart';
 
 class CardPicture extends StatefulWidget {
@@ -124,7 +124,7 @@ class _CardPictureState extends State<CardPicture> {
   Widget _placeholder() =>
       widget.placeholder ??
       ColoredBox(
-        color: const Color(0xff504945),
+        color: libraryInk,
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(3),
@@ -134,7 +134,7 @@ class _CardPictureState extends State<CardPicture> {
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: paper,
+                color: Colors.white,
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),

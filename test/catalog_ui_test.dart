@@ -5,6 +5,9 @@ import 'package:kartoved/data/catalog.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/ui/card_tilt.dart';
 import 'package:kartoved/ui/catalog_search.dart';
+import 'package:kartoved/ui/glass_sheet.dart';
+import 'package:kartoved/ui/library_style.dart';
+import 'package:kartoved/ui/sheets.dart';
 import 'package:material_ui/material_ui.dart';
 
 class _Catalog extends Fake implements Catalog {
@@ -44,6 +47,39 @@ void main() {
     await tester.tap(find.byTooltip('Очистить поиск'));
     await tester.pump();
     expect(find.text('Введите название карты'), findsOneWidget);
+  });
+
+  testWidgets('Форма миниатюр прокручивается над клавиатурой на узком экране', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 568);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: libraryTheme,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () =>
+                  showLibrarySheet<void>(context, PicturePack(_Catalog())),
+              child: const Text('Миниатюры'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Миниатюры'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'SNC');
+    tester.view.viewInsets = const FakeViewPadding(bottom: 270);
+    await tester.pumpAndSettle();
+    final download = find.widgetWithText(FilledButton, 'Скачать');
+    await tester.ensureVisible(download);
+    await tester.pumpAndSettle();
+    expect(download.hitTestable(), findsOneWidget);
+    expect(tester.getBottomRight(download).dy, lessThanOrEqualTo(298));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Соседние миниатюры наклоняются под разными углами', (

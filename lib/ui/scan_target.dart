@@ -5,6 +5,7 @@ import '../data/catalog.dart';
 import '../data/scan_names.dart';
 import '../scan_cubit.dart';
 import 'name_search.dart';
+import 'lookup_page.dart';
 
 class ScanTargetsPage extends StatefulWidget {
   const ScanTargetsPage(this.catalog, this.scan, {super.key});
@@ -33,36 +34,24 @@ class _ScanTargetsPageState extends State<ScanTargetsPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Искомые карты'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Готово'),
-        ),
-      ],
-    ),
-    body: SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: _searchField(),
-          ),
-          Expanded(
-            child: BlocSelector<ScanCubit, ScanSession, Set<String>>(
-              bloc: widget.scan,
-              selector: (state) => state.targets,
-              builder: (context, targets) =>
-                  BlocBuilder<NameSearch, AsyncSnapshot<List<String>>>(
-                    bloc: search,
-                    builder: (context, state) => _results(state, targets),
-                  ),
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) => LookupPage(
+    title: 'Искомые карты',
+    scanner: true,
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Готово'),
       ),
+    ],
+    header: _searchField(),
+    results: BlocSelector<ScanCubit, ScanSession, Set<String>>(
+      bloc: widget.scan,
+      selector: (state) => state.targets,
+      builder: (context, targets) =>
+          BlocBuilder<NameSearch, AsyncSnapshot<List<String>>>(
+            bloc: search,
+            builder: (context, state) => _results(state, targets),
+          ),
     ),
   );
 
@@ -104,7 +93,7 @@ class _ScanTargetsPageState extends State<ScanTargetsPage> {
     }
     final names = state.data ?? const [];
     if (names.isEmpty) {
-      return const Center(child: Text('Совпадений нет'));
+      return const LookupHint(Icons.search_off_rounded, 'Совпадений нет');
     }
     return ListView.builder(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -131,8 +120,9 @@ class _ScanTargetsPageState extends State<ScanTargetsPage> {
 
   Widget _selected(Set<String> targets) {
     if (targets.isEmpty) {
-      return const Center(
-        child: Text('Введите название карты, чтобы добавить её'),
+      return const LookupHint(
+        Icons.saved_search_rounded,
+        'Введите название карты, чтобы добавить её',
       );
     }
     final names = targets.toList();

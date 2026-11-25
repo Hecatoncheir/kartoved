@@ -257,7 +257,7 @@ void main() {
         await tap(find.text('Sol Ring'));
         await waitFor(() => find.byType(TextField).evaluate().isNotEmpty);
         await tester.enterText(find.byType(TextField), 'mps');
-        await tester.pump();
+        await waitFor(() => find.text(ring.detail).evaluate().isNotEmpty);
         await tap(find.text(ring.detail).first);
         final quantity = find.descendant(
           of: find.byType(CardDestination),
