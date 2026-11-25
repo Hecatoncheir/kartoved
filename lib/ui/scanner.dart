@@ -968,8 +968,6 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                 _toggleGuide();
               case 'torch':
                 _torch();
-              case 'autoMode':
-                _pickAutoMode();
               case 'calibrateTray':
                 _recalibrateTray();
             }
@@ -993,10 +991,6 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
               value: 'target',
               enabled: library.catalog != null,
               child: const Text('Искомые карты'),
-            ),
-            PopupMenuItem(
-              value: 'autoMode',
-              child: const Text('Режим автоскана'),
             ),
             if (scan.state.mode == ScanMode.tray && _trayArea != null)
               const PopupMenuItem(
