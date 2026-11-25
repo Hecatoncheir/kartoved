@@ -14,15 +14,22 @@ class Pictures {
   static final shared = Pictures();
   final Map<String, Future<File>> _pending = {};
   final Map<String, Future<Uint8List>> _browserPending = {};
+  final _unsavedScans = <String, Uint8List>{};
   final _photos = StreamController<String>.broadcast();
   Stream<String> get photos => _photos.stream;
   Future<Directory>? _root;
 
-  Future<Directory> get _directory =>
-      _root ??= getApplicationSupportDirectory().then(
-        (dir) =>
-            Directory(p.join(dir.path, 'pictures')).create(recursive: true),
-      );
+  Future<Directory> get _directory async {
+    final root = _root ??= getApplicationSupportDirectory().then(
+      (dir) => Directory(p.join(dir.path, 'pictures')).create(recursive: true),
+    );
+    try {
+      return await root;
+    } on Exception {
+      if (identical(root, _root)) _root = null;
+      rethrow;
+    }
+  }
 
   static Uri address(String id, {bool large = false}) {
     final matched = RegExp(
@@ -61,6 +68,7 @@ class Pictures {
       final bytes = await browserCacheRead('scans/$id');
       return bytes == null || bytes.isEmpty ? null : MemoryImage(bytes);
     }
+    if (_unsavedScans[id] case final bytes?) return MemoryImage(bytes);
     final file = _scanFile(await _directory, id);
     return await _hasPhoto(file) ? FileImage(file) : null;
   }
@@ -141,6 +149,13 @@ class Pictures {
   Future<bool> _hasPhoto(File file) async =>
       await file.exists() && await file.length() > 0;
 
+  bool _completeJpeg(Uint8List bytes) =>
+      bytes.length >= 4 &&
+      bytes[0] == 0xff &&
+      bytes[1] == 0xd8 &&
+      bytes[bytes.length - 2] == 0xff &&
+      bytes.last == 0xd9;
+
   Future<void> saveScan(String id, Uint8List bytes) async {
     if (bytes.isEmpty) return;
     address(id);
@@ -151,16 +166,30 @@ class Pictures {
       _photos.add(id);
       return;
     }
-    final photo = _scanFile(await _directory, id);
-    if (await _hasPhoto(photo)) return;
-    final temp = File('${photo.path}.part');
     try {
-      await temp.writeAsBytes(bytes, flush: true);
-      await temp.rename(photo.path);
-      _photos.add(id);
-    } finally {
-      if (await temp.exists()) await temp.delete();
+      final photo = _scanFile(await _directory, id);
+      final existed = await photo.exists();
+      if (existed && _completeJpeg(await photo.readAsBytes())) {
+        if (_unsavedScans.remove(id) != null) _photos.add(id);
+        return;
+      }
+      final temp = File('${photo.path}.part');
+      try {
+        await temp.writeAsBytes(bytes, flush: true);
+        await temp.rename(photo.path);
+        if (existed) await FileImage(photo).evict();
+      } finally {
+        if (await temp.exists()) await temp.delete();
+      }
+      _unsavedScans.remove(id);
+    } on Exception {
+      _unsavedScans.remove(id);
+      if (_unsavedScans.length >= 16) {
+        _unsavedScans.remove(_unsavedScans.keys.first);
+      }
+      _unsavedScans[id] = bytes;
     }
+    _photos.add(id);
   }
 
   Future<File> _download(Uri url, File file) async {
@@ -170,6 +199,7 @@ class Pictures {
     final temp = File('${file.path}.part');
     try {
       final request = await client.getUrl(url);
+      request.headers.set(HttpHeaders.acceptHeader, 'image/jpeg,image/*;q=0.8');
       final response = await request.close().timeout(
         const Duration(seconds: 10),
       );

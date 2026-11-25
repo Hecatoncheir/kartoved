@@ -1,5 +1,11 @@
 typedef Hit = ({int index, double score});
-typedef TitleRead = ({String text, double confidence, List<double> corners});
+typedef TitleCandidate = ({String text, double confidence});
+typedef TitleRead = ({
+  String text,
+  double confidence,
+  List<double> corners,
+  TitleCandidate? contrast,
+});
 typedef Recognition = ({
   List<Hit> hits,
   List<Hit> mtgHits,

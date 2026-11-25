@@ -17,14 +17,26 @@ class CardPicture extends StatefulWidget {
 }
 
 class _CardPictureState extends State<CardPicture> {
-  late Future<ImageProvider> small = Pictures.shared.official(widget.card.id);
-  late Future<ImageProvider?> scan = Pictures.shared.scanThumbnail(
-    widget.card.id,
-  );
-  late Future<ImageProvider>? large = _large();
-  Future<ImageProvider>? _large() => widget.large
-      ? Pictures.shared.official(widget.card.id, large: true)
-      : null;
+  late Future<ImageProvider?> small = _official();
+  late Future<ImageProvider?> scan = _scan();
+  late Future<ImageProvider?>? large = _large();
+
+  Future<ImageProvider?>? _large() =>
+      widget.large ? _official(large: true) : null;
+
+  Future<ImageProvider?> _official({bool large = false}) =>
+      _available(Pictures.shared.official(widget.card.id, large: large));
+
+  Future<ImageProvider?> _scan() =>
+      _available(Pictures.shared.scanThumbnail(widget.card.id));
+
+  Future<ImageProvider?> _available(Future<ImageProvider?> source) async {
+    try {
+      return await source;
+    } on Exception {
+      return null;
+    }
+  }
 
   late final StreamSubscription<String> _photos;
 
@@ -34,8 +46,8 @@ class _CardPictureState extends State<CardPicture> {
     _photos = Pictures.shared.photos.listen((id) {
       if (id != widget.card.id) return;
       setState(() {
-        small = Pictures.shared.official(id);
-        scan = Pictures.shared.scanThumbnail(id);
+        small = _official();
+        scan = _scan();
       });
     });
   }
@@ -50,8 +62,8 @@ class _CardPictureState extends State<CardPicture> {
   void didUpdateWidget(CardPicture old) {
     super.didUpdateWidget(old);
     if (old.card.id != widget.card.id) {
-      small = Pictures.shared.official(widget.card.id);
-      scan = Pictures.shared.scanThumbnail(widget.card.id);
+      small = _official();
+      scan = _scan();
     }
     if (old.large != widget.large || old.card.id != widget.card.id) {
       large = _large();
@@ -87,6 +99,8 @@ class _CardPictureState extends State<CardPicture> {
           return Image(
             image: image,
             fit: BoxFit.contain,
+            frameBuilder: (_, child, frame, _) =>
+                frame == null ? fallback() : child,
             errorBuilder: (_, _, _) => fallback(),
           );
         },

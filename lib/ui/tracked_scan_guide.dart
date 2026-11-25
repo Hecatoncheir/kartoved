@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import 'browser_glass.dart';
 import 'scan_frame.dart';
-import 'scan_particles.dart';
+import 'scan_mesh.dart';
 
 class TrackedScanGuide extends StatefulWidget {
   const TrackedScanGuide({
@@ -108,8 +108,7 @@ class _TrackedScanGuideState extends State<TrackedScanGuide>
               outline: outline,
               focus: focus,
             ),
-          if (focus != null)
-            ScanParticles(outline: focus, reading: widget.reading),
+          if (focus != null) ScanMesh(outline: focus, reading: widget.reading),
         ],
       );
     },

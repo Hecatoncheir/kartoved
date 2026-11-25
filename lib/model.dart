@@ -190,8 +190,8 @@ class AppModel extends Cubit<LibraryState> {
       .loadString('$mtgIdentificationAssets/printings.json')
       .then((json) => (jsonDecode(json) as List).cast<String>());
 
-  (Catalog, String, bool)? _lastTitleQuery;
-  Future<String?>? _lastTitle;
+  (Catalog, String?, String?, bool)? _lastTitleQuery;
+  Future<({String name, bool fromContrast})?>? _lastTitle;
 
   Future<List<Match>> _matches(
     Recognition result,
@@ -234,26 +234,32 @@ class AppModel extends Cubit<LibraryState> {
     List<Match> visual,
   ) async {
     final title = result.title;
-    if (title == null || title.confidence < .86) return visual;
+    if (title == null) return visual;
+    final color = title.confidence >= .86 ? title.text : null;
+    final contrast = title.contrast;
+    final alternate =
+        contrast != null && contrast.confidence >= .86 && contrast.text != color
+        ? contrast.text
+        : null;
+    if (color == null && alternate == null) return visual;
     try {
       final allowOneEdit =
           title.confidence >= .89 && (visual.firstOrNull?.score ?? 0) < .74;
-      final query = (catalog, title.text, allowOneEdit);
+      final query = (catalog, color, alternate, allowOneEdit);
       if (_lastTitleQuery != query || _lastTitle == null) {
         _lastTitleQuery = query;
-        _lastTitle = catalog.nameForScannedTitle(
-          title.text,
-          allowOneEdit: allowOneEdit,
-        );
+        _lastTitle = _scanTitle(catalog, color, alternate, allowOneEdit);
       }
-      final name = await _lastTitle;
-      if (name == null) return visual;
+      final choice = await _lastTitle;
+      if (choice == null) return visual;
+      final (name: name, :fromContrast) = choice;
+      final confidence = fromContrast ? contrast!.confidence : title.confidence;
       final matching = visual
           .where((m) => m.editions.first.name == name)
           .toList();
       if (matching.isEmpty &&
           (visual.firstOrNull?.score ?? 0) >= .82 &&
-          title.confidence < .95) {
+          confidence < .95) {
         return visual;
       }
       final printings = <String, Edition>{
@@ -269,7 +275,7 @@ class AppModel extends Cubit<LibraryState> {
       return [
         Match(
           printings.values.toList(),
-          score: title.confidence,
+          score: confidence,
           corners: title.corners,
           fromTitle: true,
           titleOnly: matching.isEmpty,
@@ -279,6 +285,33 @@ class AppModel extends Cubit<LibraryState> {
       _lastTitle = null;
       return visual;
     }
+  }
+
+  Future<({String name, bool fromContrast})?> _scanTitle(
+    Catalog catalog,
+    String? color,
+    String? contrast,
+    bool allowOneEdit,
+  ) async {
+    if (color != null) {
+      final name = await catalog.nameForScannedTitle(
+        color,
+        allowOneEdit: contrast == null && allowOneEdit,
+      );
+      if (name != null) return (name: name, fromContrast: false);
+    }
+    if (contrast != null) {
+      final name = await catalog.nameForScannedTitle(contrast);
+      if (name != null) return (name: name, fromContrast: true);
+      if (color != null && allowOneEdit) {
+        final near = await catalog.nameForScannedTitle(
+          color,
+          allowOneEdit: true,
+        );
+        if (near != null) return (name: near, fromContrast: false);
+      }
+    }
+    return null;
   }
 
   Future<List<Match>> _preferKeypoints(

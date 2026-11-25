@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as im;
 import 'package:path/path.dart' as p;
 
 import 'frame.dart';
@@ -45,12 +46,27 @@ class AndroidActions {
     String? file,
     PreviewFrame? frame,
     required List<double> corners,
-  }) => kIsWeb
-      ? browserCrop(file!, corners)
-      : _channel.invokeMethod<Uint8List>(
-          'scanPhoto',
-          scanArguments(file: file, frame: frame, corners: corners),
-        );
+  }) async {
+    if (kIsWeb) return browserCrop(file!, corners);
+    try {
+      final photo = await _channel.invokeMethod<Uint8List>(
+        'scanPhoto',
+        scanArguments(file: file, frame: frame, corners: corners),
+      );
+      if (photo != null && photo.isNotEmpty) return photo;
+    } on Exception {
+      // При сбое канала миниатюру можно получить из исходного кадра.
+    }
+    try {
+      return await compute(_scanThumbnail, (
+        file: file,
+        frame: frame,
+        corners: corners,
+      ));
+    } on Exception {
+      return null;
+    }
+  }
 
   static Future<void> warmTray(RecognitionModel engine) => kIsWeb
       ? browserWarmTray(engine.name)
@@ -63,15 +79,22 @@ class AndroidActions {
     required bool readFooter,
   }) async {
     if (kIsWeb) return browserTrayPhoto(file!, area, readFooter);
-    final photo = await _channel.invokeMapMethod<String, Object?>('trayPhoto', {
-      ...scanArguments(file: file, frame: frame, corners: const []),
-      'tray': area.bounds,
-      'readFooter': readFooter,
-    });
-    final bytes = photo?['bytes'];
-    return bytes is Uint8List
-        ? (bytes: bytes, footer: photo?['footer'] as String? ?? '')
-        : null;
+    try {
+      final photo = await _channel.invokeMapMethod<String, Object?>(
+        'trayPhoto',
+        {
+          ...scanArguments(file: file, frame: frame, corners: const []),
+          'tray': area.bounds,
+          'readFooter': readFooter,
+        },
+      );
+      final bytes = photo?['bytes'];
+      return bytes is Uint8List && bytes.isNotEmpty
+          ? (bytes: bytes, footer: photo?['footer'] as String? ?? '')
+          : null;
+    } on Exception {
+      return null;
+    }
   }
 
   static Future<({String text, String? language})> readTrayText(
@@ -160,4 +183,52 @@ class AndroidActions {
 
   static Future<bool> openBackup(String path) async =>
       await _channel.invokeMethod<bool>('openBackup', {'path': path}) ?? false;
+}
+
+Uint8List? _scanThumbnail(
+  ({String? file, PreviewFrame? frame, List<double> corners}) input,
+) {
+  final captured = input.frame;
+  final file = input.file;
+  final source = captured != null
+      ? frameImage(captured, maxSide: 960)
+      : file == null
+      ? null
+      : im.decodeImage(File(file).readAsBytesSync());
+  if (source == null) return null;
+  final image = captured == null ? im.bakeOrientation(source) : source;
+  final points = input.corners;
+  if (points.length == 8 && points.every((value) => value.isFinite)) {
+    final corners = [
+      for (var i = 0; i < points.length; i += 2)
+        im.Point(points[i].clamp(0, 1), points[i + 1].clamp(0, 1)),
+    ];
+    final area =
+        (corners[2].x - corners[0].x) * (corners[3].y - corners[1].y) -
+        (corners[2].y - corners[0].y) * (corners[3].x - corners[1].x);
+    if (area.abs() > .002) {
+      im.Point at(int i) => im.Point(
+        corners[i].x * (image.width - 1),
+        corners[i].y * (image.height - 1),
+      );
+      final card = im.copyRectify(
+        image,
+        topLeft: at(0),
+        topRight: at(1),
+        bottomRight: at(2),
+        bottomLeft: at(3),
+        toImage: im.Image(width: 420, height: 587, numChannels: 3),
+        interpolation: im.Interpolation.linear,
+      );
+      return im.encodeJpg(card, quality: 86);
+    }
+  }
+  final thumbnail = image.width > 840 || image.height > 840
+      ? im.copyResize(
+          image,
+          width: image.width >= image.height ? 840 : null,
+          height: image.height > image.width ? 840 : null,
+        )
+      : image;
+  return im.encodeJpg(thumbnail, quality: 86);
 }

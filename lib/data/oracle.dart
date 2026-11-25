@@ -73,7 +73,8 @@ Recognition identifyImage(
         original,
         crop,
         titleAssets,
-        onRead: () => onProgress?.call(ScanStage.title, crop),
+        retryQuad: tray == null ? null : corners,
+        onRead: (points) => onProgress?.call(ScanStage.title, points),
       );
     } catch (_) {
       return null;
@@ -173,7 +174,9 @@ Recognition identifyImage(
       final mtgHits = mtgGraph == null
           ? const <Hit>[]
           : _runMtg(mtg, bytes, side, fine.quad);
-      if ((title?.confidence ?? 0) < .86 && !identical(outline, corners)) {
+      if ((title?.confidence ?? 0) < .86 &&
+          (title?.contrast?.confidence ?? 0) < .86 &&
+          !identical(outline, corners)) {
         title = titleFor(corners);
       }
       return (hits: hits, mtgHits: mtgHits, corners: corners, title: title);

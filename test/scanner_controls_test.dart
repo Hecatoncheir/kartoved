@@ -4,7 +4,7 @@ import 'package:kartoved/scan_cubit.dart';
 import 'package:kartoved/ui/auto_scan_controls.dart';
 import 'package:kartoved/ui/scan_frame.dart';
 import 'package:kartoved/ui/scan_outline.dart';
-import 'package:kartoved/ui/scan_particles.dart';
+import 'package:kartoved/ui/scan_mesh.dart';
 import 'package:kartoved/ui/tracked_scan_guide.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -94,11 +94,11 @@ void main() {
     expect(path.contains(const Offset(20, 265)), isFalse);
   });
 
-  testWidgets('Частицы затухают после распознавания и перестают обновляться', (
+  testWidgets('Сетка затухает после распознавания и перестаёт обновляться', (
     tester,
   ) async {
     Widget effect(bool reading) => MaterialApp(
-      home: ScanParticles(
+      home: ScanMesh(
         outline: const [
           Offset(40, 30),
           Offset(210, 40),
@@ -111,14 +111,14 @@ void main() {
     await tester.pumpWidget(effect(true));
     await tester.pump(const Duration(milliseconds: 200));
     final effectOpacity = find.descendant(
-      of: find.byType(ScanParticles),
+      of: find.byType(ScanMesh),
       matching: find.byType(FadeTransition),
     );
     expect(tester.widget<FadeTransition>(effectOpacity).opacity.value, 1);
     await tester.pumpWidget(effect(false));
     await tester.pump(const Duration(milliseconds: 180));
     final opacity = find.descendant(
-      of: find.byType(ScanParticles),
+      of: find.byType(ScanMesh),
       matching: find.byType(FadeTransition),
     );
     expect(
@@ -162,7 +162,7 @@ void main() {
     expect(tester.widget<ScanFrame>(frame).outline, after);
   });
 
-  testWidgets('Фокус и частицы вместе переходят от названия к нижней строке', (
+  testWidgets('Фокус и сетка вместе переходят от названия к нижней строке', (
     tester,
   ) async {
     const viewport = Size(800, 600);
@@ -186,8 +186,8 @@ void main() {
       ),
     );
     ScanFrame frame() => tester.widget<ScanFrame>(find.byType(ScanFrame));
-    List<Offset> particles() =>
-        tester.widget<ScanParticles>(find.byType(ScanParticles)).outline;
+    List<Offset> meshCorners() =>
+        tester.widget<ScanMesh>(find.byType(ScanMesh)).outline;
 
     await tester.pumpWidget(guide(null));
     await tester.pumpWidget(guide(title));
@@ -197,7 +197,7 @@ void main() {
       frame().focus!.first.dy,
       inExclusiveRange(outline.first.dy, title.first.dy),
     );
-    expect(particles(), frame().focus);
+    expect(meshCorners(), frame().focus);
     await tester.pump(const Duration(milliseconds: 100));
     expect(frame().focus, title);
 
@@ -207,13 +207,13 @@ void main() {
       frame().focus!.first.dy,
       inExclusiveRange(title.first.dy, footer.first.dy),
     );
-    expect(particles(), frame().focus);
+    expect(meshCorners(), frame().focus);
     await tester.pump(const Duration(milliseconds: 100));
     expect(frame().focus, footer);
 
     await tester.pumpWidget(guide(null, reading: false));
     await tester.pumpAndSettle();
     expect(frame().focus, outline);
-    expect(particles(), outline);
+    expect(meshCorners(), outline);
   });
 }
