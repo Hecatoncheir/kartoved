@@ -113,7 +113,8 @@ class CardText(private val context: Context) {
 
     fun readTrayText(call: MethodCall, reply: MethodChannel.Result) = process(reply) {
         val bytes = requireNotNull(call.arguments as? ByteArray)
-        val card = requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
+        val options = BitmapFactory.Options().apply { inMutable = true }
+        val card = requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options))
         maskArtwork(card)
         recognize(card)
     }

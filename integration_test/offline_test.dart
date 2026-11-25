@@ -47,6 +47,12 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
         corners: cards.first.corners,
       );
       expect(img.decodeJpg(thumbnail!)?.width, 600);
+      final trayText = await AndroidActions.readTrayText(thumbnail);
+      expect(
+        trayText.text.trim(),
+        isNotEmpty,
+        reason: 'OCR должен прочитать текст за пределами иллюстрации',
+      );
       debugPrint('Автономная проверка: карта у края кадра NV21');
       final edgeFrame = _cameraFrame(_offsetPhoto(await photo.readAsBytes()));
       final edgeMatches = await model.recognizeFrame(edgeFrame);
@@ -107,7 +113,12 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
           tray: const TrayArea(0, 0, 1, 1),
           file: file.path,
         );
-        expect(repeat?.decision.review, isNull);
+        expect(
+          repeat?.decision.review,
+          isNull,
+          reason:
+              '$language: ${repeat?.decision.review?.reason}, ${repeat?.decision.card.detail}, оценка ${matches.first.score}',
+        );
         expect(repeat?.decision.card.language, language);
         expect(repeat?.decision.card.name, english.name);
       }
