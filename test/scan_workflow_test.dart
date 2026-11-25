@@ -19,6 +19,7 @@ import 'package:kartoved/ui/collections.dart';
 import 'package:kartoved/ui/picture.dart';
 import 'package:kartoved/ui/scan_frame.dart';
 import 'package:kartoved/ui/scanner.dart';
+import 'package:kartoved/ui/scanner_menu.dart';
 import 'package:kartoved/ui/style.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
@@ -130,7 +131,7 @@ void main() {
   scannerTest('Выбор коллекции и сохранение рамки при повторном открытии', (
     app,
   ) async {
-    await app.tap(find.text('Сканировать карту'));
+    await app.tap(find.text('Сканер'));
     await app.tap(find.widgetWithText(ListTile, 'На обмен'));
     await app.waitFor(
       () => find.byTooltip('Меню сканера').evaluate().isNotEmpty,
@@ -143,19 +144,84 @@ void main() {
     final frame = find.byType(ScanFrame);
     final initialWindow = app.tester.widget<ScanFrame>(frame).window;
     await app.tap(find.byTooltip('Меню сканера'));
-    await app.tap(find.text('Скрыть рамку и стекло'));
-    expect(find.byType(ScanFrame), findsNothing);
-    await app.tap(find.byTooltip('Меню сканера'));
-    await app.tap(find.text('Показать рамку и стекло'));
-    expect(app.tester.widget<ScanFrame>(frame).window, initialWindow);
-    await app.tap(find.byTooltip('Меню сканера'));
-    await app.tap(find.text('Скрыть рамку и стекло'));
+    final guide = find.widgetWithText(FilterChip, 'Рамка и стекло');
+    expect(app.tester.widget<FilterChip>(guide).selected, isTrue);
+    await app.tap(guide);
+    expect(app.tester.widget<FilterChip>(guide).selected, isFalse);
+    await app.closeMenu();
+    expect(frame, findsNothing);
     await app.reopenScanner();
-    expect(find.byType(ScanFrame), findsNothing);
+    expect(frame, findsNothing);
     await app.tap(find.byTooltip('Меню сканера'));
-    await app.tap(find.text('Показать рамку и стекло'));
+    await app.tap(guide);
+    await app.closeMenu();
     expect(app.tester.widget<ScanFrame>(frame).window, initialWindow);
   });
+
+  scannerTest('Поиск издания, возврат и сброс только одного фильтра стопки', (
+    app,
+  ) async {
+    await app.openScanner();
+    await app.tap(find.byTooltip('Меню сканера'));
+    await app.tap(find.text('Стопка и распознавание'));
+    await app.tap(find.text('Язык стопки'));
+    await app.tester.enterText(find.byType(TextField), 'рус');
+    await app.tap(find.text('Русский'));
+    await app.tap(find.text('Издание стопки'));
+    await app.tester.enterText(find.byType(TextField), 'несуществующий');
+    await app.waitFor(() => find.text('Нет совпадений').evaluate().isNotEmpty);
+    await app.tap(find.byTooltip('Очистить поиск'));
+    await app.tap(find.text('ELD'));
+    await app.tap(find.text('Язык стопки'));
+    await app.tap(find.text('Авто'));
+    expect(
+      find.descendant(of: find.byType(ScannerMenu), matching: find.text('ELD')),
+      findsOneWidget,
+    );
+    await app.tap(find.text('Издание стопки'));
+    await app.tester.binding.handlePopRoute();
+    await app.tester.pumpAndSettle();
+    expect(find.text('Стопка и распознавание'), findsOneWidget);
+    await app.tap(find.byTooltip('Назад'));
+    await app.closeMenu();
+    expect(find.text('ELD'), findsOneWidget);
+  });
+
+  scannerTest('Меню на узком экране с крупным шрифтом и открытой клавиатурой', (
+    app,
+  ) async {
+    final tester = app.tester;
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 680);
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await app.openScanner();
+    await app.tap(find.byTooltip('Меню сканера'));
+    await app.tap(find.text('Стопка и распознавание'));
+    await app.tap(find.text('Издание стопки'));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'eld');
+    await app.tap(find.text('ELD'));
+    tester.view.resetViewInsets();
+    await app.closeMenu();
+    expect(tester.takeException(), isNull);
+  });
+
+  scannerTest(
+    'Смена альбома в сканере направляет следующий снимок в выбранный альбом',
+    (app) async {
+      await app.openScanner();
+      await app.tap(find.widgetWithText(TextButton, 'Моя коллекция'));
+      await app.tap(find.widgetWithText(ListTile, 'На обмен'));
+      await app.waitFor(() => app.model.state.title == 'На обмен');
+      await app.tap(find.text('Из фото'));
+      await app.waitFor(
+        () => find.text('Учтено в «На обмен»').evaluate().isNotEmpty,
+      );
+    },
+  );
 
   scannerTest('Скан из фото сохраняет карту и миниатюру', (app) async {
     await app.openScanner();
@@ -190,6 +256,32 @@ void main() {
     expect(app.targetSounds, ['added']);
   });
 
+  scannerTest('Из библиотеки можно выбрать очередь конкретного альбома', (
+    app,
+  ) async {
+    await app.tester.runAsync(() async {
+      await app.model.save(
+        en,
+        review: ScanReview(ReviewReason.language, [en, ru]),
+      );
+      final other = app.model.state.groups.firstWhere(
+        (g) => g.name == 'На обмен',
+      );
+      await app.model.select(other.id);
+      await app.model.save(
+        bolt,
+        review: ScanReview(ReviewReason.artwork, [bolt]),
+      );
+      await app.model.select(1);
+    });
+    await app.openLibraryReviews(2);
+    await app.tap(find.widgetWithText(ListTile, 'На обмен'));
+    await app.waitFor(() => find.byType(CollectionPage).evaluate().isNotEmpty);
+    expect(find.text('Переснять'), findsOneWidget);
+    expect(find.text(bolt.name), findsWidgets);
+    expect(app.model.state.title, 'На обмен');
+  });
+
   scannerTest(
     'Пересъёмка из фильтра заменяет выбранную запись и сохраняет соседнюю',
     (app) async {
@@ -207,8 +299,10 @@ void main() {
       app.model.matches = const [
         Match([en]),
       ];
-      await app.tap(find.text('Моя коллекция'));
-      await app.tap(find.text('На проверке · 2'));
+      await app.openLibraryReviews(2);
+      await app.waitFor(
+        () => find.byType(CollectionPage).evaluate().isNotEmpty,
+      );
       final firstRow = find.byKey(ValueKey(ids.$1));
       final rescan = find.descendant(
         of: firstRow,
@@ -233,6 +327,56 @@ void main() {
       );
       expect(find.byKey(ValueKey(ids.$2)), findsOneWidget);
       expect(firstRow, findsNothing);
+      await app.tap(find.text('Переснять'));
+      await app.tap(find.text('Из фото'));
+      await app.waitFor(
+        () => find.text('Все карты проверены').evaluate().isNotEmpty,
+      );
+      await app.tap(find.text('К альбому'));
+      expect(find.byType(CollectionPage), findsOneWidget);
+      expect(find.text('Найти карту'), findsOneWidget);
+      expect(app.model.state.reviews, isEmpty);
+    },
+  );
+
+  scannerTest(
+    'После пересъёмки в середине длинной очереди соседняя карта остаётся на месте',
+    (app) async {
+      final ids = (await app.tester.runAsync(() async {
+        final pending = ScanReview(ReviewReason.language, [en, ru]);
+        final ids = <int>[];
+        for (var index = 0; index < 18; index++) {
+          ids.add(await app.model.save(en, review: pending));
+        }
+        return ids.reversed.toList();
+      }))!;
+      app.model.matches = const [
+        Match([en]),
+      ];
+      await app.openLibraryReviews(ids.length);
+      final list = find.byType(ListView);
+      await app.waitFor(() => list.evaluate().isNotEmpty);
+      final target = find.byKey(ValueKey(ids[9]));
+      final viewport = find.descendant(
+        of: list,
+        matching: find.byType(Scrollable),
+      );
+      await app.tester.scrollUntilVisible(target, 240, scrollable: viewport);
+      await app.tester.ensureVisible(target);
+      await app.tester.pumpAndSettle();
+      final y = app.tester.getTopLeft(target).dy;
+      await app.tap(
+        find.descendant(of: target, matching: find.text('Переснять')),
+      );
+      await app.tap(find.text('Из фото'));
+      await app.waitFor(
+        () =>
+            find.text('На проверке · 17').evaluate().isNotEmpty &&
+            find.byType(Scanner).evaluate().isEmpty,
+      );
+      expect(app.model.state.reviews.containsKey(ids[9]), isFalse);
+      final next = find.byKey(ValueKey(ids[10]));
+      expect(app.tester.getTopLeft(next).dy, closeTo(y, 1));
     },
   );
 
@@ -241,13 +385,13 @@ void main() {
   ) async {
     await app.openScanner();
     await app.tap(find.byTooltip('Меню сканера'));
-    await app.tap(find.text('Настройки стопки'));
-    await app.tap(find.text('Язык'));
+    await app.tap(find.text('Стопка и распознавание'));
+    await app.tap(find.text('Язык стопки'));
     await app.tap(find.text('Русский'));
-    await app.tap(find.text('Издание'));
+    await app.tap(find.text('Издание стопки'));
     await app.tester.enterText(find.byType(TextField), 'eld');
     await app.tap(find.text('ELD'));
-    await app.tap(find.text('Применить'));
+    await app.closeMenu();
     expect(find.text('ELD · RU'), findsOneWidget);
     await app.tap(find.text('Из фото'));
     await app.waitFor(
@@ -267,7 +411,7 @@ void main() {
     expect(app.model.state.reviews, isEmpty);
     await app.reopenScanner();
     await app.tap(find.byTooltip('Меню сканера'));
-    await app.tap(find.text('Настройки стопки'));
+    await app.tap(find.text('Стопка и распознавание'));
     expect(find.text('Авто'), findsNWidgets(2));
   });
 
@@ -311,12 +455,10 @@ void main() {
     (app) async {
       await app.openScanner();
       await app.tap(find.byTooltip('Меню сканера'));
-      final quick = find.widgetWithText(
-        CheckedPopupMenuItem<String>,
-        'Только необходимое',
-      );
+      final quick = find.widgetWithText(SwitchListTile, 'Только необходимое');
       await app.tester.ensureVisible(quick);
       await app.tap(quick);
+      await app.closeMenu();
       app.model.matches = const [
         Match([ru, en], englishTitle: true),
       ];
@@ -390,12 +532,10 @@ void main() {
     (app) async {
       await app.openScanner();
       await app.tap(find.byTooltip('Меню сканера'));
-      final quick = find.widgetWithText(
-        CheckedPopupMenuItem<String>,
-        'Только необходимое',
-      );
+      final quick = find.widgetWithText(SwitchListTile, 'Только необходимое');
       await app.tester.ensureVisible(quick);
       await app.tap(quick);
+      await app.closeMenu();
       app.model.matches = const [
         Match([en, domOpt], englishTitle: true),
       ];
@@ -423,8 +563,10 @@ void main() {
     await app.openScanner();
     expect(app.savedEngine, RecognitionModel.oracle.name);
     await app.tap(find.byTooltip('Меню сканера'));
+    await app.tap(find.text('Стопка и распознавание'));
     await app.tap(find.text('Модель распознавания'));
     await app.tap(find.text(RecognitionModel.mtgIdentification.label));
+    await app.closeMenu();
     expect(app.savedEngine, RecognitionModel.mtgIdentification.name);
     await app.reopenScanner();
     await app.waitFor(() => find.text('MTG + Oracle').evaluate().isNotEmpty);
@@ -432,8 +574,10 @@ void main() {
     await app.waitFor(() => app.model.state.owned('Opt') == 4);
     expect(app.model.lastEngine, RecognitionModel.mtgIdentification);
     await app.tap(find.byTooltip('Меню сканера'));
+    await app.tap(find.text('Стопка и распознавание'));
     await app.tap(find.text('Модель распознавания'));
     await app.tap(find.text(RecognitionModel.keypoints.label));
+    await app.closeMenu();
     expect(app.savedEngine, RecognitionModel.keypoints.name);
     await app.reopenScanner();
     await app.waitFor(() => find.text('Ключевые точки').evaluate().isNotEmpty);
@@ -592,6 +736,11 @@ class _ScannerFixture {
   }
 
   Future<void> tap(Finder finder) async {
+    if (finder.evaluate().length == 1 &&
+        finder.hitTestable().evaluate().isEmpty) {
+      await tester.ensureVisible(finder);
+      await tester.pump();
+    }
     await waitFor(
       () => finder.hitTestable().evaluate().isNotEmpty,
       finder.toString(),
@@ -601,8 +750,18 @@ class _ScannerFixture {
     await tester.pump(const Duration(milliseconds: 350));
   }
 
+  Future<void> closeMenu() => tap(find.byTooltip('Закрыть меню'));
+
+  Future<void> openLibraryReviews(int count) async {
+    await tester.pumpAndSettle();
+    final row = find.text('На проверке · $count');
+    await tester.scrollUntilVisible(row, 160);
+    await tap(row);
+  }
+
   Future<void> openTargets() async {
     await tap(find.byTooltip('Меню сканера'));
+    await tap(find.text('Стопка и распознавание'));
     await tap(find.text('Искомые карты'));
   }
 

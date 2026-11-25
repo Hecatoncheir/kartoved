@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../data/pictures.dart';
-import 'style.dart';
+import 'library_style.dart';
 
 class CollectionLight extends StatelessWidget {
   const CollectionLight({
@@ -30,8 +30,8 @@ class CollectionLight extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final samples = cardIds.toSet().take(_centers.length);
-    return ColoredBox(
-      color: dark,
+    return DecoratedBox(
+      decoration: librarySky,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -90,7 +90,7 @@ class _CardGlowState extends State<_CardGlow> {
             center: widget.center,
             radius: 1.05,
             colors: [
-              shade.withValues(alpha: shade.a * .28),
+              shade.withValues(alpha: shade.a * .14),
               shade.withValues(alpha: 0),
             ],
           ),

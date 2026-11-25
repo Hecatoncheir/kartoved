@@ -56,6 +56,8 @@ class LibraryState {
   const LibraryState({
     this.catalog,
     this.groups = const [],
+    this.covers = const {},
+    this.pendingByFolder = const {},
     this.holdings = const {},
     this.folder = 1,
     this.recent = const [],
@@ -66,6 +68,8 @@ class LibraryState {
   });
   final Catalog? catalog;
   final List<CardGroup> groups;
+  final Map<int, List<Edition>> covers;
+  final Map<int, int> pendingByFolder;
   final Holdings holdings;
   int owned(String name) =>
       holdings[name]?.values.fold<int>(0, (n, qty) => n + qty) ?? 0;
@@ -78,6 +82,8 @@ class LibraryState {
   LibraryState withCatalog(Catalog? catalog, {String? error}) => LibraryState(
     catalog: catalog,
     groups: groups,
+    covers: covers,
+    pendingByFolder: pendingByFolder,
     holdings: holdings,
     folder: folder,
     recent: recent,
@@ -158,6 +164,8 @@ class AppModel extends Cubit<LibraryState> {
   Future<void> _refresh() async {
     final revision = ++_revision;
     final groups = await history.folders();
+    final covers = await history.albumCovers();
+    final pending = await history.pendingCounts();
     final folder = groups.any((group) => group.id == _folder)
         ? _folder
         : groups.lastOrNull?.id ?? 1;
@@ -173,6 +181,8 @@ class AppModel extends Cubit<LibraryState> {
         catalog: _base,
         error: state.error,
         groups: groups,
+        covers: covers,
+        pendingByFolder: pending,
         holdings: holdings,
         folder: folder,
         recent: timeline.recent,
@@ -570,6 +580,23 @@ class AppModel extends Cubit<LibraryState> {
                 card.name: {...locations, folder: (locations[folder] ?? 0) + 1},
               },
         flags: state.flags,
+        covers: review != null
+            ? state.covers
+            : {
+                ...state.covers,
+                folder: [
+                  card,
+                  ...?state.covers[folder]
+                      ?.where((e) => e.name != card.name)
+                      .take(2),
+                ],
+              },
+        pendingByFolder: review == null
+            ? state.pendingByFolder
+            : {
+                ...state.pendingByFolder,
+                folder: (state.pendingByFolder[folder] ?? 0) + 1,
+              },
         reviews: review == null
             ? state.reviews
             : {...state.reviews, seq: review},

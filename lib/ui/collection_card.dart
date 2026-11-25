@@ -3,16 +3,25 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 
 import '../collection_rows.dart';
+import 'library_style.dart';
 import 'picture.dart';
 import 'style.dart';
 
 const collectionCardRadius = Radius.circular(19);
+const _imageWidth = 62.0, _imageHeight = 86.0, _quantityWidth = 52.0;
+const _facePadding = EdgeInsets.symmetric(horizontal: 12, vertical: 10);
+const _titleStyle = TextStyle(
+  fontFamily: headingFont,
+  color: libraryInk,
+  fontSize: 18,
+  height: 1.1,
+  fontWeight: FontWeight.w900,
+);
 
 class CollectionCard extends StatefulWidget {
   const CollectionCard({
     super.key,
     required this.item,
-    required this.slot,
     required this.flagged,
     required this.selected,
     required this.select,
@@ -21,10 +30,45 @@ class CollectionCard extends StatefulWidget {
     required this.open,
   });
   final CollectionRow item;
-  final int slot;
   final bool flagged, selected;
   final ValueChanged<bool> select;
   final VoidCallback flag, remove, open;
+
+  // Высота стопки зависит от переноса названия на доступной ширине.
+  static List<double> rowOffsets(
+    BuildContext context,
+    double width,
+    List<CollectionRow> rows,
+    double gap,
+  ) {
+    final scale = MediaQuery.textScalerOf(context);
+    final painter = TextPainter(
+      textDirection: Directionality.of(context),
+      textScaler: scale,
+    );
+    final style = DefaultTextStyle.of(context).style.merge(_titleStyle);
+    final textWidth = math.max(
+      1.0,
+      width - _facePadding.horizontal - _imageWidth - _quantityWidth - 16,
+    );
+    final offsets = [0.0];
+    for (final row in rows) {
+      painter.text = TextSpan(text: row.card.name, style: style);
+      painter.layout(maxWidth: textWidth);
+      final content =
+          painter.height.ceilToDouble() +
+          8 +
+          2 * (scale.scale(13) * 1.18).ceil();
+      offsets.add(
+        offsets.last +
+            _facePadding.vertical +
+            math.max(_imageHeight, content) +
+            gap,
+      );
+    }
+    painter.dispose();
+    return offsets;
+  }
 
   @override
   State<CollectionCard> createState() => _CollectionCardState();
@@ -70,7 +114,6 @@ class _CollectionCardState extends State<CollectionCard>
       final width = math.min(148.0, box.maxWidth * .62);
       final face = _Face(
         widget.item,
-        widget.slot,
         flagged: widget.flagged,
         toggle: widget.item.multiple
             ? widget.open
@@ -79,11 +122,16 @@ class _CollectionCardState extends State<CollectionCard>
       return ClipRRect(
         borderRadius: corners,
         child: Container(
-          decoration: const BoxDecoration(color: surface),
+          decoration: const BoxDecoration(
+            color: Color(0xfff4eff9),
+            gradient: LinearGradient(
+              colors: [Color(0xfffcf7ff), Color(0xffebe5f5)],
+            ),
+          ),
           foregroundDecoration: BoxDecoration(
             borderRadius: corners,
             border: Border.all(
-              color: widget.flagged ? butter : const Color(0x668d886e),
+              color: widget.flagged ? const Color(0xffba7639) : libraryRim,
             ),
           ),
           child: widget.item.multiple
@@ -233,14 +281,8 @@ class _Action extends StatelessWidget {
 }
 
 class _Face extends StatelessWidget {
-  const _Face(
-    this.item,
-    this.slot, {
-    required this.flagged,
-    required this.toggle,
-  });
+  const _Face(this.item, {required this.flagged, required this.toggle});
   final CollectionRow item;
-  final int slot;
   final bool flagged;
   final VoidCallback toggle;
 
@@ -252,17 +294,14 @@ class _Face extends StatelessWidget {
         ? 'есть отмеченные варианты'
         : 'отмечена флажком';
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: _facePadding,
       child: Row(
         children: [
           SizedBox(
-            width: 52,
-            height: 74,
+            width: _imageWidth,
+            height: _imageHeight,
             child: ExcludeSemantics(
-              child: Hero(
-                tag: item.key,
-                child: CardPicture(card, slot: slot),
-              ),
+              child: Hero(tag: item.key, child: CardPicture(card, tilt: false)),
             ),
           ),
           const SizedBox(width: 12),
@@ -271,18 +310,7 @@ class _Face extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  card.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: paper,
-                    fontFamily: headingFont,
-                    fontSize: 18,
-                    height: 1.1,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+                Text(card.name, style: _titleStyle),
                 const SizedBox(height: 4),
                 Text(
                   item.multiple
@@ -291,7 +319,7 @@ class _Face extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: cream,
+                    color: libraryMuted,
                     fontFamily: item.multiple ? bodyFont : monoFont,
                     fontSize: 13,
                     height: 1.18,
@@ -302,38 +330,50 @@ class _Face extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          Semantics(
-            button: true,
-            onTap: toggle,
-            label:
-                '$action ${card.name}, ×${item.quantity}${flagged ? ', $mark' : ''}',
-            child: ExcludeSemantics(
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  minimumSize: const Size(48, 48),
-                  padding: EdgeInsets.zero,
-                ),
-                onPressed: toggle,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (flagged)
-                      const Icon(Icons.flag_rounded, color: butter, size: 16),
-                    Text(
-                      '×${item.quantity}',
-                      style: const TextStyle(
-                        color: paper,
-                        fontFamily: monoFont,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
+          SizedBox(
+            width: _quantityWidth,
+            child: Semantics(
+              button: true,
+              onTap: toggle,
+              label:
+                  '$action ${card.name}, ×${item.quantity}${flagged ? ', $mark' : ''}',
+              child: ExcludeSemantics(
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    padding: EdgeInsets.zero,
+                  ),
+                  onPressed: toggle,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (flagged)
+                        const Icon(
+                          Icons.flag_rounded,
+                          color: Color(0xff99521d),
+                          size: 16,
+                        ),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '×${item.quantity}',
+                          style: const TextStyle(
+                            color: libraryInk,
+                            fontFamily: monoFont,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
-                    ),
-                    Icon(
-                      item.multiple ? Icons.layers_outlined : Icons.more_horiz,
-                      size: 18,
-                      color: muted,
-                    ),
-                  ],
+                      Icon(
+                        item.multiple
+                            ? Icons.layers_outlined
+                            : Icons.more_horiz,
+                        size: 18,
+                        color: libraryMuted,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

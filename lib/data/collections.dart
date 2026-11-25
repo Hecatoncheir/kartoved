@@ -195,6 +195,28 @@ class History {
         .toList();
   }
 
+  Future<Map<int, List<Edition>>> albumCovers() async {
+    final rows = await _db.rawQuery('''
+      SELECT s.* FROM folders f JOIN scans s ON s.seq IN (
+        SELECT MAX(c.seq) FROM scans c
+        WHERE c.folder = f.folder AND c.review IS NULL
+        GROUP BY c.name ORDER BY MAX(c.seq) DESC LIMIT 3
+      ) ORDER BY f.folder, s.seq DESC
+    ''');
+    final covers = <int, List<Edition>>{};
+    for (final row in rows) {
+      (covers[row['folder'] as int] ??= []).add(Edition.fromRow(row));
+    }
+    return covers;
+  }
+
+  Future<Map<int, int>> pendingCounts() async {
+    final rows = await _db.rawQuery(
+      'SELECT folder, COUNT(*) AS n FROM scans WHERE review IS NOT NULL GROUP BY folder',
+    );
+    return {for (final row in rows) row['folder'] as int: row['n'] as int};
+  }
+
   Future<int> _flag(
     DatabaseExecutor db,
     int folder,

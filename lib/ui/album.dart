@@ -4,326 +4,339 @@ import 'dart:ui' as ui;
 import 'package:material_ui/material_ui.dart';
 
 import '../data/catalog.dart';
+import 'library_style.dart';
+import 'picture.dart';
 import 'style.dart';
 
-class AlbumHeader extends StatefulWidget {
+class AlbumHeader extends StatelessWidget {
   const AlbumHeader({
     super.key,
     required this.albums,
     required this.cards,
-    required this.onScan,
+    this.onCreate,
+    this.onSearch,
   });
-
-  final int albums;
-  final int cards;
-  final VoidCallback? onScan;
+  final int albums, cards;
+  final VoidCallback? onCreate, onSearch;
 
   @override
-  State<AlbumHeader> createState() => _AlbumHeaderState();
-}
-
-class _AlbumHeaderState extends State<AlbumHeader>
-    with SingleTickerProviderStateMixin {
-  late final glow = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 18),
-  );
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context) ||
-        !TickerMode.valuesOf(context).enabled) {
-      glow.stop();
-    } else if (!glow.isAnimating) {
-      glow.repeat();
-    }
-  }
-
-  @override
-  void dispose() {
-    glow.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (_, bounds) {
-      final compact = bounds.maxWidth < 550;
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Image.asset(
-                'assets/design/hero.webp',
-                fit: BoxFit.cover,
-                alignment: compact ? const Alignment(.62, 0) : Alignment.center,
-                excludeFromSemantics: true,
-              ),
-            ),
-            Positioned.fill(
-              child: RepaintBoundary(child: CustomPaint(painter: _Lamp(glow))),
-            ),
-            const Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      dark,
-                      Color(0xe81d2021),
-                      Color(0x901d2021),
-                      Color(0x081d2021),
-                    ],
-                    stops: [0, .23, .54, .84],
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                  container: true,
+                  header: true,
+                  child: const Text(
+                    'Библиотека',
+                    style: TextStyle(
+                      fontFamily: headingFont,
+                      fontSize: 36,
+                      fontWeight: FontWeight.w900,
+                      height: 1.15,
+                      letterSpacing: -1.3,
+                      color: libraryInk,
+                    ),
                   ),
                 ),
-              ),
-            ),
-            ConstrainedBox(
-              constraints: BoxConstraints(minHeight: compact ? 216 : 250),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: EdgeInsets.all(compact ? 20 : 34),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: compact ? 205 : 560,
-                        ),
-                        child: Text(
-                          'Мои коллекции',
-                          style: TextStyle(
-                            color: paper,
-                            fontFamily: headingFont,
-                            fontSize: compact ? 34 : 47,
-                            height: 1.04,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -1.2,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 9),
-                      Wrap(
-                        spacing: 14,
-                        runSpacing: 4,
-                        children: [
-                          _LibraryTotal('Альбомы', widget.albums),
-                          _LibraryTotal('Карты', widget.cards),
-                        ],
-                      ),
-                      const SizedBox(height: 17),
-                      FilledButton.icon(
-                        onPressed: widget.onScan,
-                        icon: const Icon(Icons.center_focus_strong),
-                        label: const Text('Сканировать карту'),
-                        style: FilledButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ],
+                Text(
+                  '${albumCount(albums)} · ${cardCount(cards)}',
+                  style: const TextStyle(
+                    fontFamily: bodyFont,
+                    fontSize: 16,
+                    color: libraryMuted,
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-      );
-    },
-  );
-}
-
-class _LibraryTotal extends StatelessWidget {
-  const _LibraryTotal(this.label, this.count);
-
-  final String label;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) => Text.rich(
-    TextSpan(
-      text: '$label ',
-      children: [
-        TextSpan(
-          text: '$count',
-          style: const TextStyle(
-            fontFamily: monoFont,
-            fontWeight: FontWeight.w700,
+          ),
+          const SizedBox(width: 8),
+          DecoratedBox(
+            decoration: libraryActionSurface,
+            child: IconButton(
+              tooltip: 'Создать коллекцию',
+              onPressed: onCreate,
+              color: Colors.white,
+              icon: const Icon(Icons.add, size: 30),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 14),
+      Semantics(
+        container: true,
+        button: true,
+        label: 'Найти карту',
+        enabled: onSearch != null,
+        onTap: onSearch,
+        excludeSemantics: true,
+        child: LibraryGlass(
+          radius: 15,
+          onTap: onSearch,
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Icon(Icons.search_rounded, color: libraryMuted),
+                SizedBox(width: 9),
+                Flexible(
+                  child: Text(
+                    'Найти карту',
+                    style: TextStyle(
+                      fontSize: 17,
+                      color: libraryMuted,
+                      fontFamily: bodyFont,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ],
-    ),
-    style: const TextStyle(color: paper),
+      ),
+    ],
   );
-}
-
-class _Lamp extends CustomPainter {
-  _Lamp(this.drift) : super(repaint: drift);
-
-  final Animation<double> drift;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final phase = drift.value * 2 * math.pi;
-    final center = Offset(
-      (.76 + .14 * math.cos(phase)) * size.width,
-      (.26 + .20 * math.sin(phase)) * size.height,
-    );
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()
-        ..shader = ui.Gradient.radial(center, size.width * .51, [
-          butter.withValues(alpha: .24),
-          butter.withValues(alpha: 0),
-        ]),
-    );
-  }
-
-  @override
-  bool shouldRepaint(_Lamp old) => old.drift != drift;
 }
 
 class AlbumShelf extends StatelessWidget {
-  const AlbumShelf(
-    this.groups,
-    this.onOpen, {
-    super.key,
-    required this.padding,
-  });
-
+  const AlbumShelf(this.groups, this.covers, this.onOpen, {super.key});
   final List<CardGroup> groups;
+  final Map<int, List<Edition>> covers;
   final ValueChanged<int> onOpen;
-  final EdgeInsets padding;
-
-  @override
-  Widget build(BuildContext context) => SliverLayoutBuilder(
-    builder: (context, constraints) {
-      final height = 131 + 3 * MediaQuery.textScalerOf(context).scale(16);
-      final contentWidth = constraints.crossAxisExtent - padding.horizontal;
-      final shelf = contentWidth < 600
-          ? SliverToBoxAdapter(
-              child: SizedBox(
-                height: height,
-                child: ListView.separated(
-                  padding: padding,
-                  scrollDirection: Axis.horizontal,
-                  itemCount: groups.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 10),
-                  itemBuilder: (context, index) => SizedBox(
-                    width: (contentWidth * .41).clamp(143, 220),
-                    child: _tile(index),
-                  ),
-                ),
-              ),
-            )
-          : SliverPadding(
-              padding: padding,
-              sliver: SliverGrid.builder(
-                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 340,
-                  mainAxisExtent: height + 40,
-                  crossAxisSpacing: 14,
-                  mainAxisSpacing: 14,
-                ),
-                itemCount: groups.length,
-                itemBuilder: (_, index) => _tile(index),
-              ),
-            );
-      return TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0, end: 1),
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : const Duration(milliseconds: 240),
-        curve: Curves.easeOutCubic,
-        builder: (_, value, child) =>
-            SliverOpacity(opacity: value, sliver: child),
-        child: shelf,
-      );
-    },
-  );
-
-  Widget _tile(int index) {
-    final group = groups[index];
-    return _AlbumTile(group, () => onOpen(group.id), key: ValueKey(group.id));
-  }
-}
-
-class _AlbumTile extends StatelessWidget {
-  const _AlbumTile(this.group, this.open, {super.key});
-
-  static const covers = ['forest', 'dragon', 'island'];
-  final CardGroup group;
-  final VoidCallback open;
 
   @override
   Widget build(BuildContext context) {
-    final cover = covers[(group.id - 1) % covers.length];
-    final titleHeight = MediaQuery.textScalerOf(context).scale(17) * 2.2;
-    return Material(
-      color: surface,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        side: const BorderSide(color: outline),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: InkWell(
-        onTap: open,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    // Первым показываем самый ранний альбом, остальные — от новых к старым.
+    final primary = groups.last;
+    final shelf = SliverList.separated(
+      itemCount: groups.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      itemBuilder: (_, index) {
+        final group = index == 0 ? primary : groups[index - 1];
+        void open() => onOpen(group.id);
+        return Semantics(
+          key: ValueKey(group.id),
+          button: true,
+          label: '${group.name}, ${cardCount(group.count)}',
+          excludeSemantics: true,
+          onTap: open,
+          child: LibraryGlass(
+            onTap: open,
+            child: _AlbumPocket(
+              group: group,
+              cards: covers[group.id] ?? const [],
+              featured: index == 0,
+            ),
+          ),
+        );
+      },
+    );
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+      builder: (_, value, child) =>
+          SliverOpacity(opacity: value, sliver: child),
+      child: shelf,
+    );
+  }
+}
+
+class _AlbumPocket extends StatelessWidget {
+  const _AlbumPocket({
+    required this.group,
+    required this.cards,
+    required this.featured,
+  });
+  final CardGroup group;
+  final List<Edition> cards;
+  final bool featured;
+
+  Widget _cards() {
+    if (cards.isEmpty) {
+      const art = ['forest', 'dragon', 'island'];
+      return Image.asset(
+        'assets/design/${art[(group.id - 1) % art.length]}-cover.webp',
+        fit: BoxFit.cover,
+        excludeFromSemantics: true,
+      );
+    }
+    final slots = featured ? 3 : 2;
+    return LayoutBuilder(
+      builder: (_, size) {
+        final width = math.min(
+          180.0,
+          (size.maxWidth - (slots - 1) * 4) / slots,
+        );
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Expanded(
-              child: Ink.image(
-                image: AssetImage('assets/design/$cover-cover.webp'),
-                fit: BoxFit.cover,
+            for (final (index, card) in cards.take(slots).indexed) ...[
+              if (index > 0) const SizedBox(width: 4),
+              SizedBox(
+                width: width,
+                height: double.infinity,
+                child: CardPicture(
+                  card,
+                  tilt: false,
+                  fit: BoxFit.cover,
+                  placeholder: _CardBack(card.name),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _name(double size) => Text(
+    group.name,
+    maxLines: 2,
+    overflow: TextOverflow.ellipsis,
+    style: TextStyle(
+      color: libraryInk,
+      fontFamily: headingFont,
+      fontSize: size,
+      fontWeight: FontWeight.w900,
+      height: 1.12,
+    ),
+  );
+  Widget get _count => Text(
+    cardCount(group.count),
+    style: const TextStyle(
+      fontFamily: bodyFont,
+      fontSize: 15,
+      color: libraryMuted,
+    ),
+  );
+  static const _arrow = Icon(Icons.chevron_right_rounded, color: libraryInk);
+
+  @override
+  Widget build(BuildContext context) {
+    if (!featured) {
+      return Padding(
+        padding: const EdgeInsets.all(9),
+        child: Row(
+          children: [
+            Flexible(
+              flex: 4,
+              fit: FlexFit.tight,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(height: 68, child: _cards()),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 9, 10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 5,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [_name(18), const SizedBox(height: 3), _count],
+              ),
+            ),
+            _arrow,
+          ],
+        ),
+      );
+    }
+    final stacked = MediaQuery.textScalerOf(context).scale(16) > 21;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 15, 12, 7),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: _cards(),
+            ),
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 130),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: libraryRim),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xe2f1eaff), Color(0xe5e3e6f7)],
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 15,
+                      vertical: 14,
+                    ),
+                    child: Row(
                       children: [
-                        ConstrainedBox(
-                          constraints: BoxConstraints(minHeight: titleHeight),
-                          child: Text(
-                            group.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontFamily: headingFont,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 17,
-                              height: 1.1,
-                            ),
-                          ),
+                        Expanded(
+                          child: stacked
+                              ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [_name(21), _count],
+                                )
+                              : _name(21),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Карт: ${group.count}',
-                          style: codeText.copyWith(fontSize: 12),
-                        ),
+                        if (!stacked) ...[const SizedBox(width: 8), _count],
+                        const SizedBox(width: 3),
+                        _arrow,
                       ],
                     ),
                   ),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    size: 18,
-                    color: muted,
-                  ),
-                ],
+                ),
               ),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
+}
+
+class _CardBack extends StatelessWidget {
+  const _CardBack(this.name);
+  final String name;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      border: Border.all(color: const Color(0xffaca0c9)),
+      borderRadius: BorderRadius.circular(5),
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xffdcd7ee), Color(0xffc8bddc)],
+      ),
+    ),
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Text(
+          name,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontFamily: bodyFont,
+            color: libraryInk,
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    ),
+  );
 }

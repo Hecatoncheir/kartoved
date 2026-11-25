@@ -2,10 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:kartoved/data/catalog.dart';
 import 'package:kartoved/model.dart';
-import 'package:kartoved/ui/sheets.dart';
+import 'package:kartoved/ui/edition_picker.dart';
 import 'package:kartoved/ui/picture.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kartoved/ui/album.dart';
+import 'package:kartoved/ui/library_style.dart';
 import 'package:kartoved/ui/collections.dart';
 import 'package:kartoved/ui/style.dart';
 import 'package:kartoved/ui/scan_strip.dart';
@@ -72,7 +73,7 @@ void main() {
       ),
     );
     await tester.pump(const Duration(milliseconds: 300));
-    final heading = find.text('Мои коллекции');
+    final heading = find.text('Библиотека');
     final album = find.text('Основная коллекция');
     expect(heading, findsOneWidget);
     await tester.scrollUntilVisible(
@@ -81,17 +82,13 @@ void main() {
       scrollable: find.ancestor(of: heading, matching: find.byType(Scrollable)),
     );
     expect(album, findsOneWidget);
-    final shelf = tester.getRect(find.byType(ListView));
-    expect(shelf.left, 0);
-    expect(shelf.right, 320);
-    expect(tester.getRect(find.byKey(const ValueKey(1))).left, 16);
-
+    final tile = find.byKey(const ValueKey(1));
+    expect(tester.getRect(tile).left, 16);
+    expect(tester.getRect(tile).right, 304);
     tester.view.padding = const FakeViewPadding(left: 8, right: 20);
     await tester.pump();
-    final shelfWithInsets = tester.getRect(find.byType(ListView));
-    expect(shelfWithInsets.left, 0);
-    expect(shelfWithInsets.right, 320);
-    expect(tester.getRect(find.byKey(const ValueKey(1))).left, 16);
+    expect(tester.getRect(tile).left, 24);
+    expect(tester.getRect(tile).right, 284);
     expect(tester.takeException(), isNull);
   });
 
@@ -118,14 +115,12 @@ void main() {
     );
     final recent = find.ancestor(
       of: find.text('Подтверждённые карты появятся здесь'),
-      matching: find.byWidgetPredicate(
-        (widget) => widget is Material && widget.color == surface,
-      ),
+      matching: find.byType(LibraryGlass),
     );
     for (final area in [find.byType(AlbumHeader), recent]) {
       final rect = tester.getRect(area);
-      expect(rect.left, 16);
-      expect(rect.right, 374);
+      expect(rect.left, 24);
+      expect(rect.right, 354);
     }
     expect(tester.takeException(), isNull);
   });
@@ -152,7 +147,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     final bar = find.byType(AppBar);
     final bounds = tester.getRect(bar);
-    final title = find.text('Альбомы');
+    final title = find.text('Библиотека');
     expect(
       tester.getTopLeft(find.byType(AlbumHeader)).dy,
       greaterThan(bounds.bottom),
@@ -180,33 +175,73 @@ void main() {
     expect(tester.getRect(acrylic), bounds);
   });
 
-  testWidgets('Выбор языка и выпуска работает без подключения', (tester) async {
-    const en = Edition('a', 'Counterspell', 'lea', '54', 'en');
-    const ru = Edition('b', 'Counterspell', '7ed', '67', 'ru');
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: kartovedTheme(),
-        home: Scaffold(
-          body: Builder(
-            builder: (c) => TextButton(
-              onPressed: () =>
-                  panel<Edition>(c, const EditionPicker([en, ru], en)),
-              child: const Text('Выбрать'),
+  for (final library in [false, true]) {
+    final source = library ? 'альбома' : 'сканера';
+    testWidgets('Выбор издания из $source с открытой клавиатурой', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 640);
+      tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      const en = Edition('a', 'Counterspell', 'lea', '54', 'en', foil: true);
+      const ru = Edition('b', 'Counterspell', '7ed', '67', 'ru');
+      Edition? chosen;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: kartovedTheme(),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async {
+                  chosen = await showEditionPicker(
+                    context,
+                    [en, ru],
+                    en,
+                    library: library,
+                  );
+                },
+                child: const Text('Выбрать'),
+              ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.tap(find.text('Выбрать'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'ru');
-    await tester.pump();
-    expect(find.text(ru.detail), findsOneWidget);
-    expect(find.text(en.detail), findsNothing);
-    await tester.tap(find.text(ru.detail));
-    await tester.pumpAndSettle();
-    expect(find.byType(EditionPicker), findsNothing);
-  });
+      );
+      await tester.tap(find.text('Выбрать'));
+      await tester.pumpAndSettle();
+      final current = find.widgetWithText(ListTile, en.detail);
+      expect(tester.widget<ListTile>(current).selected, isTrue);
+      await tester.tap(find.byTooltip('Закрыть'));
+      await tester.pumpAndSettle();
+      expect(chosen, isNull);
+
+      await tester.tap(find.text('Выбрать'));
+      await tester.pumpAndSettle();
+      final field = find.byType(TextField);
+      await tester.tap(field);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 284);
+      await tester.enterText(field, 'xxx');
+      await tester.pumpAndSettle();
+      expect(find.text('Совпадений нет'), findsOneWidget);
+      await tester.tap(find.byTooltip('Очистить поиск'));
+      await tester.pump();
+      expect(current, findsOneWidget);
+      await tester.enterText(field, '  РУС   67  7ed ');
+      await tester.pump();
+      final match = find.text(ru.detail);
+      expect(current, findsNothing);
+      await tester.ensureVisible(match);
+      await tester.pumpAndSettle();
+      expect(tester.getBottomRight(match).dy, lessThanOrEqualTo(640 - 284));
+      await tester.tap(match);
+      await tester.pumpAndSettle();
+      expect(chosen?.printingKey, ru.withFoil(true).printingKey);
+      expect(find.text('Издание и язык'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
   testWidgets('Лента возвращается к только что добавленному экземпляру', (
     tester,
   ) async {

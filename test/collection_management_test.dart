@@ -122,6 +122,31 @@ void main() {
     expect(restarted.state.reviews.keys, [otherPending]);
   });
 
+  test('Обложки содержат три последние разные карты каждого альбома', () async {
+    const forest = Edition('forest', 'Forest', 'lea', '1', 'en');
+    const island = Edition('island', 'Island', 'lea', '2', 'en');
+    const plains = Edition('plains', 'Plains', 'lea', '3', 'en');
+    for (final card in [opt, forest, island, plains, foil]) {
+      await model.save(card);
+    }
+    await model.save(forest, review: review);
+    Iterable<String> cover(int folder) =>
+        model.state.covers[folder]!.map((card) => card.id);
+    expect(cover(1), [foil.id, plains.id, island.id]);
+    final other = await history.create('Обмен');
+    await model.select(other);
+    await model.save(forest);
+    final pending = await model.save(island, review: review);
+    await model.select(1);
+    expect(cover(1), [foil.id, plains.id, island.id]);
+    expect(cover(other), [forest.id]);
+    expect(model.state.pendingByFolder, {1: 1, other: 1});
+    await model.select(other);
+    await model.confirmReview(pending, island);
+    expect(cover(other), [island.id, forest.id]);
+    expect(model.state.pendingByFolder, {1: 1});
+  });
+
   test('Удаление очищает только выбранную коллекцию, пустую библиотеку можно восстановить', () async {
     final keep = await history.create('Оставить');
     await history.add(foil, folder: keep);
@@ -284,7 +309,7 @@ void main() {
         () => model.state.groups.isEmpty,
       );
       expect(find.byType(CollectionsPage), findsOneWidget);
-      await tap(tester, find.text('Создать коллекцию'));
+      await tap(tester, find.byTooltip('Создать коллекцию'));
       await tester.enterText(find.byType(TextField), 'Новая');
       await tester.pump();
       await tapAndWait(

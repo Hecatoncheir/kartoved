@@ -16,6 +16,7 @@ function scannerFiles(engine) {
       ['js', 'wasm'].map(ext => `canvaskit/${variant}canvaskit.${ext}`)),
     'assets/fonts/MaterialIcons-Regular.otf', 'assets/fonts/fallback/Roboto-Regular.ttf',
     ...['Nunito', 'NunitoSans', 'JetBrainsMono'].map(font => `assets/assets/fonts/${font}.ttf`),
+    ...['forest', 'dragon', 'island'].map(art => `assets/assets/design/${art}-cover.webp`),
     ...['scan_glass', 'ink_sparkle', 'stretch_effect'].map(shader => `assets/shaders/${shader}.frag`),
     'assets/packages/material_ui/shaders/ink_sparkle.frag',
     ...['catalog.json', 'cards.sqlite.pack', 'detector.onnx', 'embed.onnx', 'search.onnx']

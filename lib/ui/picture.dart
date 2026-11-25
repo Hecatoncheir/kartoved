@@ -14,11 +14,15 @@ class CardPicture extends StatefulWidget {
     this.slot = 0,
     this.large = false,
     this.tilt = true,
+    this.fit = BoxFit.contain,
+    this.placeholder,
   });
   final Edition card;
   final int slot;
   final bool large;
   final bool tilt;
+  final BoxFit fit;
+  final Widget? placeholder;
   @override
   State<CardPicture> createState() => _CardPictureState();
 }
@@ -106,7 +110,10 @@ class _CardPictureState extends State<CardPicture> {
           if (image == null) return fallback();
           return Image(
             image: image,
-            fit: BoxFit.contain,
+            fit: widget.fit,
+            alignment: widget.fit == BoxFit.cover
+                ? Alignment.topCenter
+                : Alignment.center,
             frameBuilder: (_, child, frame, _) =>
                 frame == null ? fallback() : child,
             errorBuilder: (_, _, _) => fallback(),
@@ -114,23 +121,25 @@ class _CardPictureState extends State<CardPicture> {
         },
       );
 
-  Widget _placeholder() => ColoredBox(
-    color: const Color(0xff504945),
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(3),
-        child: Text(
-          widget.card.name,
-          textAlign: TextAlign.center,
-          maxLines: 4,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: paper,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
+  Widget _placeholder() =>
+      widget.placeholder ??
+      ColoredBox(
+        color: const Color(0xff504945),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(3),
+            child: Text(
+              widget.card.name,
+              textAlign: TextAlign.center,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: paper,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ),
-      ),
-    ),
-  );
+      );
 }

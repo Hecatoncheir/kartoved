@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../scan_cubit.dart';
+import 'scanner_style.dart';
 import 'style.dart';
 
 extension AutoScanProfile on ScanMode {
@@ -40,9 +41,9 @@ class AutoScanButton extends StatelessWidget {
           onPressed: onToggle,
           onLongPress: onChoose,
           style: TextButton.styleFrom(
-            foregroundColor: running ? butter : paper,
-            disabledForegroundColor: muted,
-            backgroundColor: running ? amberSurface : null,
+            foregroundColor: running ? scanOrange : scanPaper,
+            disabledForegroundColor: scanMuted,
+            backgroundColor: running ? const Color(0xff463342) : null,
             minimumSize: const Size(64, 54),
             padding: const EdgeInsets.symmetric(horizontal: 6),
           ),

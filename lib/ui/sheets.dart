@@ -8,6 +8,7 @@ import '../data/catalog.dart';
 import '../data/browser.dart';
 import '../model.dart';
 import 'card_facts.dart';
+import 'edition_picker.dart';
 import 'style.dart';
 
 Future<T?> panel<T>(BuildContext context, Widget child) =>
@@ -99,9 +100,10 @@ class _ResultSheetState extends State<ResultSheet> {
             title: const Text('Издание и язык'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
-              final edition = await panel<Edition>(
+              final edition = await showEditionPicker(
                 context,
-                EditionPicker(widget.matches[selected].editions, card),
+                widget.matches[selected].editions,
+                card,
               );
               if (edition != null && mounted) setState(() => card = edition);
             },
@@ -155,64 +157,15 @@ class _ResultSheetState extends State<ResultSheet> {
 Future<Edition?> choosePrinting(
   BuildContext context,
   Catalog catalog,
-  Edition card,
-) async {
+  Edition card, {
+  bool library = false,
+}) async {
   final editions = await catalog.byName(card.name);
   if (!context.mounted) return null;
   final options = editions
       .where((e) => card.language == 'und' || e.language == card.language)
       .toList();
-  final selected = await panel<Edition>(context, EditionPicker(options, card));
-  return selected?.withFoil(card.foil || selected.foil);
-}
-
-class EditionPicker extends StatefulWidget {
-  const EditionPicker(this.options, this.selected, {super.key});
-  final List<Edition> options;
-  final Edition selected;
-  @override
-  State<EditionPicker> createState() => _EditionPickerState();
-}
-
-class _EditionPickerState extends State<EditionPicker> {
-  String query = '';
-  @override
-  Widget build(BuildContext context) {
-    final options = widget.options
-        .where((e) => e.detail.toLowerCase().contains(query.toLowerCase()))
-        .toList();
-    return SizedBox(
-      height: MediaQuery.sizeOf(context).height * .68,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SheetHeading('Издание и язык'),
-          const SizedBox(height: 10),
-          TextField(
-            onChanged: (s) => setState(() => query = s),
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search),
-              hintText: 'Код выпуска, номер или язык',
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: options.length,
-              itemBuilder: (c, i) => ListTile(
-                title: Text(options[i].detail, style: codeText),
-                trailing:
-                    !widget.selected.needsPrinting &&
-                        options[i].id == widget.selected.id
-                    ? const Icon(Icons.check)
-                    : null,
-                onTap: () => Navigator.pop(c, options[i]),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  return showEditionPicker(context, options, card, library: library);
 }
 
 class CatalogPanel extends StatefulWidget {

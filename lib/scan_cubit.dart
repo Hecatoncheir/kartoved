@@ -19,6 +19,12 @@ class ScanGate {
   bool get awaitingConfirmation => _candidate != null;
 
   void clearCandidate() => _candidate = null;
+  void reset() {
+    clearCandidate();
+    _last = null;
+    _seenNames = {};
+  }
+
   void saved(Edition card, {Iterable<String> observedNames = const []}) {
     _last = card;
     _seenNames = {card.name, ...observedNames};
@@ -88,6 +94,8 @@ enum ScanOption {
   final String label;
 }
 
+enum ScanLight { unavailable, off, on }
+
 class ScanSession {
   const ScanSession({
     this.mode = ScanMode.manual,
@@ -95,6 +103,7 @@ class ScanSession {
     this.lastScan,
     this.lastAdded,
     this.showGuide = true,
+    this.light = ScanLight.unavailable,
     this.targets = const {},
     this.model = RecognitionModel.oracle,
     this.options = const {},
@@ -106,6 +115,7 @@ class ScanSession {
   final int? lastScan;
   final int? lastAdded;
   final bool showGuide;
+  final ScanLight light;
   final Set<String> targets;
   final RecognitionModel model;
   final Set<ScanOption> options;
@@ -118,6 +128,7 @@ class ScanSession {
     int? lastAdded,
     bool clearLastScan = false,
     bool? showGuide,
+    ScanLight? light,
     Set<String>? targets,
     RecognitionModel? model,
     Set<ScanOption>? options,
@@ -128,6 +139,7 @@ class ScanSession {
     lastScan: clearLastScan ? null : lastScan ?? this.lastScan,
     lastAdded: clearLastScan ? null : lastAdded ?? this.lastAdded,
     showGuide: showGuide ?? this.showGuide,
+    light: light ?? this.light,
     targets: targets ?? this.targets,
     model: model ?? this.model,
     options: options ?? this.options,
@@ -210,6 +222,10 @@ class ScanCubit extends Cubit<ScanSession> {
   }
 
   void setGuide(bool visible) => emit(state.copyWith(showGuide: visible));
+
+  void setLight(ScanLight value) {
+    if (state.light != value) emit(state.copyWith(light: value));
+  }
 
   void setModel(RecognitionModel model) {
     if (state.model == model) return;
@@ -297,6 +313,11 @@ class ScanCubit extends Cubit<ScanSession> {
     stopRepeats();
     cancelFrame();
     emit(state.copyWith(clearLastScan: true));
+  }
+
+  void changedFolder() {
+    gate.reset();
+    undone();
   }
 
   void shutter() => _force = true;

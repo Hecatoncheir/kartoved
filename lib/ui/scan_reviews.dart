@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/catalog.dart';
 import '../data/review.dart';
 import '../model.dart';
+import 'library_style.dart';
 import 'picture.dart';
 import 'sheets.dart';
 import 'style.dart';
@@ -57,8 +58,13 @@ Future<bool> reviewBeforeExport(
 }
 
 class ReviewList extends StatelessWidget {
-  const ReviewList({required this.onRescan, super.key});
+  const ReviewList({
+    required this.onRescan,
+    required this.onBackToAlbum,
+    super.key,
+  });
   final ValueChanged<ScanEntry>? onRescan;
+  final VoidCallback onBackToAlbum;
   Future<void> open(BuildContext context, int seq) async {
     try {
       await chooseReview(context, context.read<AppModel>(), seq);
@@ -81,23 +87,103 @@ class ReviewList extends StatelessWidget {
         .where((entry) => state.reviews.containsKey(entry.sequence))
         .toList();
     if (pending.isEmpty) {
-      return const Center(child: Text('Все карты проверены'));
+      return Center(
+        child: SingleChildScrollView(
+          child: LibraryGlass(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.check_circle_outline,
+                    size: 32,
+                    color: libraryMuted,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Все карты проверены',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: headingFont,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: libraryInk,
+                    ),
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(foregroundColor: libraryInk),
+                    onPressed: onBackToAlbum,
+                    child: const Text('К альбому'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
     }
-    return ListView.builder(
+    return ListView.separated(
+      key: PageStorageKey(('reviews', state.folder)),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.paddingOf(context).bottom + 12,
+      ),
       itemCount: pending.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
         final item = pending[i];
         final card = item.card;
-        return ListTile(
+        return LibraryGlass(
           key: ValueKey(item.sequence),
-          leading: SizedBox(width: 38, child: CardPicture(card)),
-          title: Text(card.name),
-          subtitle: Text(state.reviews[item.sequence]!.reason.label),
-          trailing: TextButton(
-            onPressed: onRescan == null ? null : () => onRescan!(item),
-            child: Text('Переснять', semanticsLabel: 'Переснять ${card.name}'),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ListTile(
+                  leading: SizedBox(
+                    width: 46,
+                    height: 62,
+                    child: CardPicture(card, tilt: false),
+                  ),
+                  title: Text(
+                    card.name,
+                    style: const TextStyle(
+                      fontFamily: headingFont,
+                      color: libraryInk,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  subtitle: Text(
+                    state.reviews[item.sequence]!.reason.label,
+                    style: const TextStyle(color: libraryMuted),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: libraryMuted,
+                  ),
+                  onTap: () => open(context, item.sequence),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      style: TextButton.styleFrom(foregroundColor: libraryInk),
+                      onPressed: onRescan == null
+                          ? null
+                          : () => onRescan!(item),
+                      icon: const Icon(Icons.camera_alt_outlined, size: 19),
+                      label: Text(
+                        'Переснять',
+                        semanticsLabel: 'Переснять ${card.name}',
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          onTap: () => open(context, item.sequence),
         );
       },
     );

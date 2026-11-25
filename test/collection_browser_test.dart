@@ -3,11 +3,14 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kartoved/collection_rows.dart';
 import 'package:kartoved/data/catalog.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/ui/collection_card.dart';
+import 'package:kartoved/ui/collection_detail.dart';
 import 'package:kartoved/ui/catalog_search.dart';
 import 'package:kartoved/ui/card_destination.dart';
+import 'package:kartoved/ui/glass_sheet.dart';
 import 'package:kartoved/ui/collections.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
@@ -35,6 +38,70 @@ void main() {
         .pipe(File(p.join(root.path, 'cards.sqlite')).openWrite());
   });
   tearDownAll(() => root.delete(recursive: true));
+
+  testWidgets(
+    'Карточка переносит длинное название и показывает выбранный вариант на разных экранах',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 720);
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      const card = Edition(
+        'first',
+        'The Book of Exalted Deeds',
+        'afr',
+        '4',
+        'en',
+      );
+      final shiny = card.withFoil(true);
+      final model = AppModel(
+        CatalogStore(),
+        History(),
+        initial: LibraryState(
+          recent: [
+            (sequence: 1, card: card, quantity: 2),
+            (sequence: 2, card: shiny, quantity: 1),
+          ],
+        ),
+      );
+      addTearDown(model.close);
+      await tester.pumpWidget(
+        BlocProvider.value(
+          value: model,
+          child: MaterialApp(
+            home: CollectionDetail(CollectionRow(model.state.printings)),
+          ),
+        ),
+      );
+      final title = find.descendant(
+        of: find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.header == true,
+        ),
+        matching: find.text(card.name),
+      );
+      final art = find.byType(Hero);
+      expect(tester.widget<Text>(title).maxLines, isNull);
+      expect(tester.getSize(title).height, greaterThan(60));
+      expect(
+        tester.getBottomLeft(title).dy,
+        lessThan(tester.getTopLeft(art).dy),
+      );
+      final variant = find.widgetWithText(
+        ListTile,
+        '${shiny.detail}  ·  Фольга',
+      );
+      await tester.scrollUntilVisible(variant.hitTestable(), 200);
+      await tester.pumpAndSettle();
+      await tester.tap(variant);
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Экземпляров: 1'), findsOneWidget);
+      tester.view.physicalSize = const Size(960, 720);
+      await tester.pumpAndSettle();
+      expect(tester.getTopRight(art).dx, lessThan(tester.getTopLeft(title).dx));
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'При выборе новой коллекции нужны название и допустимое количество',
@@ -67,6 +134,68 @@ void main() {
       expect(submit().onPressed, isNull);
     },
   );
+
+  testWidgets('Перемещение с открытой клавиатурой на узком экране', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 640);
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    CardSelection? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                result = await showGlassSheet<CardSelection>(
+                  context,
+                  const CardDestination(
+                    card: ru,
+                    groups: [],
+                    initialFolder: null,
+                    available: 3,
+                  ),
+                  library: true,
+                );
+              },
+              child: const Text('Открыть'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Открыть'));
+    await tester.pumpAndSettle();
+    final submit = find.widgetWithText(FilledButton, 'Создать и переместить');
+    expect(tester.widget<FilledButton>(submit).onPressed, isNull);
+    final name = find.widgetWithText(TextFormField, 'Название новой коллекции');
+    await tester.enterText(name, ' Обмен ');
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    await tester.pumpAndSettle();
+    final all = find.text('Выбрать все (3)');
+    await tester.ensureVisible(all);
+    await tester.tap(all);
+    await tester.pump();
+    final plus = find.widgetWithIcon(IconButton, Icons.add);
+    expect(tester.widget<IconButton>(plus).onPressed, isNull);
+    final minus = find.byTooltip('Уменьшить количество');
+    await tester.ensureVisible(minus);
+    await tester.tap(minus);
+    await tester.pump();
+    expect(tester.widget<IconButton>(plus).onPressed, isNotNull);
+    expect(submit.hitTestable(), findsOneWidget);
+    expect(tester.getBottomRight(submit).dy, lessThanOrEqualTo(640 - 280));
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(result?.quantity, 2);
+    expect(result?.folderName, 'Обмен');
+    expect(result?.folderId, isNull);
+    expect(result?.card.printingKey, ru.printingKey);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final createDestination in [false, true]) {
     testWidgets(

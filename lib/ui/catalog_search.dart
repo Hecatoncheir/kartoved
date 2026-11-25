@@ -7,7 +7,7 @@ import 'collections.dart';
 import 'card_destination.dart';
 import 'name_search.dart';
 import 'picture.dart';
-import 'sheets.dart';
+import 'glass_sheet.dart';
 import 'style.dart';
 
 class CatalogSearchPage extends StatefulWidget {
@@ -223,13 +223,14 @@ class _PrintingsState extends State<_Printings> {
   String filter = '';
   Future<void> _add(Edition card) async {
     final model = widget.model;
-    final result = await panel<CardSelection>(
+    final result = await showGlassSheet<CardSelection>(
       context,
       CardDestination(
         card: card,
         groups: model.state.groups,
         initialFolder: model.state.folder,
       ),
+      library: true,
     );
     if (result == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);

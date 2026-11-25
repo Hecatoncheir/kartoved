@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/catalog.dart';
 import 'picture.dart';
+import 'scanner_style.dart';
 
 class ScanStrip extends StatefulWidget {
   static const limit = 10;
@@ -54,7 +55,7 @@ class _ScanStripState extends State<ScanStrip> {
 
   @override
   Widget build(BuildContext context) => ListView.separated(
-    padding: const EdgeInsets.symmetric(horizontal: 14),
+    padding: const EdgeInsets.symmetric(horizontal: 3),
     scrollDirection: Axis.horizontal,
     controller: scroll,
     itemCount: math.min(widget.entries.length, ScanStrip.limit),
@@ -64,37 +65,42 @@ class _ScanStripState extends State<ScanStrip> {
       final entry = widget.entries[i];
       return SizedBox(
         key: ValueKey(entry.sequence),
-        width: 88,
+        width: 108,
         child: Column(
           children: [
             Expanded(
-              child: AspectRatio(
-                aspectRatio: 63 / 88,
-                child: InkWell(
-                  onTap: widget.edit == null ? null : () => widget.edit!(entry),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CardPicture(entry.card, tilt: false),
-                      if (widget.pending.contains(entry.sequence))
-                        Positioned(
-                          top: 3,
-                          right: 3,
-                          child: Semantics(
-                            label: 'Требует проверки',
-                            child: const DecoratedBox(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Color(0xfffabd2f),
-                                border: Border.fromBorderSide(
-                                  BorderSide(color: Color(0xff282828)),
+              child: ScanSurface(
+                radius: 10,
+                child: Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: InkWell(
+                    onTap: widget.edit == null
+                        ? null
+                        : () => widget.edit!(entry),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        CardPicture(entry.card, tilt: false, fit: BoxFit.cover),
+                        if (widget.pending.contains(entry.sequence))
+                          Positioned(
+                            top: 3,
+                            right: 3,
+                            child: Semantics(
+                              label: 'Требует проверки',
+                              child: const DecoratedBox(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Color(0xfffabd2f),
+                                  border: Border.fromBorderSide(
+                                    BorderSide(color: Color(0xff282828)),
+                                  ),
                                 ),
+                                child: SizedBox.square(dimension: 12),
                               ),
-                              child: SizedBox.square(dimension: 12),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -107,8 +113,8 @@ class _ScanStripState extends State<ScanStrip> {
                       ? null
                       : () => widget.rescan!(entry),
                   style: TextButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: const Color(0xcc282828),
+                    foregroundColor: scanPaper,
+                    backgroundColor: const Color(0x33252242),
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     minimumSize: const Size(80, 32),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,

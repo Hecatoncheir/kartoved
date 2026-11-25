@@ -17,7 +17,7 @@ const context = await browser.newContext({viewport: {width: 390, height: 780}});
 const page = await context.newPage();
 page.setDefaultTimeout(20000);
 const button = name => page.getByRole('button', {name, exact: typeof name === 'string'});
-const album = button(/^Моя коллекция Карт:/);
+const album = button(/^Моя коллекция, /);
 const first = {id: '54772e15-d99d-4eec-ba8d-b9202a7e318b', name: "Bouncer's Beatdown", set_code: 'snc', number: '135', lang: 'en', foil: 0};
 const second = {id: 'c3669391-8f64-4904-b432-0f0582f30449', name: 'Opt', set_code: 'eld', number: '59', lang: 'en', foil: 0};
 const pending = (card, seq) => ({...card, seq, folder: 1, qty: 1, flagged: 0, review: {reason: 'printing', choices: [card]}});
@@ -59,6 +59,13 @@ try {
   }), false, 'У браузера осталось соединение');
   await page.reload();
   await enableSemantics();
+  for (const art of ['forest', 'dragon', 'island']) {
+    const header = await page.evaluate(async name => {
+      const response = await fetch('assets/assets/design/' + name + '-cover.webp');
+      return new TextDecoder().decode((await response.arrayBuffer()).slice(8, 12));
+    }, art);
+    assert.equal(header, 'WEBP', 'Обложка должна быть доступна без сети: ' + art);
+  }
   for (const sound of ['added', 'found', 'review']) {
     const header = await page.evaluate(async (name) => {
       const response = await fetch('runtime/card_' + name + '.wav');
@@ -67,8 +74,7 @@ try {
     }, sound);
     assert.equal(header, 'RIFF', 'Сигнал должен быть доступен без сети: ' + sound);
   }
-  await album.click();
-  await filter(2).click();
+  await button('На проверке · 2').click();
   await button('Переснять ' + second.name).waitFor();
   await screenshot('before');
   await button('Переснять ' + first.name).click();
@@ -99,7 +105,7 @@ try {
 
   await page.reload();
   await enableSemantics();
-  await button(/^Моя коллекция Карт: 1$/).waitFor();
+  await button(/^Моя коллекция, 1 карта$/).waitFor();
   await button(/Bouncer's Beatdown.*×1/).waitFor();
   await screenshot('reloaded');
   await album.click();
@@ -115,6 +121,17 @@ try {
   assert.deepEqual(saved, {...backup.scans[0], review: null});
   assert.deepEqual(scans.find(s => s.seq === 2), backup.scans[1]);
   console.log('Без сети после перезагрузки: Bouncer’s Beatdown ×1, Opt на проверке. Обе записи сохранили исходные номера.');
+  await page.reload();
+  await enableSemantics();
+  await button('На проверке · 1').click();
+  await button('Переснять ' + second.name).click();
+  await upload(button('Из фото'), photo);
+  await button('К альбому').waitFor({timeout: 90000});
+  await page.getByText('Все карты проверены', {exact: true}).waitFor();
+  await button('К альбому').click();
+  await button('Найти карту').waitFor();
+  await button(/Действия с картой Bouncer's Beatdown, ×2/).waitFor();
+  console.log('После второго снимка очередь пуста, в альбоме два подтверждённых экземпляра.');
 } catch (error) {
   console.error(await page.locator('body').ariaSnapshot().catch(() => ''));
   throw error;

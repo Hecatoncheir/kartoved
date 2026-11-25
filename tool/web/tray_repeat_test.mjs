@@ -39,20 +39,30 @@ try {
   await page.goto(url);
   await page.locator('flt-semantics-placeholder').evaluate(el => el.click());
   await button('Сканировать карту').click();
+  await button('Меню сканера').click();
   for (const name of ['Только необходимое', 'Одинаковые подряд']) {
-    await button('Меню сканера').click();
-    await page.getByRole('menuitemcheckbox', {name}).or(page.getByRole('menuitem', {name})).click();
+    await page.getByRole('switch', {name: new RegExp(name)}).click();
   }
+  await button('Закрыть меню').click();
   // Меняем изображение сразу после записи в базу. Камера, распознавание и SQLite настоящие.
   await page.evaluate(() => {
     window.shots = [];
     let footerReads = 0;
-    const crop = kartoved.trayPhoto, sound = kartoved.chime;
+    let signalAt;
+    const sample = kartoved.traySample, crop = kartoved.trayPhoto, sound = kartoved.chime;
+    kartoved.traySample = (...args) => {
+      const shot = shots.at(-1);
+      if (shot && shot.nextFrameMs == null) shot.nextFrameMs = Math.round(performance.now() - signalAt);
+      return sample(...args);
+    };
     kartoved.trayPhoto = (file, area, readFooter) => {
       if (readFooter) footerReads++;
       return crop(file, area, readFooter);
     };
     kartoved.chime = outcome => {
+      const now = performance.now();
+      if (shots.length) shots.at(-1).nextSignalMs = Math.round(now - signalAt);
+      signalAt = now;
       shots.push({outcome, footerReads});
       if (shots.length === 2) {
         showCard(null);

@@ -7,7 +7,7 @@ import '../model.dart';
 import 'name_search.dart';
 import 'collection_detail.dart';
 import 'collection_stack.dart';
-import 'style.dart';
+import 'library_style.dart';
 
 class CollectionBrowser extends StatefulWidget {
   const CollectionBrowser({
@@ -63,12 +63,8 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
     );
   }
 
-  Widget _toolbar() => DecoratedBox(
-    decoration: BoxDecoration(
-      color: surface,
-      border: Border.all(color: outline),
-      borderRadius: BorderRadius.circular(18),
-    ),
+  Widget _toolbar() => LibraryGlass(
+    radius: 16,
     child: Row(
       children: [
         Expanded(
@@ -76,19 +72,19 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
               ? TextField(
                   autofocus: true,
                   onChanged: (text) => setState(() => search.search(text)),
-                  style: const TextStyle(color: paper),
-                  cursorColor: butter,
+                  style: const TextStyle(color: libraryInk),
+                  cursorColor: libraryInk,
                   textInputAction: TextInputAction.search,
                   decoration: const InputDecoration(
                     contentPadding: EdgeInsets.symmetric(horizontal: 12),
                     hintText: 'Название карты',
-                    hintStyle: TextStyle(color: cream),
+                    hintStyle: TextStyle(color: libraryMuted),
                     border: InputBorder.none,
                   ),
                 )
               : TextButton.icon(
                   style: TextButton.styleFrom(
-                    foregroundColor: paper,
+                    foregroundColor: libraryInk,
                     alignment: Alignment.centerLeft,
                   ),
                   onPressed: () => setState(() => editing = true),
@@ -98,7 +94,7 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
         ),
         if (editing)
           IconButton(
-            color: paper,
+            color: libraryInk,
             tooltip: 'Закрыть поиск',
             icon: const Icon(Icons.close),
             onPressed: () {
@@ -109,14 +105,14 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
         IconButton(
           isSelected: flagsOnly,
           tooltip: 'Только отмеченные',
-          color: flagsOnly ? butter : paper,
+          color: flagsOnly ? const Color(0xff844202) : libraryMuted,
           icon: Icon(flagsOnly ? Icons.flag_rounded : Icons.flag_outlined),
           onPressed: () => setState(() => flagsOnly = !flagsOnly),
         ),
         IconButton(
           isSelected: grouped,
           tooltip: 'Группировать по названию',
-          color: grouped ? butter : paper,
+          color: grouped ? const Color(0xff844202) : libraryMuted,
           icon: Icon(grouped ? Icons.layers : Icons.layers_outlined),
           onPressed: () => setState(() => grouped = !grouped),
         ),
@@ -170,7 +166,7 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
             }
             if (result.connectionState == ConnectionState.waiting) {
               return const Center(
-                child: CircularProgressIndicator(color: butter),
+                child: CircularProgressIndicator(color: libraryMuted),
               );
             }
             if (result.hasError) {
@@ -179,7 +175,7 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
                   onPressed: () => search.search(search.query),
                   child: const Text(
                     'Повторить поиск',
-                    style: TextStyle(color: paper),
+                    style: TextStyle(color: libraryInk),
                   ),
                 ),
               );
@@ -189,7 +185,7 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
                 flagsOnly && term.isEmpty
                     ? 'Нет отмеченных карт'
                     : 'Совпадений нет',
-                style: const TextStyle(color: paper),
+                style: const TextStyle(color: libraryMuted),
               ),
             );
           },

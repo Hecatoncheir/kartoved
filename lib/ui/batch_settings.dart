@@ -1,147 +1,151 @@
 import 'package:material_ui/material_ui.dart';
 
-import '../data/catalog.dart';
-import '../scan_decision.dart';
-import 'sheets.dart';
+import 'card_language.dart';
+import 'scanner_style.dart';
 import 'style.dart';
 
-const _languages = {
-  'ru': 'Русский',
-  'en': 'Английский',
-  'de': 'Немецкий',
-  'fr': 'Французский',
-  'es': 'Испанский',
-  'it': 'Итальянский',
-  'pt': 'Португальский',
-  'ja': 'Японский',
-  'ko': 'Корейский',
-  'zhs': 'Китайский (упрощённый)',
-  'zht': 'Китайский (традиционный)',
-};
+enum BatchField {
+  language('Язык стопки', 'Найти язык'),
+  edition('Издание стопки', 'Найти код издания');
 
-class BatchSheet extends StatefulWidget {
-  const BatchSheet(this.catalog, this.initial, {super.key});
-  final Catalog catalog;
-  final BatchSettings initial;
-  @override
-  State<BatchSheet> createState() => _BatchSheetState();
+  const BatchField(this.title, this.hint);
+  final String title, hint;
+
+  String label(String? code) {
+    if (code == null) return 'Авто';
+    return this == language ? cardLanguageName(code) : code.toUpperCase();
+  }
 }
 
-class _BatchSheetState extends State<BatchSheet> {
-  late String? language = widget.initial.language, set = widget.initial.setCode;
-  Future<void> _pick(bool languages) async {
-    final codes = languages
-        ? widget.catalog.languages
-        : widget.catalog.setCodes;
-    final value = await panel<String>(context, _CodePicker(codes, languages));
-    if (!mounted || value == null) return;
-    setState(() {
-      final code = value.isEmpty ? null : value;
-      if (languages) {
-        language = code;
-      } else {
-        set = code;
-      }
-    });
+class BatchPicker extends StatefulWidget {
+  const BatchPicker({
+    super.key,
+    required this.field,
+    required this.load,
+    required this.selected,
+    required this.onSelect,
+  });
+  final BatchField field;
+  final Future<List<String>> Function() load;
+  final String? selected;
+  final ValueChanged<String?> onSelect;
+
+  @override
+  State<BatchPicker> createState() => _BatchPickerState();
+}
+
+class _BatchPickerState extends State<BatchPicker> {
+  final search = TextEditingController();
+  late Future<List<String>> options = _loadOptions();
+
+  Future<List<String>> _loadOptions() async {
+    final codes = await widget.load();
+    if (widget.field == BatchField.edition) return codes;
+    final remaining = codes.toSet();
+    return [
+      for (final code in cardLanguageNames.keys)
+        if (remaining.remove(code)) code,
+      ...remaining,
+    ];
   }
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SheetHeading('Настройки стопки'),
-        ListTile(
-          title: const Text('Язык'),
-          trailing: Text(
-            _languages[language] ?? language?.toUpperCase() ?? 'Авто',
-          ),
-          onTap: () => _pick(true),
-        ),
-        ListTile(
-          title: const Text('Издание'),
-          trailing: Text(set?.toUpperCase() ?? 'Авто'),
-          onTap: () => _pick(false),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(
-            context,
-            BatchSettings(language: language, setCode: set),
-          ),
-          child: const Text('Применить'),
-        ),
-      ],
-    ),
-  );
-}
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
 
-class _CodePicker extends StatefulWidget {
-  const _CodePicker(this.load, this.languages);
-  final Future<List<String>> Function() load;
-  final bool languages;
-  @override
-  State<_CodePicker> createState() => _CodePickerState();
-}
-
-class _CodePickerState extends State<_CodePicker> {
-  late Future<List<String>> options = widget.load();
-  String query = '';
-  String label(String code) =>
-      (widget.languages ? _languages[code] : null) ?? code.toUpperCase();
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-    child: SizedBox(
-      height: MediaQuery.sizeOf(context).height * .60,
-      child: Column(
-        children: [
-          TextField(
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search),
-              hintText: widget.languages ? 'Найти язык' : 'Найти код издания',
-            ),
-            onChanged: (v) => setState(() => query = v.trim().toLowerCase()),
-          ),
-          ListTile(
-            title: const Text('Авто'),
-            onTap: () => Navigator.pop(context, ''),
-          ),
-          Expanded(
-            child: FutureBuilder<List<String>>(
-              future: options,
-              builder: (_, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: TextButton(
-                      onPressed: () => setState(() => options = widget.load()),
-                      child: const Text('Повторить загрузку'),
-                    ),
-                  );
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final values = snapshot.requireData
-                    .where(
-                      (s) => '$s ${label(s)}'.toLowerCase().contains(query),
-                    )
-                    .toList();
-                if (values.isEmpty) {
-                  return const Center(child: Text('Нет совпадений'));
-                }
-                return ListView.builder(
-                  itemCount: values.length,
-                  itemBuilder: (_, i) => ListTile(
-                    title: Text(label(values[i])),
-                    onTap: () => Navigator.pop(context, values[i]),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
+  Widget _option(String? code) {
+    final selected = code == widget.selected;
+    return ListTile(
+      selected: selected,
+      selectedColor: scanPaper,
+      selectedTileColor: const Color(0x225f638b),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      title: Text(
+        widget.field.label(code),
+        style: TextStyle(
+          fontFamily: code != null && widget.field == BatchField.edition
+              ? monoFont
+              : bodyFont,
+          fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+        ),
       ),
-    ),
+      trailing: selected
+          ? const Icon(Icons.check_rounded, color: scanOrange)
+          : null,
+      onTap: () => widget.onSelect(code),
+    );
+  }
+
+  Widget _results(AsyncSnapshot<List<String>> snapshot) {
+    if (snapshot.hasError) {
+      return SliverToBoxAdapter(
+        child: TextButton(
+          onPressed: () => setState(() => options = _loadOptions()),
+          child: const Text('Повторить загрузку'),
+        ),
+      );
+    }
+    if (!snapshot.hasData) {
+      return const SliverToBoxAdapter(child: LinearProgressIndicator());
+    }
+    final query = search.text.trim().toLowerCase();
+    final codes = snapshot.requireData
+        .where(
+          (code) =>
+              '$code ${widget.field.label(code)}'.toLowerCase().contains(query),
+        )
+        .toList();
+    if (codes.isEmpty) {
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Center(child: Text('Нет совпадений')),
+        ),
+      );
+    }
+    return SliverList.builder(
+      itemCount: codes.length,
+      itemBuilder: (_, i) => _option(codes[i]),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => CustomScrollView(
+    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+    slivers: [
+      SliverToBoxAdapter(
+        child: TextField(
+          controller: search,
+          onChanged: (_) => setState(() {}),
+          style: TextStyle(
+            fontFamily: widget.field == BatchField.edition
+                ? monoFont
+                : bodyFont,
+          ),
+          decoration: InputDecoration(
+            hintText: widget.field.hint,
+            hintStyle: const TextStyle(fontFamily: bodyFont, color: scanMuted),
+            prefixIcon: const Icon(Icons.search),
+            filled: true,
+            fillColor: const Color(0x227d7290),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            suffixIcon: search.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Очистить поиск',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(search.clear),
+                  ),
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(child: _option(null)),
+      FutureBuilder<List<String>>(
+        future: options,
+        builder: (_, data) => _results(data),
+      ),
+    ],
   );
 }

@@ -80,11 +80,14 @@ class _CardFactsState extends State<CardFacts> {
           if (!widget.edition.needsPrinting) _EditionFacts(card),
           _Rules(card.rulings, _retry),
           if (card.legalities.isNotEmpty) _Formats(card.legalities),
-          const Padding(
-            padding: EdgeInsets.only(top: 6, left: 12),
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 12),
             child: Text(
               'Данные Scryfall',
-              style: TextStyle(color: muted, fontSize: 12),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
             ),
           ),
         ],
@@ -101,13 +104,14 @@ class _FaceText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final details = [face.type, face.mana, face.stats].nonNulls.join(' · ');
     final rules = showPrinting ? face.printed ?? face.oracle : face.oracle;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -115,7 +119,7 @@ class _FaceText extends StatelessWidget {
         children: [
           Text(face.name, style: Theme.of(context).textTheme.titleLarge),
           if (details.isNotEmpty)
-            Text(details, style: const TextStyle(color: muted)),
+            Text(details, style: TextStyle(color: colors.onSurfaceVariant)),
           if (rules != null) ...[
             const SizedBox(height: 10),
             SelectableText(rules),
@@ -138,8 +142,8 @@ class _FaceText extends StatelessWidget {
               padding: const EdgeInsets.only(top: 8),
               child: Text(
                 face.flavor!,
-                style: const TextStyle(
-                  color: muted,
+                style: TextStyle(
+                  color: colors.onSurfaceVariant,
                   fontStyle: FontStyle.italic,
                 ),
               ),
@@ -206,7 +210,14 @@ class _Rules extends StatelessWidget {
       expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final ruling in list) ...[
-          if (ruling.date case final date?) Text(date, style: codeText),
+          if (ruling.date case final date?)
+            Text(
+              date,
+              style: TextStyle(
+                fontFamily: monoFont,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           SelectableText(ruling.text),
           const SizedBox(height: 8),
         ],

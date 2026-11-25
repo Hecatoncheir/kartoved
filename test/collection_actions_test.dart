@@ -193,6 +193,58 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Длинное название целиком помещается в строку альбома при крупном шрифте',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 800);
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      const long = Edition(
+        'long',
+        'The Book of Exalted Deeds',
+        'afr',
+        '4',
+        'en',
+      );
+      final model = AppModel(
+        CatalogStore(),
+        History(),
+        initial: const LibraryState(
+          recent: [
+            (sequence: 2, card: long, quantity: 3),
+            (sequence: 1, card: opt, quantity: 1),
+          ],
+        ),
+      );
+      addTearDown(model.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BlocProvider.value(value: model, child: const CollectionPage()),
+        ),
+      );
+      final row = find.byKey(ValueKey(long.printingKey));
+      final title = find.descendant(
+        of: row,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Text &&
+              widget.data == long.name &&
+              widget.style?.fontSize == 18,
+        ),
+      );
+      expect(tester.widget<Text>(title).maxLines, isNull);
+      expect(tester.getSize(title).height, greaterThan(2 * 18 * 1.6));
+      expect(
+        tester.getRect(row).contains(tester.getBottomRight(title)),
+        isTrue,
+      );
+      expect(find.text('4 карты'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('Флажок, удаление последней позиции и отмена через меню', (
     tester,
   ) async {
