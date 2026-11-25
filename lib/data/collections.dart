@@ -113,12 +113,14 @@ class History {
         await batch.commit(noResult: true);
       });
 
-  Future<int> create(String name) {
+  Future<int> create(String name) => _createFolder(_db, name);
+
+  Future<int> _createFolder(DatabaseExecutor db, String name) {
     final title = name.trim();
     if (title.isEmpty) {
       throw const FormatException('Введите название коллекции');
     }
-    return _db.insert('folders', {'title': title});
+    return db.insert('folders', {'title': title});
   }
 
   Future<List<CardGroup>> folders() async {
@@ -208,15 +210,24 @@ class History {
     );
   }
 
-  Future<void> replace(int folder, int seq, Edition card) =>
-      _db.transaction((db) async {
-        await db.update(
-          'scans',
-          {...card.row, 'flagged': await _flag(db, folder, card)},
-          where: 'folder=? AND seq=?',
-          whereArgs: [folder, seq],
-        );
-      });
+  Future<void> replace(
+    int folder,
+    int seq,
+    Edition card, {
+    ScanReview? review,
+  }) => _db.transaction((db) async {
+    final changed = await db.update(
+      'scans',
+      {
+        ...card.row,
+        'review': review?.encode(),
+        'flagged': review == null ? await _flag(db, folder, card) : 0,
+      },
+      where: 'folder=? AND seq=?',
+      whereArgs: [folder, seq],
+    );
+    if (changed != 1) throw StateError('Карта уже удалена');
+  });
 
   Future<void> takeOne(int folder, Edition card) => _db.transaction((db) async {
     final rows = await db.query(

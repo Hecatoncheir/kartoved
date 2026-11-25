@@ -42,6 +42,8 @@ jobs:
           script: |
             adb shell svc wifi disable
             adb shell svc data disable
+            timeout 30s adb shell 'until dumpsys connectivity | grep -F "Active default network: none"; do sleep 1; done'
             python tool/android_documents.py flutter test integration_test/generated_acceptance_test.dart -d emulator-5554 --timeout 10m
+            adb shell 'dumpsys connectivity | grep -F "Active default network: none"'
       - name: Проверить автономный каталог внутри APK
         run: python tool/verify_apk.py build/app/outputs/flutter-apk/app-debug.apk

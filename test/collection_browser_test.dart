@@ -37,101 +37,148 @@ void main() {
   tearDownAll(() => root.delete(recursive: true));
 
   testWidgets(
-    'Из каталога в коллекцию, поиск по русскому названию, перемещение и отмена',
+    'При выборе новой коллекции нужны название и допустимое количество',
     (tester) async {
-      tester.view.physicalSize = const Size(390, 800);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      tester.platformDispatcher.accessibilityFeaturesTestValue =
-          FakeAccessibilityFeatures(disableAnimations: true);
-      addTearDown(
-        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
-      );
-      final path = p.join(root.path, 'inventory.sqlite');
-      final history = History();
-      final model = AppModel(
-        CatalogStore(),
-        history,
-        initial: LibraryState(catalog: catalog),
-      );
-      late CardGroup dest;
-      late Edition ring;
-      await tester.runAsync(() async {
-        await history.open(path: path);
-        await history.create('На обмен');
-        await model.select(1);
-        dest = model.state.groups.first;
-        ring = (await catalog.byName('Sol Ring'))
-            .firstWhere((e) => e.set == 'mps' && e.language == 'en');
-      });
-      addTearDown(() async {
-        await model.close();
-        await (await openDatabase(path)).close();
-      });
       await tester.pumpWidget(
-        BlocProvider.value(
-          value: model,
-          child: MaterialApp(home: CatalogSearchPage(catalog, model)),
+        const MaterialApp(
+          home: Scaffold(
+            body: CardDestination(
+              card: ru,
+              groups: [(id: 2, name: 'Альбом', count: 0)],
+              initialFolder: 2,
+              available: 2,
+            ),
+          ),
         ),
       );
-      Future<void> waitFor(bool Function() found) async {
-        for (int i = 0; !found() && i < 150; i++) {
-          await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 15)),
-          );
-          await tester.pump(const Duration(milliseconds: 25));
-        }
-        expect(found(), isTrue);
-      }
-
-      Future<void> tap(Finder finder) async {
-        await tester.ensureVisible(finder);
-        await waitFor(() => finder.hitTestable().evaluate().isNotEmpty);
-        await tester.tap(finder.hitTestable());
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 350));
-      }
-
-      await tester.enterText(find.byType(TextField), 'солнечное кольцо');
-      await waitFor(() => find.text('Sol Ring').evaluate().isNotEmpty);
-      await tap(find.text('Sol Ring'));
-      await waitFor(() => find.byType(TextField).evaluate().isNotEmpty);
-      await tester.enterText(find.byType(TextField), 'mps');
-      await tester.pump();
-      await tap(find.text(ring.detail).first);
-      final quantity = find.descendant(
-        of: find.byType(CardDestination),
-        matching: find.byType(TextField),
-      );
-      await tester.enterText(quantity, '4');
-      await tap(find.text('В коллекцию'));
-      await waitFor(() => model.state.owned('Sol Ring') == 4);
-      await tester.pageBack();
+      await tester.tap(find.text('Альбом'));
       await tester.pumpAndSettle();
-      await tap(find.text('Мои карты'));
-      final location = find.widgetWithText(ActionChip, 'Моя коллекция · 4');
-      await waitFor(() => location.evaluate().isNotEmpty);
-      expect(find.text('×4'), findsOneWidget);
-      await tap(location);
-      final tile = find.byKey(ValueKey(ring.printingKey));
-      await waitFor(() => tile.evaluate().isNotEmpty);
-      await tap(tile);
-      await tap(find.text('Переместить'));
-      await tester.enterText(quantity, '2');
-      await tap(
-        find.descendant(
-          of: find.byType(CardDestination),
-          matching: find.text('Переместить'),
-        ),
+      await tester.tap(find.text('Создать коллекцию').last);
+      await tester.pumpAndSettle();
+      FilledButton submit() => tester.widget(
+        find.widgetWithText(FilledButton, 'Создать и переместить'),
       );
-      await waitFor(() => model.state.holdings['Sol Ring']?[dest.id] == 2);
-      expect(model.state.owned('Sol Ring'), 4);
-      await waitFor(() => find.text('Отменить').evaluate().isNotEmpty);
-      await tap(find.text('Отменить'));
-      await waitFor(() => model.state.holdings['Sol Ring']?[1] == 4);
-      expect(model.state.printings.single.card.row, ring.row);
+      expect(submit().onPressed, isNull);
+      await tester.enterText(find.byType(TextFormField).last, 'Новая');
+      await tester.pump();
+      expect(submit().onPressed, isNotNull);
+      await tester.enterText(find.widgetWithText(TextField, 'Количество'), '3');
+      await tester.pump();
+      expect(submit().onPressed, isNull);
     },
   );
+
+  for (final createDestination in [false, true]) {
+    testWidgets(
+      'Из каталога в коллекцию, перемещение и отмена (${createDestination ? "новая коллекция" : "существующая коллекция"})',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        tester.platformDispatcher.accessibilityFeaturesTestValue =
+            FakeAccessibilityFeatures(disableAnimations: true);
+        addTearDown(
+          tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+        );
+        final path = p.join(root.path, 'inventory-$createDestination.sqlite');
+        final history = History();
+        final model = AppModel(
+          CatalogStore(),
+          history,
+          initial: LibraryState(catalog: catalog),
+        );
+        late Edition ring;
+        await tester.runAsync(() async {
+          await history.open(path: path);
+          if (!createDestination) await history.create('На обмен');
+          await model.select(1);
+          ring = (await catalog.byName('Sol Ring'))
+              .firstWhere((e) => e.set == 'mps' && e.language == 'en');
+        });
+        addTearDown(() async {
+          await model.close();
+          await (await openDatabase(path)).close();
+        });
+        await tester.pumpWidget(
+          BlocProvider.value(
+            value: model,
+            child: MaterialApp(home: CatalogSearchPage(catalog, model)),
+          ),
+        );
+        Future<void> waitFor(bool Function() found) async {
+          for (int i = 0; !found() && i < 150; i++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 15)),
+            );
+            await tester.pump(const Duration(milliseconds: 25));
+          }
+          expect(found(), isTrue);
+        }
+
+        Future<void> tap(Finder finder) async {
+          await tester.ensureVisible(finder);
+          await waitFor(() => finder.hitTestable().evaluate().isNotEmpty);
+          await tester.tap(finder.hitTestable());
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 350));
+        }
+
+        await tester.enterText(find.byType(TextField), 'солнечное кольцо');
+        await waitFor(() => find.text('Sol Ring').evaluate().isNotEmpty);
+        await tap(find.text('Sol Ring'));
+        await waitFor(() => find.byType(TextField).evaluate().isNotEmpty);
+        await tester.enterText(find.byType(TextField), 'mps');
+        await tester.pump();
+        await tap(find.text(ring.detail).first);
+        final quantity = find.descendant(
+          of: find.byType(CardDestination),
+          matching: find.byType(TextField),
+        );
+        await tester.enterText(quantity, '4');
+        await tap(find.text('В коллекцию'));
+        await waitFor(() => model.state.owned('Sol Ring') == 4);
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        await tap(find.text('Мои карты'));
+        final location = find.widgetWithText(ActionChip, 'Моя коллекция · 4');
+        await waitFor(() => location.evaluate().isNotEmpty);
+        expect(find.text('×4'), findsOneWidget);
+        await tap(location);
+        final tile = find.byKey(ValueKey(ring.printingKey));
+        await waitFor(() => tile.evaluate().isNotEmpty);
+        await tap(tile);
+        await tap(find.text('Переместить'));
+        if (createDestination) {
+          await tester.enterText(
+            find.widgetWithText(TextFormField, 'Название новой коллекции'),
+            'На обмен',
+          );
+        }
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Количество'),
+          '2',
+        );
+        await tap(
+          find.descendant(
+            of: find.byType(CardDestination),
+            matching: find.text(
+              createDestination ? 'Создать и переместить' : 'Переместить',
+            ),
+          ),
+        );
+        await waitFor(
+          () =>
+              model.state.groups.first.name == 'На обмен' &&
+              model.state.groups.first.count == 2,
+        );
+        expect(model.state.owned('Sol Ring'), 4);
+        await waitFor(() => find.text('Отменить').evaluate().isNotEmpty);
+        await tap(find.text('Отменить'));
+        await waitFor(() => model.state.holdings['Sol Ring']?[1] == 4);
+        expect(model.state.printings.single.card.row, ring.row);
+      },
+    );
+  }
 
   test(
     'Старые строки с несколькими экземплярами уменьшаются по одному',

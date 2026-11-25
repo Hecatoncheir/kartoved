@@ -26,53 +26,56 @@ class AutoScanButton extends StatelessWidget {
   final VoidCallback? onChoose;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    toggled: running,
-    label: profile.label,
-    hint: 'Удерживайте для выбора режима',
-    child: TextButton(
-      onPressed: onToggle,
-      onLongPress: onChoose,
-      style: TextButton.styleFrom(
-        foregroundColor: running ? butter : paper,
-        disabledForegroundColor: muted,
-        backgroundColor: running ? amberSurface : null,
-        minimumSize: const Size(86, 54),
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-      ),
-      child: ExcludeSemantics(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(profile.icon, size: 23),
-                const SizedBox(width: 4),
-                Icon(
-                  running ? Icons.pause : Icons.play_arrow_rounded,
-                  size: 14,
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  profile == ScanMode.tray ? 'В лотке' : 'Автоскан',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Semantics(
+        excludeSemantics: true,
+        toggled: running,
+        label: profile.label,
+        enabled: onToggle != null,
+        onTap: onToggle,
+        onLongPress: onChoose,
+        child: TextButton(
+          onPressed: onToggle,
+          onLongPress: onChoose,
+          style: TextButton.styleFrom(
+            foregroundColor: running ? butter : paper,
+            disabledForegroundColor: muted,
+            backgroundColor: running ? amberSurface : null,
+            minimumSize: const Size(64, 54),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(profile.icon, size: 23),
+                  Icon(
+                    running ? Icons.pause : Icons.play_arrow_rounded,
+                    size: 14,
                   ),
+                ],
+              ),
+              Text(
+                profile == ScanMode.tray ? 'В лотке' : 'Автоскан',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
                 ),
-                const Icon(Icons.arrow_drop_down, size: 16),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
-    ),
+      IconButton(
+        tooltip: 'Выбрать режим автоскана',
+        onPressed: onChoose,
+        icon: const Icon(Icons.arrow_drop_down),
+      ),
+    ],
   );
 }
 

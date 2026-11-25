@@ -9,6 +9,25 @@ void main() {
   databaseFactory = databaseFactoryFfi;
   const en = Edition('opt-en', 'Opt', 'eld', '59', 'en');
   const ru = Edition('opt-ru', 'Opt', 'dom', '60', 'ru', foil: true);
+  test('Новая коллекция создаётся вместе с перемещением, ошибка откатывает обе операции', () async {
+    final history = History();
+    await history.open(path: inMemoryDatabasePath);
+    addTearDown((await openDatabase(inMemoryDatabasePath)).close);
+    final model = AppModel(CatalogStore(), history);
+    addTearDown(model.close);
+    await model.save(ru);
+    await expectLater(
+      model.moveToNewCollection('Лишняя', ru, 2),
+      throwsStateError,
+    );
+    expect((await history.folders()).length, 1);
+    final move = await model.moveToNewCollection('  На обмен  ', ru, 1);
+    expect(model.state.groups.first.name, 'На обмен');
+    expect(model.state.folder, 1);
+    expect(model.state.holdings[ru.name], {move.to: 1});
+    await model.undoMove(move);
+    expect(model.state.holdings[ru.name], {1: 1});
+  });
   test(
     'Перемещение части стопки и отдельных сканов обратимо и атомарно',
     () async {

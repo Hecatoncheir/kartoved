@@ -12,40 +12,58 @@ class CardMove {
 
 extension CardTransfers on History {
   Future<CardMove> moveCards(int from, int to, Edition card, int quantity) =>
-      _db.transaction((db) async {
-        if (from == to || quantity < 1) {
-          throw ArgumentError('Проверьте коллекцию и количество');
-        }
-        final rows = await db.query(
-          'scans',
-          where: _printing,
-          whereArgs: _printingArgs(from, card),
-          orderBy: 'seq DESC',
-        );
-        final flagged = rows.firstOrNull?['flagged'] == 1;
-        final targetFlag = await _flag(db, to, card, fallback: flagged);
-        final target = {'folder': to, 'flagged': targetFlag};
-        final portions = <_Portion>[];
-        var left = quantity;
-        for (final row in rows) {
-          if (left == 0) break;
-          final seq = row['seq'] as int;
-          final available = row['qty'] as int;
-          final amount = left < available ? left : available;
-          final moved = await _movePortion(
-            db,
-            seq,
-            card,
-            target,
-            amount,
-            available,
-          );
-          portions.add((original: seq, moved: moved, quantity: amount));
-          left -= amount;
-        }
-        if (left != 0) throw StateError('В коллекции недостаточно экземпляров');
-        return CardMove._(from, to, card, flagged, portions);
-      });
+      _db.transaction((db) => _move(db, from, to, card, quantity));
+
+  Future<CardMove> moveToNewCollection(
+    int from,
+    String name,
+    Edition card,
+    int quantity,
+  ) => _db.transaction((db) async {
+    final to = await _createFolder(db, name);
+    return _move(db, from, to, card, quantity);
+  });
+
+  Future<CardMove> _move(
+    Transaction db,
+    int from,
+    int to,
+    Edition card,
+    int quantity,
+  ) async {
+    if (from == to || quantity < 1) {
+      throw ArgumentError('Проверьте коллекцию и количество');
+    }
+    final rows = await db.query(
+      'scans',
+      where: _printing,
+      whereArgs: _printingArgs(from, card),
+      orderBy: 'seq DESC',
+    );
+    final flagged = rows.firstOrNull?['flagged'] == 1;
+    final targetFlag = await _flag(db, to, card, fallback: flagged);
+    final target = {'folder': to, 'flagged': targetFlag};
+    final portions = <_Portion>[];
+    var left = quantity;
+    for (final row in rows) {
+      if (left == 0) break;
+      final seq = row['seq'] as int;
+      final available = row['qty'] as int;
+      final amount = left < available ? left : available;
+      final moved = await _movePortion(
+        db,
+        seq,
+        card,
+        target,
+        amount,
+        available,
+      );
+      portions.add((original: seq, moved: moved, quantity: amount));
+      left -= amount;
+    }
+    if (left != 0) throw StateError('В коллекции недостаточно экземпляров');
+    return CardMove._(from, to, card, flagged, portions);
+  }
 
   Future<int> _movePortion(
     Transaction db,

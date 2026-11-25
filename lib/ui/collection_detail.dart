@@ -68,37 +68,31 @@ class _CollectionDetailState extends State<CollectionDetail> {
         .where((g) => g.id != model.state.folder)
         .toList();
     final messenger = ScaffoldMessenger.of(context);
-    if (others.isEmpty) {
-      messenger.showSnackBar(
-        const SnackBar(
-          duration: noticeDuration,
-          content: Text('Сначала создайте вторую коллекцию'),
-        ),
-      );
-      return;
-    }
     final result = await panel<CardSelection>(
       context,
       CardDestination(
         card: selected,
         groups: others,
-        initialFolder: others.first.id,
+        initialFolder: others.firstOrNull?.id,
         available: available,
       ),
     );
     if (result == null || !mounted) return;
-    final receipt = await model.moveCards(
-      result.folder.id,
-      result.card,
-      result.quantity,
-    );
+    final receipt = switch (result.folderId) {
+      final id? => await model.moveCards(id, result.card, result.quantity),
+      null => await model.moveToNewCollection(
+        result.folderName,
+        result.card,
+        result.quantity,
+      ),
+    };
     if (!mounted) return;
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
         duration: noticeDuration,
         persist: false,
-        content: Text('В «${result.folder.name}» · ${result.quantity}'),
+        content: Text('В «${result.folderName}» · ${result.quantity}'),
         action: SnackBarAction(
           label: 'Отменить',
           onPressed: () async {

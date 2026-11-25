@@ -143,7 +143,7 @@ class CollectionsPage extends StatelessWidget {
                 state: state,
                 onRetry: model.initialize,
                 onScan: scan,
-                onCreate: ready ? () => _create(context) : null,
+                onCreate: state.groups.isEmpty ? null : () => _create(context),
                 onOpenAlbum: (id) => _openAlbum(context, id),
                 onBrowse: ready ? () => _catalog(context, mine: true) : null,
                 onOpenRecent: (entry) =>
@@ -615,7 +615,9 @@ class CollectionPage extends StatelessWidget {
             actions: [
               IconButton(
                 tooltip: 'Экспорт для Moxfield',
-                onPressed: items.isEmpty ? null : () => _export(context),
+                onPressed: items.isEmpty || state.catalog == null
+                    ? null
+                    : () => _export(context),
                 icon: const Icon(Icons.ios_share_outlined),
               ),
             ],
@@ -705,7 +707,9 @@ class CollectionPage extends StatelessWidget {
               ),
             ),
           ),
-          bottomNavigationBar: keyboard ? null : const _ScanButton(),
+          bottomNavigationBar: keyboard
+              ? null
+              : _ScanButton(enabled: state.catalog != null),
         ),
       );
     },
@@ -713,7 +717,8 @@ class CollectionPage extends StatelessWidget {
 }
 
 class _ScanButton extends StatelessWidget {
-  const _ScanButton();
+  const _ScanButton({required this.enabled});
+  final bool enabled;
   static const corners = BorderRadius.all(Radius.circular(12));
 
   @override
@@ -749,7 +754,7 @@ class _ScanButton extends StatelessWidget {
                 foregroundColor: const Color(0xff090a07),
                 elevation: 0,
               ),
-              onPressed: () => _openScanner(context),
+              onPressed: enabled ? () => _openScanner(context) : null,
               icon: const Icon(Icons.center_focus_strong),
               label: const Text('Сканировать карту'),
             ),

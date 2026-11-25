@@ -9,7 +9,7 @@ import 'package:kartoved/ui/tracked_scan_guide.dart';
 import 'package:material_ui/material_ui.dart';
 
 void main() {
-  testWidgets('Долгое нажатие выбирает режим, короткое запускает автоскан', (
+  testWidgets('Стрелка меняет профиль независимо от запуска и паузы', (
     tester,
   ) async {
     var profile = ScanMode.tray;
@@ -34,20 +34,20 @@ void main() {
         ),
       ),
     );
-    final button = find.byType(AutoScanButton);
+    final choose = find.byTooltip('Выбрать режим автоскана');
     expect(find.byIcon(Icons.inventory_2_outlined), findsOneWidget);
-    await tester.longPress(button);
+    await tester.tap(choose);
     await tester.pumpAndSettle();
     expect(running, isFalse);
     expect(find.byIcon(Icons.check), findsOneWidget);
     await tester.tap(find.text('Обычный автоскан'));
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.center_focus_weak_rounded), findsOneWidget);
-    await tester.tap(button);
+    await tester.tap(find.text('Автоскан'));
     await tester.pumpAndSettle();
     expect(running, isTrue);
     expect(find.byIcon(Icons.pause), findsOneWidget);
-    await tester.longPress(button);
+    await tester.longPress(find.text('Автоскан'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Автоскан в лотке'));
     await tester.pumpAndSettle();

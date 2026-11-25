@@ -235,7 +235,7 @@ class _PrintingsState extends State<_Printings> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await model.addFromCatalog(
-        result.folder.id,
+        result.folderId!,
         result.card,
         result.quantity,
       );
@@ -243,7 +243,7 @@ class _PrintingsState extends State<_Printings> {
         SnackBar(
           duration: noticeDuration,
           content: Text(
-            'Добавлено в «${result.folder.name}» · ${result.quantity}',
+            'Добавлено в «${result.folderName}» · ${result.quantity}',
           ),
         ),
       );

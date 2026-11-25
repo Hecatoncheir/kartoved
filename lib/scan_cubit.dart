@@ -4,6 +4,7 @@ import 'model.dart';
 import 'data/catalog.dart';
 import 'data/recognition_result.dart';
 import 'scan_decision.dart';
+import 'scan_processing.dart';
 
 // Два кадра с одинаковыми кандидатами. Пропуск кадра не снимает защиту от дубля.
 class ScanGate {
@@ -71,25 +72,43 @@ enum ScanMode {
   bool get isAutomatic => this != manual;
 }
 
-typedef ScanSession = ({
-  ScanMode mode,
-  BatchSettings batch,
-  int? lastScan,
-  bool showGuide,
-  Set<String> targets,
-  RecognitionModel model,
-});
+class ScanSession {
+  const ScanSession({
+    this.mode = ScanMode.manual,
+    this.batch = const BatchSettings(),
+    this.lastScan,
+    this.showGuide = true,
+    this.targets = const {},
+    this.model = RecognitionModel.oracle,
+  });
+
+  final ScanMode mode;
+  final BatchSettings batch;
+  final int? lastScan;
+  final bool showGuide;
+  final Set<String> targets;
+  final RecognitionModel model;
+
+  ScanSession copyWith({
+    ScanMode? mode,
+    BatchSettings? batch,
+    int? lastScan,
+    bool clearLastScan = false,
+    bool? showGuide,
+    Set<String>? targets,
+    RecognitionModel? model,
+  }) => ScanSession(
+    mode: mode ?? this.mode,
+    batch: batch ?? this.batch,
+    lastScan: clearLastScan ? null : lastScan ?? this.lastScan,
+    showGuide: showGuide ?? this.showGuide,
+    targets: targets ?? this.targets,
+    model: model ?? this.model,
+  );
+}
 
 class ScanCubit extends Cubit<ScanSession> {
-  ScanCubit()
-    : super((
-        mode: ScanMode.manual,
-        batch: const BatchSettings(),
-        lastScan: null,
-        showGuide: true,
-        targets: const {},
-        model: RecognitionModel.oracle,
-      ));
+  ScanCubit() : super(const ScanSession());
   final gate = ScanGate();
   bool _force = false;
   void toggle() =>
@@ -98,48 +117,20 @@ class ScanCubit extends Cubit<ScanSession> {
   void setMode(ScanMode mode) {
     if (state.mode == mode) return;
     cancelFrame();
-    emit((
-      mode: mode,
-      batch: state.batch,
-      lastScan: state.lastScan,
-      showGuide: state.showGuide,
-      targets: state.targets,
-      model: state.model,
-    ));
+    emit(state.copyWith(mode: mode));
   }
 
   void configure(BatchSettings value) {
     cancelFrame();
-    emit((
-      mode: state.mode,
-      batch: value,
-      lastScan: state.lastScan,
-      showGuide: state.showGuide,
-      targets: state.targets,
-      model: state.model,
-    ));
+    emit(state.copyWith(batch: value));
   }
 
-  void setGuide(bool visible) => emit((
-    mode: state.mode,
-    batch: state.batch,
-    lastScan: state.lastScan,
-    showGuide: visible,
-    targets: state.targets,
-    model: state.model,
-  ));
+  void setGuide(bool visible) => emit(state.copyWith(showGuide: visible));
 
   void setModel(RecognitionModel model) {
     if (state.model == model) return;
     cancelFrame();
-    emit((
-      mode: state.mode,
-      batch: state.batch,
-      lastScan: state.lastScan,
-      showGuide: state.showGuide,
-      targets: state.targets,
-      model: model,
-    ));
+    emit(state.copyWith(model: model));
   }
 
   void addTarget(String name) {
@@ -152,40 +143,37 @@ class ScanCubit extends Cubit<ScanSession> {
     _setTargets({...state.targets}..remove(name));
   }
 
-  void _setTargets(Set<String> targets) => emit((
-    mode: state.mode,
-    batch: state.batch,
-    lastScan: state.lastScan,
-    showGuide: state.showGuide,
-    targets: Set.unmodifiable(targets),
-    model: state.model,
-  ));
+  void _setTargets(Set<String> targets) =>
+      emit(state.copyWith(targets: Set.unmodifiable(targets)));
+
+  Future<int> save(
+    AppModel library,
+    PreparedScan scan, {
+    ScanEntry? previous,
+  }) async {
+    final (:card, :review) = scan.decision;
+    final int sequence;
+    if (previous == null) {
+      sequence = await library.save(card, review: review);
+    } else {
+      await library.replace(previous, card, review: review);
+      sequence = previous.sequence;
+    }
+    if (!isClosed) recorded(sequence, card, scan.matches);
+    return sequence;
+  }
 
   void recorded(int seq, Edition card, List<Match> matches) {
     gate.saved(
       card,
       observedNames: closeMatches(matches).map((m) => m.editions.first.name),
     );
-    emit((
-      mode: state.mode,
-      batch: state.batch,
-      lastScan: seq,
-      showGuide: state.showGuide,
-      targets: state.targets,
-      model: state.model,
-    ));
+    emit(state.copyWith(lastScan: seq));
   }
 
   void undone() {
     cancelFrame();
-    emit((
-      mode: state.mode,
-      batch: state.batch,
-      lastScan: null,
-      showGuide: state.showGuide,
-      targets: state.targets,
-      model: state.model,
-    ));
+    emit(state.copyWith(clearLastScan: true));
   }
 
   void shutter() => _force = true;

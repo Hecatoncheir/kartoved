@@ -5,7 +5,12 @@ import '../data/catalog.dart';
 import 'picture.dart';
 import 'style.dart';
 
-typedef CardSelection = ({CardGroup folder, Edition card, int quantity});
+typedef CardSelection = ({
+  int? folderId,
+  String folderName,
+  Edition card,
+  int quantity,
+});
 
 class CardDestination extends StatefulWidget {
   const CardDestination({
@@ -17,7 +22,7 @@ class CardDestination extends StatefulWidget {
   });
   final Edition card;
   final List<CardGroup> groups;
-  final int initialFolder;
+  final int? initialFolder;
   final int? available;
 
   @override
@@ -25,14 +30,29 @@ class CardDestination extends StatefulWidget {
 }
 
 class _CardDestinationState extends State<CardDestination> {
+  static const newCollection = 0;
   final copies = TextEditingController(text: '1');
-  late int folder = widget.initialFolder;
+  late int? folder = widget.initialFolder;
+  String newName = '';
   late bool foil = widget.card.foil;
   int? get quantity => int.tryParse(copies.text);
   bool get valid =>
+      (folder != null || newName.isNotEmpty) &&
       quantity != null &&
       quantity! > 0 &&
       (widget.available == null || quantity! <= widget.available!);
+
+  void _submit() {
+    final name = folder == null
+        ? newName
+        : widget.groups.firstWhere((group) => group.id == folder).name;
+    Navigator.pop<CardSelection>(context, (
+      folderId: folder,
+      folderName: name,
+      card: widget.card.withFoil(foil),
+      quantity: quantity!,
+    ));
+  }
 
   @override
   void dispose() {
@@ -43,6 +63,11 @@ class _CardDestinationState extends State<CardDestination> {
   @override
   Widget build(BuildContext context) {
     final moving = widget.available != null;
+    final action = switch ((moving, folder)) {
+      (false, _) => 'В коллекцию',
+      (true, null) => 'Создать и переместить',
+      _ => 'Переместить',
+    };
     final pictureWidth = moving || MediaQuery.viewInsetsOf(context).bottom > 0
         ? 60.0
         : (MediaQuery.sizeOf(context).width * .36).clamp(60.0, 160.0);
@@ -74,21 +99,38 @@ class _CardDestinationState extends State<CardDestination> {
               ],
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<int>(
-              isExpanded: true,
-              initialValue: folder,
-              decoration: const InputDecoration(labelText: 'Коллекция'),
-              items: [
-                for (final group in widget.groups)
-                  DropdownMenuItem(
-                    value: group.id,
-                    child: Text(group.name, overflow: TextOverflow.ellipsis),
-                  ),
-              ],
-              onChanged: (value) {
-                if (value != null) setState(() => folder = value);
-              },
-            ),
+            if (widget.groups.isNotEmpty)
+              DropdownButtonFormField<int>(
+                isExpanded: true,
+                initialValue: folder ?? newCollection,
+                decoration: const InputDecoration(labelText: 'Коллекция'),
+                items: [
+                  for (final group in widget.groups)
+                    DropdownMenuItem(
+                      value: group.id,
+                      child: Text(group.name, overflow: TextOverflow.ellipsis),
+                    ),
+                  if (moving)
+                    const DropdownMenuItem(
+                      value: newCollection,
+                      child: Text('Создать коллекцию'),
+                    ),
+                ],
+                onChanged: (value) {
+                  setState(
+                    () => folder = value == newCollection ? null : value,
+                  );
+                },
+              ),
+            if (folder == null)
+              TextFormField(
+                initialValue: newName,
+                maxLength: 80,
+                decoration: const InputDecoration(
+                  labelText: 'Название новой коллекции',
+                ),
+                onChanged: (value) => setState(() => newName = value.trim()),
+              ),
             const SizedBox(height: 12),
             TextField(
               controller: copies,
@@ -116,15 +158,9 @@ class _CardDestinationState extends State<CardDestination> {
               ),
             const SizedBox(height: 12),
             FilledButton.icon(
-              onPressed: !valid
-                  ? null
-                  : () => Navigator.pop<CardSelection>(context, (
-                      folder: widget.groups.firstWhere((g) => g.id == folder),
-                      card: widget.card.withFoil(foil),
-                      quantity: quantity!,
-                    )),
+              onPressed: valid ? _submit : null,
               icon: Icon(moving ? Icons.drive_file_move_outline : Icons.add),
-              label: Text(moving ? 'Переместить' : 'В коллекцию'),
+              label: Text(action),
             ),
           ],
         ),

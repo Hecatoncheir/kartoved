@@ -72,6 +72,18 @@ class LibraryState {
   final Set<String> flags;
   final Map<int, ScanReview> reviews;
   final String? error;
+  LibraryState withCatalog(Catalog? catalog, {String? error}) => LibraryState(
+    catalog: catalog,
+    groups: groups,
+    holdings: holdings,
+    folder: folder,
+    recent: recent,
+    additions: additions,
+    flags: flags,
+    reviews: reviews,
+    error: error,
+  );
+
   List<CardCount> get printings {
     final rows = <String, CardCount>{};
     for (final entry in recent) {
@@ -106,14 +118,36 @@ class AppModel extends Cubit<LibraryState> {
   Catalog? get catalog => state.catalog;
   String? get initialError => state.error;
 
-  Future<void> initialize() async {
+  Future<void>? _initializing;
+  Future<void> initialize() => _initializing ??= _initialize().whenComplete(() {
+    _initializing = null;
+  });
+
+  Future<void> _initialize() async {
+    if (state.groups.isEmpty) {
+      try {
+        await history.open();
+        await _refresh();
+      } catch (e, stack) {
+        debugPrint('Открытие коллекций: $e\n$stack');
+        if (!isClosed) {
+          emit(state.withCatalog(null, error: 'Не удалось открыть коллекции'));
+        }
+        return;
+      }
+    }
+    if (isClosed) return;
+    emit(state.withCatalog(_base));
     try {
-      await history.open();
       _base = await store.initialize();
-      await _refresh();
+      if (!isClosed) emit(state.withCatalog(_base));
     } catch (e, stack) {
       debugPrint('Подготовка каталога: $e\n$stack');
-      emit(const LibraryState(error: 'Не удалось подготовить базу карт'));
+      if (!isClosed) {
+        emit(
+          state.withCatalog(_base, error: 'Не удалось подготовить базу карт'),
+        );
+      }
     }
   }
 
@@ -130,6 +164,7 @@ class AppModel extends Cubit<LibraryState> {
     emit(
       LibraryState(
         catalog: _base,
+        error: state.error,
         groups: groups,
         holdings: holdings,
         folder: folder,
@@ -481,6 +516,7 @@ class AppModel extends Cubit<LibraryState> {
     emit(
       LibraryState(
         catalog: catalog,
+        error: state.error,
         folder: folder,
         holdings: review != null
             ? state.holdings
@@ -515,8 +551,19 @@ class AppModel extends Cubit<LibraryState> {
     await _refresh();
   }
 
-  Future<CardMove> moveCards(int to, Edition card, int quantity) async {
-    final move = await history.moveCards(state.folder, to, card, quantity);
+  Future<CardMove> moveCards(int to, Edition card, int quantity) =>
+      _finishMove(history.moveCards(state.folder, to, card, quantity));
+
+  Future<CardMove> moveToNewCollection(
+    String name,
+    Edition card,
+    int quantity,
+  ) => _finishMove(
+    history.moveToNewCollection(state.folder, name, card, quantity),
+  );
+
+  Future<CardMove> _finishMove(Future<CardMove> operation) async {
+    final move = await operation;
     await _refresh();
     _undoable = move;
     return move;
@@ -541,10 +588,14 @@ class AppModel extends Cubit<LibraryState> {
     await _refresh();
   }
 
-  Future<void> replace(ScanEntry entry, Edition card) async {
+  Future<void> replace(
+    ScanEntry entry,
+    Edition card, {
+    ScanReview? review,
+  }) async {
     _undoable = null;
     final folder = state.folder;
-    await history.replace(folder, entry.sequence, card);
+    await history.replace(folder, entry.sequence, card, review: review);
     await _refresh();
   }
 

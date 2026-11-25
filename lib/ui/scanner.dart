@@ -14,14 +14,13 @@ import '../data/browser.dart';
 import '../data/card_reference.dart';
 import '../data/catalog.dart';
 import '../data/frame.dart';
-import '../data/language.dart';
 import '../data/pictures.dart';
 import '../data/recognition.dart';
-import '../data/review.dart';
 import '../data/tray.dart';
 import '../model.dart';
 import '../scan_cubit.dart';
 import '../scan_decision.dart';
+import '../scan_processing.dart';
 import 'auto_scan_controls.dart';
 import 'batch_settings.dart';
 import 'scan_frame.dart';
@@ -520,23 +519,15 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   }
 
   Future<void> _save(
-    Edition card,
-    List<Match> matches, {
+    PreparedScan result, {
     required bool trayScan,
-    ScanReview? review,
     ScanEntry? previous,
   }) async {
+    final (:card, :review) = result.decision;
     setState(() => writing = true);
     try {
-      final int seq;
-      if (previous == null) {
-        seq = await library.save(card, review: review);
-      } else {
-        await library.replace(previous, card);
-        seq = previous.sequence;
-      }
+      final seq = await scan.save(library, result, previous: previous);
       if (!mounted) return;
-      scan.recorded(seq, card, matches);
       final targetFound = scan.state.targets.contains(card.name);
       final soundOnSave = kIsWeb || trayScan || review != null;
       if (soundOnSave) {
@@ -642,73 +633,20 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     ScanEntry? previous,
     ScanProgress? onProgress,
   }) async {
-    final corners = tray?.corners ?? detected.first.corners;
-    final readFooter =
-        tray != null && (refineTrayMatch || detected.first.editions.length > 1);
-    if (readFooter) onProgress?.call(ScanStage.footer, corners);
-    final prepared = tray == null
-        ? null
-        : await AndroidActions.trayPhoto(
-            file: file,
-            frame: frame,
-            area: tray,
-            readFooter: readFooter,
-          );
-    if (!accept()) return;
-    final matches = refineTrayMatch
-        ? await library.refineTrayMatches(
-            detected,
-            file: file,
-            frame: frame,
-            photo: prepared?.bytes,
-            onProgress: onProgress,
-          )
-        : detected;
-    if (!accept()) return;
-    final hit = matches.first;
-    void showText() => onProgress?.call(ScanStage.text, corners);
-    final evidence = prepared == null
-        ? await CardLanguage.readOptions(
-            corners: corners,
-            file: file,
-            frame: frame,
-            options: hit.editions,
-            onRead: showText,
-          )
-        : await CardLanguage.readTrayOptions(
-            prepared,
-            hit.editions,
-            onRead: showText,
-          );
-    if (!accept()) return;
-    final batch = scan.state.batch;
-    final decision = hit.titleOnly && previous == null
-        ? decideScan(matches, evidence, batch)
-        : (card: selectScannedEdition(evidence, batch), review: null);
-    final card = decision.card;
-    try {
-      final photo =
-          prepared?.bytes ??
-          await AndroidActions.scanPhoto(
-            file: file,
-            frame: frame,
-            corners: corners,
-          );
-      if (photo != null && accept()) {
-        await Pictures.shared.saveScan(card.id, photo);
-      }
-    } on Exception {
-      // Издание можно сохранить даже при недоступном кэше фотографий.
-    }
-    if (accept()) {
-      await _save(
-        card,
-        matches,
-        trayScan: tray != null,
-        review: decision.review,
-        previous: previous,
-      );
-    }
+    final result = await prepareScan(
+      detected,
+      library: library,
+      batch: scan.state.batch,
+      isCurrent: accept,
+      rescan: previous != null,
+      file: file,
+      frame: frame,
+      tray: tray,
+      refineTrayMatch: refineTrayMatch,
+      onProgress: onProgress,
+    );
+    if (result == null || !accept()) return;
+    await _save(result, trayScan: tray != null, previous: previous);
   }
 
   Future<void> _discard(XFile? file) async {
@@ -1213,7 +1151,7 @@ class _ScanResult extends StatelessWidget {
             ),
           ),
         ),
-        TextButton(onPressed: repeat, child: const Text('Повторить')),
+        TextButton(onPressed: repeat, child: const Text('Переснять')),
       ],
     ),
   );
