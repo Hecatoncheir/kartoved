@@ -25,6 +25,34 @@ void main() {
   });
   tearDownAll(() => folder.delete(recursive: true));
 
+  test('Название с камеры сопоставляется с каталогом целиком', () async {
+    expect(
+      await catalog.nameForScannedTitle('ЖрицаЗабытых Богов1'),
+      'Priest of Forgotten Gods',
+    );
+    expect(
+      await catalog.nameForScannedTitle('Marauding Blight-Priest 2'),
+      'Marauding Blight-Priest',
+    );
+    expect(await catalog.nameForScannedTitle('Fatal'), isNull);
+    expect(await catalog.nameForScannedTitle('Marauding Bight-Priest'), isNull);
+    expect(
+      await catalog.nameForScannedTitle(
+        'Marauding Bight-Priest',
+        allowOneEdit: true,
+      ),
+      'Marauding Blight-Priest',
+    );
+    expect(
+      await catalog.nameForScannedTitle(
+        'Дявольский Наставник 2',
+        allowOneEdit: true,
+      ),
+      'Diabolic Tutor',
+    );
+    expect(await catalog.nameForScannedTitle(''), isNull);
+  });
+
   test('Очередь переживает обновление и перезапуск, подтверждение и отмена меняют ровно один экземпляр', () async {
     const en = Edition('en', 'Opt', 'eld', '59', 'en');
     const ru = Edition('ru', 'Opt', 'dom', '60', 'ru');

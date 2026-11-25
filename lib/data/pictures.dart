@@ -55,13 +55,14 @@ class Pictures {
       ? _getBrowser(id, large: true)
       : (await _getFile(id, large: true)).readAsBytes();
 
-  Future<ImageProvider?> cachedThumbnail(String id) async {
+  Future<ImageProvider?> scanThumbnail(String id) async {
+    address(id);
     if (kIsWeb) {
-      final bytes = await _cachedBrowserThumbnail(id);
-      return bytes == null ? null : MemoryImage(bytes);
+      final bytes = await browserCacheRead('scans/$id');
+      return bytes == null || bytes.isEmpty ? null : MemoryImage(bytes);
     }
-    final file = await _cachedFileThumbnail(id);
-    return file == null ? null : FileImage(file);
+    final file = _scanFile(await _directory, id);
+    return await _hasPhoto(file) ? FileImage(file) : null;
   }
 
   Future<Uint8List> thumbnailBytes(String id) async {
@@ -137,16 +138,21 @@ class Pictures {
   File _scanFile(Directory root, String id) =>
       File(p.join(root.path, '$id.scan.jpg'));
 
+  Future<bool> _hasPhoto(File file) async =>
+      await file.exists() && await file.length() > 0;
+
   Future<void> saveScan(String id, Uint8List bytes) async {
+    if (bytes.isEmpty) return;
     address(id);
     if (kIsWeb) {
-      if (await browserCacheRead('scans/$id') != null) return;
-      await browserCacheWrite('scans/$id', bytes);
+      final key = 'scans/$id';
+      if ((await browserCacheRead(key))?.isNotEmpty == true) return;
+      await browserCacheWrite(key, bytes);
       _photos.add(id);
       return;
     }
     final photo = _scanFile(await _directory, id);
-    if (await photo.exists()) return;
+    if (await _hasPhoto(photo)) return;
     final temp = File('${photo.path}.part');
     try {
       await temp.writeAsBytes(bytes, flush: true);

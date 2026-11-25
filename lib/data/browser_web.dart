@@ -30,7 +30,7 @@ external JSPromise<_TrayPhoto> _trayPhoto(
 @JS('kartoved.readTrayText')
 external JSPromise<JSString> _readTrayText(JSUint8Array bytes);
 @JS('kartoved.warmTray')
-external JSPromise<JSAny?> _warmTray();
+external JSPromise<JSAny?> _warmTray(String engine);
 
 extension type _TrayPhoto(JSObject _) implements JSObject {
   external JSUint8Array get bytes;
@@ -41,6 +41,8 @@ extension type _TrayPhoto(JSObject _) implements JSObject {
 external bool _guide(JSBoolean? visible);
 @JS('kartoved.scannerModel')
 external String browserScannerModel(String? model);
+@JS('kartoved.scannerTray')
+external bool browserScannerTray(JSBoolean? value);
 @JS('kartoved.download')
 external void _download(String name, String mime, JSUint8Array data);
 @JS('kartoved.pickBackup')
@@ -99,6 +101,7 @@ class _BrowserCatalogStore extends CatalogStore {
 }
 
 Future<bool> browserGuide(bool? visible) async => _guide(visible?.toJS);
+bool browserTrayPreference(bool? value) => browserScannerTray(value?.toJS);
 Future<void> browserChime(bool targetFound) async =>
     await _chime(targetFound).toDart;
 
@@ -131,7 +134,7 @@ Future<TrayPhoto> browserTrayPhoto(
 Future<String> browserReadTrayText(Uint8List bytes) async =>
     (await _readTrayText(bytes.toJS).toDart).toDart;
 
-Future<void> browserWarmTray() async => await _warmTray().toDart;
+Future<void> browserWarmTray(String engine) async => await _warmTray(engine).toDart;
 
 Future<Uint8List?> browserCacheRead(String key) async =>
     (await _readCache(key).toDart)?.toDart;

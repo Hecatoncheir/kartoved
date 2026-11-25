@@ -16,6 +16,8 @@ Future<KeypointChoice?> refineKeypointScan(
   List<double> corners, {
   String? file,
   PreviewFrame? frame,
+  Uint8List? photo,
+  void Function()? onCompare,
 }) async {
   if (corners.length != 8) return null;
   final options = candidates.take(3).toList();
@@ -27,12 +29,15 @@ Future<KeypointChoice?> refineKeypointScan(
   final available = references.where((ref) => ref.bytes != null).toList();
   if (available.isEmpty || available.first.artwork != 0) return null;
   try {
-    final crop = await AndroidActions.scanPhoto(
-      file: file,
-      frame: frame,
-      corners: corners,
-    );
+    final crop =
+        photo ??
+        await AndroidActions.scanPhoto(
+          file: file,
+          frame: frame,
+          corners: corners,
+        );
     if (crop == null) return null;
+    onCompare?.call();
     final scores = await compute(compareKeypoints, (
       crop: crop,
       references: [for (final ref in available) ref.bytes!],

@@ -9,7 +9,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kartoved/data/card_reference.dart';
 import 'package:kartoved/data/catalog.dart';
 import 'package:kartoved/data/recognition_result.dart';
+import 'package:kartoved/data/scan_progress.dart';
 import 'package:kartoved/model.dart';
+import 'package:kartoved/scan_cubit.dart';
+import 'package:kartoved/ui/auto_scan_controls.dart';
 import 'package:kartoved/ui/collections.dart';
 import 'package:kartoved/ui/picture.dart';
 import 'package:kartoved/ui/scan_frame.dart';
@@ -72,6 +75,7 @@ class _ScannerModel extends AppModel {
   Future<List<Match>> recognize(
     String file, {
     RecognitionModel engine = RecognitionModel.oracle,
+    ScanProgress? onProgress,
   }) async {
     lastEngine = engine;
     return matches;
@@ -281,7 +285,9 @@ void main() {
       await addTarget('foudre', 'Lightning Bolt');
       await tap(find.text('Готово'));
       expect(find.textContaining('Ищу · карт: 2'), findsOneWidget);
-      expect(find.text('Остановить'), findsOneWidget);
+      final auto = tester.widget<AutoScanButton>(find.byType(AutoScanButton));
+      expect(auto.running, isTrue);
+      expect(auto.profile, ScanMode.tray);
       await tap(find.text('Из фото'));
       await waitFor(
         () => model.state.recent.first.card.language == 'ru' && sounds == 1,
@@ -346,7 +352,10 @@ void main() {
       await tap(find.byTooltip('Убрать из поиска: Lightning Bolt'));
       await tap(find.byTooltip('Back'));
       expect(find.textContaining('Ищу ·'), findsNothing);
-      expect(find.text('Остановить'), findsOneWidget);
+      expect(
+        tester.widget<AutoScanButton>(find.byType(AutoScanButton)).running,
+        isTrue,
+      );
       await tap(find.byTooltip('К коллекции'));
       await tap(find.text('Сканировать карту'));
       await tap(find.byTooltip('Меню сканера'));
@@ -366,23 +375,13 @@ void main() {
       expect(model.lastEngine, RecognitionModel.mtgIdentification);
       await tap(find.byTooltip('Меню сканера'));
       await tap(find.text('Модель распознавания'));
-      await tap(find.text(RecognitionModel.mtgStandalone.label));
-      expect(savedEngine, RecognitionModel.mtgStandalone.name);
-      await tap(find.byTooltip('К коллекции'));
-      await tap(find.text('Сканировать карту'));
-      await waitFor(() => find.text('MTG без Oracle').evaluate().isNotEmpty);
-      await tap(find.text('Из фото'));
-      await waitFor(() => model.state.owned('Opt') == 7 && sounds == 5);
-      expect(model.lastEngine, RecognitionModel.mtgStandalone);
-      await tap(find.byTooltip('Меню сканера'));
-      await tap(find.text('Модель распознавания'));
       await tap(find.text(RecognitionModel.keypoints.label));
       expect(savedEngine, RecognitionModel.keypoints.name);
       await tap(find.byTooltip('К коллекции'));
       await tap(find.text('Сканировать карту'));
       await waitFor(() => find.text('Ключевые точки').evaluate().isNotEmpty);
       await tap(find.text('Из фото'));
-      await waitFor(() => model.state.owned('Opt') == 8 && sounds == 6);
+      await waitFor(() => model.state.owned('Opt') == 7 && sounds == 5);
       expect(model.lastEngine, RecognitionModel.keypoints);
       await tester.pumpWidget(const SizedBox.shrink());
       PaintingBinding.instance.imageCache

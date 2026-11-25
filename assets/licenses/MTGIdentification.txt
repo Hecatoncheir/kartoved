@@ -3,12 +3,7 @@ Author: Diego Vazquez (dhvazquez)
 Source: https://huggingface.co/dhvazquez/mtg_card_identification_embeddings
 Revision: 653d88d94b2beb31a7894561e7c6b26f589a3861
 
-MTG Card Pose Estimation, round 4b (FP32)
-Author: Diego Vazquez (dhvazquez)
-Source: https://huggingface.co/dhvazquez/mtg_card_pose_estimation
-Revision: ef6d7912e7e2db79ce24976cb3ea84984e43721a
-
-Both source repositories declare the MIT license for these artifacts.
+The source repository declares the MIT license for these artifacts.
 
 MIT License
 

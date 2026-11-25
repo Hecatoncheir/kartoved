@@ -1,7 +1,7 @@
 name: kartoved
 description: Картовед — автономный сканер карт Magic для Android и браузера.
 publish_to: none
-version: 1.0.4+14
+version: 1.0.5+15
 environment:
   sdk: ^3.14.0
 dependencies:
@@ -41,6 +41,7 @@ flutter:
     - assets/design/
     - assets/oracle/
     - assets/mtg_identification/
+    - assets/paddleocr/
     - assets/licenses/
   fonts:
     - family: Nunito

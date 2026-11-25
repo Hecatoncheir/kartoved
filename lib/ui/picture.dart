@@ -17,8 +17,8 @@ class CardPicture extends StatefulWidget {
 }
 
 class _CardPictureState extends State<CardPicture> {
-  late Future<ImageProvider> file = Pictures.shared.official(widget.card.id);
-  late Future<ImageProvider?> cached = Pictures.shared.cachedThumbnail(
+  late Future<ImageProvider> small = Pictures.shared.official(widget.card.id);
+  late Future<ImageProvider?> scan = Pictures.shared.scanThumbnail(
     widget.card.id,
   );
   late Future<ImageProvider>? large = _large();
@@ -34,7 +34,8 @@ class _CardPictureState extends State<CardPicture> {
     _photos = Pictures.shared.photos.listen((id) {
       if (id != widget.card.id) return;
       setState(() {
-        cached = Pictures.shared.cachedThumbnail(id);
+        small = Pictures.shared.official(id);
+        scan = Pictures.shared.scanThumbnail(id);
       });
     });
   }
@@ -49,8 +50,8 @@ class _CardPictureState extends State<CardPicture> {
   void didUpdateWidget(CardPicture old) {
     super.didUpdateWidget(old);
     if (old.card.id != widget.card.id) {
-      file = Pictures.shared.official(widget.card.id);
-      cached = Pictures.shared.cachedThumbnail(widget.card.id);
+      small = Pictures.shared.official(widget.card.id);
+      scan = Pictures.shared.scanThumbnail(widget.card.id);
     }
     if (old.large != widget.large || old.card.id != widget.card.id) {
       large = _large();
@@ -67,52 +68,29 @@ class _CardPictureState extends State<CardPicture> {
       foil: widget.card.foil,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(5),
-        child: !widget.large
-            ? _thumbnail()
-            : FutureBuilder<ImageProvider>(
-                future: large,
-                builder: (context, full) {
-                  if (full.connectionState == ConnectionState.done &&
-                      full.hasData) {
-                    return Image(
-                      image: full.requireData,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, _, _) => _thumbnail(),
-                    );
-                  }
-                  return _thumbnail();
-                },
-              ),
+        child: widget.large ? _image(large, _thumbnail) : _thumbnail(),
       ),
     ),
   );
 
-  Widget _thumbnail() => FutureBuilder<ImageProvider>(
-    future: file,
-    builder: (c, s) {
-      if (s.connectionState == ConnectionState.done && s.hasData) {
-        return Image(
-          image: s.requireData,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => _cachedThumbnail(),
-        );
-      }
-      return _cachedThumbnail();
-    },
-  );
+  Widget _thumbnail() => _image(small, () => _image(scan, _placeholder));
 
-  Widget _cachedThumbnail() => FutureBuilder<ImageProvider?>(
-    key: ValueKey(widget.card.id),
-    future: cached,
-    builder: (_, snapshot) => switch (snapshot.data) {
-      final image? => Image(
-        image: image,
-        fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => _placeholder(),
-      ),
-      null => _placeholder(),
-    },
-  );
+  Widget _image(Future<ImageProvider?>? source, Widget Function() fallback) =>
+      FutureBuilder<ImageProvider?>(
+        key: ValueKey(widget.card.id),
+        future: source,
+        builder: (_, snapshot) {
+          final image = snapshot.connectionState == ConnectionState.done
+              ? snapshot.data
+              : null;
+          if (image == null) return fallback();
+          return Image(
+            image: image,
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => fallback(),
+          );
+        },
+      );
 
   Widget _placeholder() => ColoredBox(
     color: const Color(0xff504945),

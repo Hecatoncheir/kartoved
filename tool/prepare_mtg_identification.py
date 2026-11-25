@@ -23,22 +23,18 @@ SOURCE = (
 )
 EMBEDDER = "onnx/mtg_embed_fp32.onnx"
 GALLERY = "gallery_val.npz"
-POSE = "exports/mtg_4kp_s_r4b.onnx"
-POSE_REVISION = "ef6d7912e7e2db79ce24976cb3ea84984e43721a"
-POSE_SOURCE = f"https://huggingface.co/dhvazquez/mtg_card_pose_estimation/resolve/{POSE_REVISION}/"
 CHECKSUMS = {
     EMBEDDER: "fa092cdc8a25b0f3b80ee0ec0580fc9b4e0dc03bb49f9b7ffa43b83b88672ed2",
     GALLERY: "0eb38edd4a238b9c97dbc2bd5f77150fd911edd551823a2d5cd027168c7f36e7",
-    POSE: "3d33788e992e4882e37b1d2307994942552413092fdebaf998728cdbda4b5a99",
 }
 WIDTH, HEIGHT, DIMENSIONS = 320, 448, 256
 
 
-def artifact(cache, name, source=SOURCE):
+def artifact(cache, name):
     path = cache / Path(name).name
     if not path.exists():
         partial = path.with_suffix(".part")
-        with urllib.request.urlopen(source + name, timeout=90) as response, partial.open("wb") as out:
+        with urllib.request.urlopen(SOURCE + name, timeout=90) as response, partial.open("wb") as out:
             shutil.copyfileobj(response, out)
         partial.replace(path)
     with path.open("rb") as stream:
@@ -138,55 +134,13 @@ def recognition_graph(path, centers):
     return model
 
 
-def pose_graph(path):
-    pose = compose.add_prefix(onnx.load(path), "pose_")
-    side = 640
-    constants = {
-        "rgb": np.array([0, 1, 2], dtype=np.int64),
-        "batch": np.array([0], dtype=np.int64),
-        "scale": np.float32(1 / 255),
-        "side": np.float32(side),
-    }
-    node = helper.make_node
-    graph = helper.make_graph(
-        [
-            node("Gather", ["scene", "rgb"], ["rgb_pixels"], axis=2),
-            node("Cast", ["rgb_pixels"], ["pixels"], to=TensorProto.FLOAT),
-            node("Transpose", ["pixels"], ["channels"], perm=[2, 0, 1]),
-            node("Unsqueeze", ["channels", "batch"], ["input_batch"]),
-            node("Mul", ["input_batch", "scale"], ["pose_image"]),
-            *pose.graph.node,
-            node("Squeeze", ["pose_scores", "batch"], ["logits"]),
-            node("ArgMax", ["logits"], ["winner"], axis=0, keepdims=0),
-            node("Gather", ["logits", "winner"], ["logit"]),
-            node("Sigmoid", ["logit"], ["score"]),
-            node("Squeeze", ["pose_keypoints", "batch"], ["keypoints"]),
-            node("Gather", ["keypoints", "winner"], ["corners"]),
-            node("Mul", ["corners", "side"], ["quad"]),
-        ],
-        "Kartoved MTG Card Pose",
-        [helper.make_tensor_value_info("scene", TensorProto.UINT8, [side, side, 4])],
-        [helper.make_tensor_value_info("score", TensorProto.FLOAT, []),
-         helper.make_tensor_value_info("quad", TensorProto.FLOAT, [4, 2])],
-        initializer=[*pose.graph.initializer,
-                     *(numpy_helper.from_array(value, name) for name, value in constants.items())],
-    )
-    model = helper.make_model(graph, opset_imports=pose.opset_import, ir_version=pose.ir_version)
-    onnx.checker.check_model(model)
-    return model
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cache", type=Path, default=ROOT / ".dart_tool/mtg-model")
-    parser.add_argument("--pose-only", action="store_true", help="Собрать только модель границ карты")
     args = parser.parse_args()
     args.cache.mkdir(parents=True, exist_ok=True)
     output = ROOT / "assets/mtg_identification"
     output.mkdir(parents=True, exist_ok=True)
-    onnx.save(pose_graph(artifact(args.cache, POSE, POSE_SOURCE)), output / "pose.onnx")
-    if args.pose_only:
-        return
     ids, vectors = gallery(artifact(args.cache, GALLERY))
     model = recognition_graph(artifact(args.cache, EMBEDDER), vectors)
     onnx.save(model, output / "recognize.onnx")

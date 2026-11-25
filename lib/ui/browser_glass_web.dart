@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:web/web.dart' as web;
 
@@ -6,12 +7,14 @@ class BrowserGlass extends StatefulWidget {
     this.window,
     this.viewport, {
     required this.visible,
+    this.outline,
     super.key,
   });
 
   final Rect window;
   final Size viewport;
   final bool visible;
+  final List<Offset>? outline;
 
   @override
   State<BrowserGlass> createState() => _BrowserGlassState();
@@ -25,7 +28,8 @@ class _BrowserGlassState extends State<BrowserGlass> {
     super.didUpdateWidget(oldWidget);
     if (widget.visible != oldWidget.visible) _updateVisibility();
     if (widget.window != oldWidget.window ||
-        widget.viewport != oldWidget.viewport) {
+        widget.viewport != oldWidget.viewport ||
+        !listEquals(widget.outline, oldWidget.outline)) {
       _updatePath();
     }
   }
@@ -54,6 +58,13 @@ class _BrowserGlassState extends State<BrowserGlass> {
     final l = frame.left, t = frame.top, r = frame.right, b = frame.bottom;
     const radius = 16;
     final outside = 'M 0 0 H ${viewport.width} V ${viewport.height} H 0 Z';
+    if (widget.outline case final points?) {
+      final polygon = points
+          .map((point) => '${point.dx} ${point.dy}')
+          .join(' L ');
+      _glass?.style.clipPath = 'path(evenodd, "$outside M $polygon Z")';
+      return;
+    }
     final hole =
         'M ${l + radius} $t H ${r - radius} Q $r $t $r ${t + radius} '
         'V ${b - radius} Q $r $b ${r - radius} $b '

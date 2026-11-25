@@ -22,8 +22,8 @@ Map<String, Object?> scanArguments({
   },
 };
 
-im.Image frameImage(PreviewFrame frame) {
-  final scale = math.min(1.0, 640 / math.max(frame.width, frame.height));
+im.Image frameImage(PreviewFrame frame, {int maxSide = 640}) {
+  final scale = math.min(1.0, maxSide / math.max(frame.width, frame.height));
   final rgb = im.Image(
     width: (frame.width * scale).round(),
     height: (frame.height * scale).round(),

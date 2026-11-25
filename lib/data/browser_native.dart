@@ -11,6 +11,7 @@ void openBrowserScryfall(String url) => _unsupported();
 
 Future<bool> browserGuide(bool? visible) => _unsupported();
 String browserScannerModel(String? model) => _unsupported();
+bool browserTrayPreference(bool? value) => _unsupported();
 Future<void> browserChime(bool targetFound) => _unsupported();
 Future<Uint8List> browserCrop(String file, List<double> corners) =>
     _unsupported();
@@ -23,7 +24,7 @@ Future<TrayPhoto> browserTrayPhoto(
   bool readFooter,
 ) => _unsupported();
 Future<String> browserReadTrayText(Uint8List bytes) => _unsupported();
-Future<void> browserWarmTray() => _unsupported();
+Future<void> browserWarmTray(String engine) => _unsupported();
 Future<Uint8List?> browserCacheRead(String key) => _unsupported();
 Future<void> browserCacheWrite(String key, Uint8List bytes) => _unsupported();
 void browserDownload(String name, String mime, Uint8List bytes) =>

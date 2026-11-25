@@ -36,6 +36,11 @@ class MainActivity : FlutterActivity() {
                         if (model != null) settings.edit().putString("recognitionModel", model).apply()
                         reply.success(model ?: settings.getString("recognitionModel", null))
                     }
+                    "scannerTray" -> {
+                        val tray = call.arguments as? Boolean
+                        if (tray != null) settings.edit().putBoolean("tray", tray).apply()
+                        reply.success(tray ?: settings.getBoolean("tray", true))
+                    }
                     "chime" -> {
                         chime?.play(call.arguments == true)
                         reply.success(null)

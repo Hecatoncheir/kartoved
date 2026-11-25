@@ -16,19 +16,22 @@ import '../data/catalog.dart';
 import '../data/frame.dart';
 import '../data/language.dart';
 import '../data/pictures.dart';
-import '../data/recognition_result.dart';
+import '../data/recognition.dart';
+import '../data/review.dart';
 import '../data/tray.dart';
 import '../model.dart';
 import '../scan_cubit.dart';
 import '../scan_decision.dart';
+import 'auto_scan_controls.dart';
 import 'batch_settings.dart';
-import 'browser_glass.dart';
 import 'scan_frame.dart';
+import 'scan_outline.dart';
 import 'scan_reviews.dart';
 import 'sheets.dart';
 import 'scan_strip.dart';
 import 'scan_target.dart';
 import 'style.dart';
+import 'tracked_scan_guide.dart';
 
 class Scanner extends StatefulWidget {
   const Scanner({super.key});
@@ -46,8 +49,15 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   String? error;
   bool reading = false, modal = false, torch = false, writing = false;
   bool _modelSelected = false;
-  bool _warmingTray = false;
+  bool _autoModeChosen = false;
+  RecognitionModel? _warmingTray;
+  ScanMode _autoMode = ScanMode.tray;
   TrayArea? _trayArea;
+  ScanOutline? _outline;
+  (ScanStage, ScanOutline)? _focus;
+  Size _frameSize = Size.zero;
+  int _missingOutlines = 0;
+  bool _sweeping = false;
   int epoch = 0, nextFrame = 0, frameSession = 0;
   Future<void> cameraQueue = Future.value();
   AppModel get library => context.read<AppModel>();
@@ -58,25 +68,44 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     unawaited(_restoreGuide());
     unawaited(_restoreModel());
+    unawaited(_restoreAutoMode());
+    unawaited(warmTitleRecognition());
     openCamera(true);
   }
 
   Future<void> _restoreGuide() async {
     final visible = await AndroidActions.scannerGuide();
-    if (mounted && visible != null) scan.setGuide(visible);
+    if (mounted && visible != null && visible != scan.state.showGuide) {
+      scan.setGuide(visible);
+      _syncCameraStream();
+    }
   }
 
   Future<void> _restoreModel() async {
     final saved = await AndroidActions.scannerModel();
     if (!mounted || _modelSelected || saved == scan.state.model) return;
     frameSession++;
+    _sweep(false);
     scan.setModel(saved);
+  }
+
+  Future<void> _restoreAutoMode() async {
+    final tray = await AndroidActions.scannerTray();
+    if (!mounted || _autoModeChosen) return;
+    setState(() => _autoMode = tray ? ScanMode.tray : ScanMode.automatic);
   }
 
   void _toggleGuide() {
     final visible = !scan.state.showGuide;
+    if (!scan.state.mode.isAutomatic) {
+      frameSession++;
+      nextFrame = 0;
+      if (!visible) _outline = null;
+    }
+    if (!visible) _focus = null;
     scan.setGuide(visible);
     unawaited(AndroidActions.scannerGuide(visible));
+    _syncCameraStream();
   }
 
   @override
@@ -89,6 +118,11 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     final token = ++epoch;
     frameSession++;
     _trayArea = null;
+    _outline = null;
+    _focus = null;
+    _missingOutlines = 0;
+    _sweeping = false;
+    nextFrame = 0;
     scan.cancelFrame();
     cameraQueue = cameraQueue.then((_) => _open(open, token)).catchError((
       Object e,
@@ -101,6 +135,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
 
   Future<void> _open(bool open, int token) async {
     _webFrames?.cancel();
+    _webFrames = null;
     final old = camera;
     camera = null;
     torch = false;
@@ -149,58 +184,91 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   Future<void> _syncStream() async {
     final c = camera;
     if (c == null) return;
-    final auto = scan.state.mode.isAutomatic;
+    final watch = scan.state.mode.isAutomatic || scan.state.showGuide;
     if (kIsWeb) {
-      _webFrames?.cancel();
-      if (auto) {
-        _webFrames = Timer.periodic(const Duration(milliseconds: 300), (_) {
+      if (watch) {
+        _webFrames ??= Timer.periodic(const Duration(milliseconds: 300), (_) {
           unawaited(_webFrame(c));
         });
+      } else {
+        _webFrames?.cancel();
+        _webFrames = null;
       }
       return;
     }
-    if (auto == c.value.isStreamingImages) return;
-    if (auto) {
+    if (watch == c.value.isStreamingImages) return;
+    if (watch) {
       await c.startImageStream(_onFrame);
     } else {
       await c.stopImageStream();
     }
   }
 
-  void _mode() => _setMode(
-    scan.state.mode.isAutomatic ? ScanMode.manual : ScanMode.automatic,
-  );
+  void _toggleAuto() {
+    _autoModeChosen = true;
+    _setMode(scan.state.mode.isAutomatic ? ScanMode.manual : _autoMode);
+  }
 
-  void _toggleTray() => _setMode(
-    scan.state.mode == ScanMode.tray ? ScanMode.manual : ScanMode.tray,
-  );
+  Future<void> _pickAutoMode() {
+    unlockBrowserSound();
+    return _paused(() async {
+      final selected = await panel<ScanMode>(
+        context,
+        AutoScanModeSheet(_autoMode),
+      );
+      if (!mounted || selected == null) return;
+      _autoModeChosen = true;
+      setState(() => _autoMode = selected);
+      if (scan.state.mode.isAutomatic && scan.state.mode != selected) {
+        _setMode(selected);
+      }
+      await AndroidActions.scannerTray(selected == ScanMode.tray);
+    });
+  }
 
   void _setMode(ScanMode mode) {
     unlockBrowserSound();
     frameSession++;
+    nextFrame = 0;
+    _sweep(false);
+    if (!mode.isAutomatic && !scan.state.showGuide) _outline = null;
     scan.setMode(mode);
-    if (mode == ScanMode.tray && !_warmingTray) unawaited(_warmTray());
+    if (mode == ScanMode.tray) _warmSelectedModel();
+    _syncCameraStream();
+  }
+
+  void _syncCameraStream() {
     cameraQueue = cameraQueue.then((_) => _syncStream()).catchError((Object e) {
       if (!mounted) return;
       scan.setMode(ScanMode.manual);
-      message('Не удалось включить поток камеры');
+      _sweep(false);
+      message('Не удалось переключить поток камеры');
     });
   }
 
-  Future<void> _warmTray() async {
-    setState(() => _warmingTray = true);
+  void _warmSelectedModel() {
+    final engine = scan.state.model;
+    if (_warmingTray != engine) unawaited(_warmTray(engine));
+  }
+
+  Future<void> _warmTray(RecognitionModel engine) async {
+    setState(() => _warmingTray = engine);
     try {
-      await AndroidActions.warmTray().timeout(const Duration(seconds: 30));
+      await AndroidActions.warmTray(engine)
+          .timeout(const Duration(seconds: 30));
     } catch (_) {
       // Следующий кадр повторит загрузку необходимых ресурсов.
     } finally {
-      if (mounted) setState(() => _warmingTray = false);
+      if (mounted && _warmingTray == engine) {
+        setState(() => _warmingTray = null);
+      }
     }
   }
 
   void _recalibrateTray() {
     frameSession++;
     scan.cancelFrame();
+    _sweep(false);
     setState(() => _trayArea = null);
   }
 
@@ -224,12 +292,22 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   }
 
   bool get active => mounted && ModalRoute.of(context)?.isCurrent == true;
-  bool accepts(int token) =>
+  bool _acceptsFrame(int token) =>
       active &&
       token == frameSession &&
       !modal &&
-      scan.state.mode.isAutomatic &&
-      (scan.state.mode != ScanMode.tray || !_warmingTray);
+      !writing &&
+      library.catalog != null &&
+      (scan.state.mode.isAutomatic || scan.state.showGuide) &&
+      (scan.state.mode != ScanMode.tray || _warmingTray == null);
+  bool accepts(int token) =>
+      _acceptsFrame(token) && scan.state.mode.isAutomatic;
+
+  bool _readyForFrame(int token) =>
+      !reading &&
+      clock.elapsedMilliseconds >= nextFrame &&
+      _acceptsFrame(token);
+
   int rotation(CameraController c) {
     final turns = switch (c.value.deviceOrientation) {
       DeviceOrientation.portraitUp => 0,
@@ -247,11 +325,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   }
 
   void _onFrame(CameraImage image) {
-    if (reading ||
-        !accepts(frameSession) ||
-        clock.elapsedMilliseconds < nextFrame) {
-      return;
-    }
+    if (!_readyForFrame(frameSession)) return;
     final c = camera;
     if (c == null || image.planes.length != 1) return;
     // Передаём весь кадр. Рамка служит визуальной подсказкой.
@@ -261,7 +335,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       height: image.height,
       rotation: rotation(c),
     );
-    unawaited(_automatic(frame, frameSession));
+    unawaited(_nativeFrame(frame, frameSession));
   }
 
   Future<XFile> _takePicture(CameraController controller) async {
@@ -282,7 +356,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
 
   Future<void> _webFrame(CameraController c) async {
     final token = frameSession;
-    if (reading || !accepts(token) || !identical(c, camera)) return;
+    if (!_readyForFrame(token) || !identical(c, camera)) return;
     reading = true;
     XFile? photo;
     try {
@@ -292,75 +366,171 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       } finally {
         _webCapture = null;
       }
-      if (!accepts(token)) return;
-      await _recognizeAutomatic(token, file: photo.path);
+      if (!_acceptsFrame(token)) return;
+      await _inspectFrame(token, file: photo.path);
     } catch (_) {
-      if (accepts(token)) {
-        _mode();
-        message('Автоскан остановлен. Попробуйте ещё раз.');
-      }
+      _frameFailed(token);
     } finally {
       await _discard(photo);
-      reading = false;
+      _finishFrame(token);
     }
   }
 
-  Future<void> _automatic(PreviewFrame frame, int token) async {
+  Future<void> _nativeFrame(PreviewFrame frame, int token) async {
     reading = true;
     try {
-      await _recognizeAutomatic(token, frame: frame);
-    } catch (e) {
-      if (accepts(token)) {
-        _mode();
-        message('Автоскан остановлен. Попробуйте ещё раз.');
-      }
+      await _inspectFrame(token, frame: frame);
+    } catch (_) {
+      _frameFailed(token);
     } finally {
-      nextFrame = clock.elapsedMilliseconds + 220;
-      reading = false;
+      _finishFrame(token);
     }
   }
 
-  Future<void> _recognizeAutomatic(
+  void _frameFailed(int token) {
+    if (accepts(token)) {
+      _setMode(ScanMode.manual);
+      message('Автоскан остановлен. Попробуйте ещё раз.');
+    } else if (_acceptsFrame(token)) {
+      _observeOutline(const [], Size.zero, mirror: false);
+    }
+  }
+
+  void _finishFrame(int token) {
+    reading = false;
+    if (token != frameSession) return;
+    if (mounted && _focus != null) setState(() => _focus = null);
+    final interval = scan.state.mode.isAutomatic ? (kIsWeb ? 0 : 220) : 850;
+    nextFrame = clock.elapsedMilliseconds + interval;
+  }
+
+  Future<void> _inspectFrame(
     int token, {
     String? file,
     PreviewFrame? frame,
   }) async {
+    final c = camera!;
+    final size = frame == null
+        ? c.value.previewSize!
+        : frame.rotation % 180 == 0
+        ? Size(frame.width.toDouble(), frame.height.toDouble())
+        : Size(frame.height.toDouble(), frame.width.toDouble());
+    final mirror = _mirrored(c);
+    void showOutline(List<double> points) {
+      if (!_acceptsFrame(token)) return;
+      _observeOutline(points, size, mirror: mirror);
+    }
+
+    if (!scan.state.mode.isAutomatic) {
+      showOutline(await library.previewOutline(file: file, frame: frame));
+      return;
+    }
     final inTray = scan.state.mode == ScanMode.tray;
     final engine = scan.state.model;
-    final matches = inTray
-        ? await library.recognizeTray(file: file, frame: frame, area: _trayArea)
-        : frame == null
-        ? await library.recognize(file!, engine: engine)
-        : await library.recognizeFrame(frame, engine: engine);
+    var showStages = scan.gate.awaitingConfirmation;
+    void showProgress(ScanStage stage, List<double> corners) {
+      if (!accepts(token) || !scan.state.showGuide) return;
+      if (stage == ScanStage.card) showOutline(corners);
+      if (showStages) _showScanStage(stage, corners, size, mirror: mirror);
+    }
+
+    final matches = await library.recognizePreview(
+      file: file,
+      frame: frame,
+      engine: engine,
+      tray: inTray ? _trayArea : null,
+      deferKeypoints: inTray,
+      onOutline: showOutline,
+      onProgress: scan.state.showGuide ? showProgress : null,
+    );
     if (!accepts(token)) return;
     if (inTray && _trayArea == null) {
       final area = TrayArea.calibrate(matches.firstOrNull?.corners ?? const []);
       if (area == null) {
         scan.cancelFrame();
+        _sweep(false);
         return;
       }
       setState(() => _trayArea = area);
     }
-    if (scan.evaluate(matches) == null) return;
-    await _store(
-      matches,
-      file: file,
-      frame: frame,
-      tray: inTray ? _trayArea : null,
-      accept: () => accepts(token),
+    final ready = scan.evaluate(matches) != null;
+    _sweep(ready || scan.gate.awaitingConfirmation);
+    if (!ready) return;
+    showStages = true;
+    try {
+      await _store(
+        matches,
+        file: file,
+        frame: frame,
+        tray: inTray ? _trayArea : null,
+        refineTrayMatch: inTray && engine == RecognitionModel.keypoints,
+        accept: () => accepts(token),
+        onProgress: showProgress,
+      );
+    } finally {
+      if (mounted) _sweep(false);
+    }
+  }
+
+  void _observeOutline(List<double> points, Size size, {required bool mirror}) {
+    final observed = ScanOutline.fromCamera(points, mirror: mirror);
+    if (observed == null) {
+      if (++_missingOutlines >= 2 && _outline != null) {
+        setState(() => _outline = null);
+      }
+      return;
+    }
+    _missingOutlines = 0;
+    final next = _outline?.follow(observed) ?? observed;
+    if (identical(next, _outline) && size == _frameSize) return;
+    setState(() {
+      _outline = next;
+      _frameSize = size;
+    });
+  }
+
+  void _sweep(bool reading) {
+    if (_sweeping == reading && (reading || _focus == null)) return;
+    setState(() {
+      _sweeping = reading;
+      if (!reading) _focus = null;
+    });
+  }
+
+  bool _mirrored(CameraController camera) => kIsWeb
+      ? camera.description.lensDirection != CameraLensDirection.back
+      : camera.description.lensDirection == CameraLensDirection.front;
+
+  void _showScanStage(
+    ScanStage stage,
+    List<double> card,
+    Size size, {
+    required bool mirror,
+  }) {
+    final region = ScanOutline.fromCamera(
+      stage.focus(card),
+      mirror: mirror,
+      minTurn: .00001,
     );
+    if (region == null) return;
+    setState(() {
+      _focus = (stage, region);
+      _frameSize = size;
+    });
   }
 
   Future<void> _save(
     Edition card,
     List<Match> matches, {
+    required bool trayScan,
+    ScanReview? review,
     ScanEntry? previous,
   }) async {
     setState(() => writing = true);
     try {
       final int seq;
       if (previous == null) {
-        seq = await library.save(card);
+        seq = await library.save(card, review: review);
       } else {
         await library.replace(previous, card);
         seq = previous.sequence;
@@ -368,13 +538,20 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       if (!mounted) return;
       scan.recorded(seq, card, matches);
       final targetFound = scan.state.targets.contains(card.name);
-      final soundOnSave = kIsWeb || scan.state.mode == ScanMode.tray;
+      final soundOnSave = kIsWeb || trayScan || review != null;
       if (soundOnSave) {
         unawaited(AndroidActions.chime(targetFound: targetFound));
       }
-      unawaited(
-        _loadScannedCardDetails(seq, card, targetFound, announce: !soundOnSave),
-      );
+      if (review == null) {
+        unawaited(
+          _loadScannedCardDetails(
+            seq,
+            card,
+            targetFound,
+            announce: !soundOnSave,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => writing = false);
     }
@@ -410,59 +587,112 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _recognize(XFile file, {ScanEntry? previous}) async {
+  ScanProgress? _manualProgress() {
+    final c = camera;
+    final size = c?.value.previewSize;
+    if (c == null || size == null || !scan.state.showGuide) return null;
+    final token = frameSession;
+    final turned =
+        !kIsWeb && MediaQuery.orientationOf(context) == Orientation.portrait;
+    final displaySize = turned ? size.flipped : size;
+    final mirror = _mirrored(c);
+    return (stage, card) {
+      if (!active || token != frameSession || !scan.state.showGuide) return;
+      if (stage == ScanStage.card) {
+        _observeOutline(card, displaySize, mirror: mirror);
+        _sweep(true);
+      }
+      _showScanStage(stage, card, displaySize, mirror: mirror);
+    };
+  }
+
+  Future<void> _recognize(
+    XFile file, {
+    required bool live,
+    ScanEntry? previous,
+  }) async {
+    final onProgress = live ? _manualProgress() : null;
     final matches = await library.recognize(
       file.path,
       engine: scan.state.model,
+      onProgress: onProgress,
     );
     if (!active) return;
     if (matches.isEmpty) {
       message('Карта не найдена');
       return;
     }
+    if (live) _sweep(true);
     await _store(
       matches,
       file: file.path,
       accept: () => active,
       previous: previous,
+      onProgress: onProgress,
     );
   }
 
   Future<void> _store(
-    List<Match> matches, {
+    List<Match> detected, {
     String? file,
     PreviewFrame? frame,
     TrayArea? tray,
+    bool refineTrayMatch = false,
     required bool Function() accept,
     ScanEntry? previous,
+    ScanProgress? onProgress,
   }) async {
-    final hit = matches.first;
+    final corners = tray?.corners ?? detected.first.corners;
+    final readFooter =
+        tray != null && (refineTrayMatch || detected.first.editions.length > 1);
+    if (readFooter) onProgress?.call(ScanStage.footer, corners);
     final prepared = tray == null
         ? null
         : await AndroidActions.trayPhoto(
             file: file,
             frame: frame,
             area: tray,
-            readFooter: hit.editions.length > 1,
+            readFooter: readFooter,
           );
     if (!accept()) return;
+    final matches = refineTrayMatch
+        ? await library.refineTrayMatches(
+            detected,
+            file: file,
+            frame: frame,
+            photo: prepared?.bytes,
+            onProgress: onProgress,
+          )
+        : detected;
+    if (!accept()) return;
+    final hit = matches.first;
+    void showText() => onProgress?.call(ScanStage.text, corners);
     final evidence = prepared == null
         ? await CardLanguage.readOptions(
-            corners: hit.corners,
+            corners: corners,
             file: file,
             frame: frame,
             options: hit.editions,
+            onRead: showText,
           )
-        : await CardLanguage.readTrayOptions(prepared, hit.editions);
+        : await CardLanguage.readTrayOptions(
+            prepared,
+            hit.editions,
+            onRead: showText,
+          );
     if (!accept()) return;
-    final card = selectScannedEdition(evidence, scan.state.batch);
+    final batch = scan.state.batch;
+    final decision = hit.titleOnly && previous == null
+        ? decideScan(matches, evidence, batch)
+        : (card: selectScannedEdition(evidence, batch), review: null);
+    final card = decision.card;
     try {
       final photo =
           prepared?.bytes ??
           await AndroidActions.scanPhoto(
             file: file,
             frame: frame,
-            corners: hit.corners,
+            corners: corners,
           );
       if (photo != null && accept()) {
         await Pictures.shared.saveScan(card.id, photo);
@@ -470,7 +700,15 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     } on Exception {
       // Издание можно сохранить даже при недоступном кэше фотографий.
     }
-    if (accept()) await _save(card, matches, previous: previous);
+    if (accept()) {
+      await _save(
+        card,
+        matches,
+        trayScan: tray != null,
+        review: decision.review,
+        previous: previous,
+      );
+    }
   }
 
   Future<void> _discard(XFile? file) async {
@@ -508,6 +746,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       return;
     }
     frameSession++;
+    scan.cancelFrame();
+    _sweep(false);
     if (previous != null) _pendingSounds.remove(previous.sequence);
     setState(() => modal = true);
     XFile? file;
@@ -520,12 +760,15 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
             )
           : await _capture();
       if (file == null || !active) return;
-      await _recognize(file, previous: previous);
+      await _recognize(file, live: !gallery, previous: previous);
     } catch (e) {
       message('Не удалось обработать снимок');
     } finally {
       if (!gallery || kIsWeb) await _discard(file);
-      if (mounted) setState(() => modal = false);
+      if (mounted) {
+        _sweep(false);
+        setState(() => modal = false);
+      }
     }
   }
 
@@ -550,6 +793,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     if (modal || writing) return;
     frameSession++;
     scan.cancelFrame();
+    _sweep(false);
     setState(() => modal = true);
     try {
       await action();
@@ -586,8 +830,6 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                   RecognitionModel.oracle => 'Каталог Картоведа',
                   RecognitionModel.mtgIdentification =>
                     'Уточняет близкие совпадения Oracle по галерее автора',
-                  RecognitionModel.mtgStandalone =>
-                    'Находит карту в кадре и ищет совпадение в галерее MTG',
                   RecognitionModel.keypoints =>
                     'Сверяет варианты Oracle с изображениями Scryfall',
                 }),
@@ -604,6 +846,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     if (!mounted || selected == null) return;
     _modelSelected = true;
     scan.setModel(selected);
+    if (scan.state.mode == ScanMode.tray) _warmSelectedModel();
     await AndroidActions.scannerModel(selected);
   });
 
@@ -617,7 +860,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         MaterialPageRoute(builder: (_) => ScanTargetsPage(catalog, scan)),
       );
       if (!mounted || hadTargets || scan.state.targets.isEmpty) return;
-      if (scan.state.mode == ScanMode.manual) _mode();
+      if (scan.state.mode == ScanMode.manual) _toggleAuto();
     });
   }
 
@@ -645,18 +888,18 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   };
 
   String? get _modelLabel {
-    if (scan.state.mode == ScanMode.tray) {
-      if (_warmingTray) return 'Лоток · загрузка моделей';
-      return _trayArea == null
-          ? 'Лоток · положите карту ровно'
-          : 'Лоток · Oracle';
-    }
-    return switch (scan.state.model) {
-      RecognitionModel.oracle => null,
+    final model = switch (scan.state.model) {
+      RecognitionModel.oracle => 'Oracle',
       RecognitionModel.mtgIdentification => 'MTG + Oracle',
-      RecognitionModel.mtgStandalone => 'MTG без Oracle',
       RecognitionModel.keypoints => 'Ключевые точки',
     };
+    if (scan.state.mode == ScanMode.tray) {
+      if (_warmingTray != null) return 'Лоток · загрузка моделей';
+      return _trayArea == null
+          ? 'Лоток · положите карту ровно'
+          : 'Лоток · $model';
+    }
+    return scan.state.model == RecognitionModel.oracle ? null : model;
   }
 
   Widget _header(String title) => Row(
@@ -682,13 +925,15 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                 fontSize: 21,
               ),
             ),
-            if (scan.state.batch.active ||
+            if ((scan.state.showGuide && _focus != null) ||
+                scan.state.batch.active ||
                 scan.state.targets.isNotEmpty ||
                 scan.state.model != RecognitionModel.oracle ||
                 scan.state.mode == ScanMode.tray)
               Text(
                 [
-                  ?_modelLabel,
+                  ?((scan.state.showGuide ? _focus?.$1.label : null) ??
+                      _modelLabel),
                   ?_targetLabel,
                   if (scan.state.batch.active) scan.state.batch.label,
                 ].join('  ·  '),
@@ -723,8 +968,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                 _toggleGuide();
               case 'torch':
                 _torch();
-              case 'tray':
-                _toggleTray();
+              case 'autoMode':
+                _pickAutoMode();
               case 'calibrateTray':
                 _recalibrateTray();
             }
@@ -750,13 +995,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
               child: const Text('Искомые карты'),
             ),
             PopupMenuItem(
-              value: 'tray',
-              enabled: camera != null && library.catalog != null,
-              child: Text(
-                scan.state.mode == ScanMode.tray
-                    ? 'Остановить автоскан в лотке'
-                    : 'Автоскан в лотке',
-              ),
+              value: 'autoMode',
+              child: const Text('Режим автоскана'),
             ),
             if (scan.state.mode == ScanMode.tray && _trayArea != null)
               const PopupMenuItem(
@@ -810,15 +1050,11 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                 ? const CircularProgressIndicator()
                 : const Icon(Icons.center_focus_strong_rounded, size: 31),
           ),
-          Semantics(
-            toggled: mode.isAutomatic,
-            child: _DockAction(
-              mode.isAutomatic
-                  ? Icons.pause_circle_filled
-                  : Icons.play_circle_outline,
-              mode.isAutomatic ? 'Остановить' : 'Автоскан',
-              camera == null || modal ? null : _mode,
-            ),
+          AutoScanButton(
+            profile: _autoMode,
+            running: mode.isAutomatic,
+            onToggle: camera == null || modal || writing ? null : _toggleAuto,
+            onChoose: modal || writing ? null : _pickAutoMode,
           ),
         ],
       ),
@@ -850,13 +1086,24 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       width: width,
       height: height,
     );
+    final outline = bounds.biggest.isEmpty || _frameSize.isEmpty
+        ? null
+        : _outline?.project(_frameSize, bounds.biggest);
+    final focus = bounds.biggest.isEmpty || _frameSize.isEmpty
+        ? null
+        : _focus?.$2.project(_frameSize, bounds.biggest);
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (kIsWeb && camera != null)
-          BrowserGlass(rect, bounds.biggest, visible: scan.state.showGuide),
-        if (scan.state.showGuide)
-          ScanFrame(window: rect, hasPreview: !kIsWeb && camera != null),
+        TrackedScanGuide(
+          viewport: bounds.biggest,
+          window: rect,
+          outline: outline,
+          focus: focus,
+          showGuide: scan.state.showGuide,
+          hasPreview: camera != null,
+          reading: _sweeping,
+        ),
         Positioned(
           left: 10,
           right: 10,

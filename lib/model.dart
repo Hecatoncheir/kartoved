@@ -16,10 +16,17 @@ import 'data/moxfield.dart';
 import 'data/review.dart';
 
 class Match {
-  const Match(this.editions, {this.score = 1, this.corners = const []});
+  const Match(
+    this.editions, {
+    this.score = 1,
+    this.corners = const [],
+    this.fromTitle = false,
+    this.titleOnly = false,
+  });
   final List<double> corners;
   final List<Edition> editions;
   final double score;
+  final bool fromTitle, titleOnly;
 
   static List<Match> preferMtg(
     List<Match> matches,
@@ -183,27 +190,17 @@ class AppModel extends Cubit<LibraryState> {
       .loadString('$mtgIdentificationAssets/printings.json')
       .then((json) => (jsonDecode(json) as List).cast<String>());
 
-  Future<List<Match>> _standaloneMatches(Recognition result) async {
-    final hit = standaloneMtgHit(result.mtgHits);
-    if (hit == null) return [];
-    final printings = await _mtgPrintings;
-    final editions = await catalog!.editionsForPrinting(printings[hit.index]);
-    return [
-      if (editions.isNotEmpty)
-        Match(editions, score: hit.score, corners: result.corners),
-    ];
-  }
+  (Catalog, String, bool)? _lastTitleQuery;
+  Future<String?>? _lastTitle;
 
   Future<List<Match>> _matches(
     Recognition result,
     RecognitionModel engine, {
     String? file,
     PreviewFrame? frame,
+    ScanProgress? onProgress,
   }) async {
-    if (engine == RecognitionModel.mtgStandalone) {
-      return _standaloneMatches(result);
-    }
-    if (result.hits.isEmpty) return [];
+    if (result.hits.isEmpty && result.title == null) return [];
     final catalog = this.catalog!;
     final matches = <Match>[];
     for (final hit in result.hits) {
@@ -213,19 +210,75 @@ class AppModel extends Cubit<LibraryState> {
       }
     }
     if (engine == RecognitionModel.keypoints && matches.isNotEmpty) {
-      return _preferKeypoints(
+      final refined = await _preferKeypoints(
         matches,
         result.corners,
         file: file,
         frame: frame,
+        onProgress: onProgress,
       );
+      return _preferTitle(catalog, result, refined);
     }
-    if (result.mtgHits.isEmpty) return matches;
+    if (result.mtgHits.isEmpty) return _preferTitle(catalog, result, matches);
     final printings = await _mtgPrintings;
-    return Match.preferMtg(matches, [
+    final refined = Match.preferMtg(matches, [
       for (final hit in result.mtgHits)
         if (hit.score >= .25) printings[hit.index],
     ]);
+    return _preferTitle(catalog, result, refined);
+  }
+
+  Future<List<Match>> _preferTitle(
+    Catalog catalog,
+    Recognition result,
+    List<Match> visual,
+  ) async {
+    final title = result.title;
+    if (title == null || title.confidence < .86) return visual;
+    try {
+      final allowOneEdit =
+          title.confidence >= .89 && (visual.firstOrNull?.score ?? 0) < .74;
+      final query = (catalog, title.text, allowOneEdit);
+      if (_lastTitleQuery != query || _lastTitle == null) {
+        _lastTitleQuery = query;
+        _lastTitle = catalog.nameForScannedTitle(
+          title.text,
+          allowOneEdit: allowOneEdit,
+        );
+      }
+      final name = await _lastTitle;
+      if (name == null) return visual;
+      final matching = visual
+          .where((m) => m.editions.first.name == name)
+          .toList();
+      if (matching.isEmpty &&
+          (visual.firstOrNull?.score ?? 0) >= .82 &&
+          title.confidence < .95) {
+        return visual;
+      }
+      final printings = <String, Edition>{
+        for (final match in matching)
+          for (final card in match.editions) card.printingKey: card,
+      };
+      if (printings.isEmpty) {
+        for (final card in await catalog.byName(name)) {
+          printings[card.printingKey] = card;
+        }
+      }
+      if (printings.isEmpty) return visual;
+      return [
+        Match(
+          printings.values.toList(),
+          score: title.confidence,
+          corners: title.corners,
+          fromTitle: true,
+          titleOnly: matching.isEmpty,
+        ),
+      ];
+    } catch (_) {
+      _lastTitle = null;
+      return visual;
+    }
   }
 
   Future<List<Match>> _preferKeypoints(
@@ -233,12 +286,16 @@ class AppModel extends Cubit<LibraryState> {
     List<double> corners, {
     String? file,
     PreviewFrame? frame,
+    Uint8List? photo,
+    ScanProgress? onProgress,
   }) async {
     final choice = await refineKeypointScan(
       [for (final match in matches) match.editions],
       corners,
       file: file,
       frame: frame,
+      photo: photo,
+      onCompare: () => onProgress?.call(ScanStage.details, corners),
     );
     if (choice == null || (choice.artwork == 0 && choice.printing == null)) {
       return matches;
@@ -256,7 +313,13 @@ class AppModel extends Cubit<LibraryState> {
             ),
           ];
     return [
-      Match(editions, score: matches.first.score, corners: picked.corners),
+      Match(
+        editions,
+        score: matches.first.score,
+        corners: picked.corners,
+        fromTitle: picked.fromTitle,
+        titleOnly: picked.titleOnly,
+      ),
       for (final match in matches)
         if (!identical(match, picked)) match,
     ];
@@ -265,30 +328,112 @@ class AppModel extends Cubit<LibraryState> {
   Future<List<Match>> recognize(
     String file, {
     RecognitionModel engine = RecognitionModel.oracle,
-  }) async =>
-      _matches(await recognizeFile(catalog!, file, engine), engine, file: file);
+    ScanProgress? onProgress,
+  }) async => _matches(
+    await recognizeFile(catalog!, file, engine: engine, onProgress: onProgress),
+    engine,
+    file: file,
+    onProgress: onProgress,
+  );
+
+  Future<Recognition> _inspectPreview({
+    String? file,
+    PreviewFrame? frame,
+    required RecognitionModel engine,
+    TrayArea? tray,
+    bool outlineOnly = false,
+    ScanProgress? onProgress,
+  }) => frame == null
+      ? recognizeFile(
+          catalog!,
+          file!,
+          engine: engine,
+          tray: tray,
+          outlineOnly: outlineOnly,
+          onProgress: onProgress,
+        )
+      : recognizeCameraFrame(
+          catalog!,
+          frame,
+          engine: engine,
+          tray: tray,
+          outlineOnly: outlineOnly,
+          onProgress: onProgress,
+        );
 
   Future<List<Match>> recognizeFrame(
     PreviewFrame frame, {
     RecognitionModel engine = RecognitionModel.oracle,
   }) async => _matches(
-    await recognizeCameraFrame(catalog!, frame, engine),
+    await _inspectPreview(frame: frame, engine: engine),
     engine,
     frame: frame,
   );
 
-  Future<List<Match>> recognizeTray({
+  Future<List<double>> previewOutline({
     String? file,
     PreviewFrame? frame,
-    TrayArea? area,
   }) async {
-    const engine = RecognitionModel.oracle;
-    final installed = catalog!;
-    final result = frame == null
-        ? await recognizeFile(installed, file!, engine, area)
-        : await recognizeCameraFrame(installed, frame, engine, area);
-    return _matches(result, engine);
+    final result = await _inspectPreview(
+      file: file,
+      frame: frame,
+      engine: RecognitionModel.oracle,
+      outlineOnly: true,
+    );
+    return result.corners;
   }
+
+  Future<List<Match>> recognizePreview({
+    String? file,
+    PreviewFrame? frame,
+    required RecognitionModel engine,
+    TrayArea? tray,
+    bool deferKeypoints = false,
+    required void Function(List<double>) onOutline,
+    ScanProgress? onProgress,
+  }) async {
+    final result = await _inspectPreview(
+      file: file,
+      frame: frame,
+      engine: engine,
+      tray: tray,
+      onProgress: onProgress,
+    );
+    final matches = await _matches(
+      (
+        hits: result.hits,
+        mtgHits: result.mtgHits,
+        corners: tray?.corners ?? result.corners,
+        title: result.title,
+      ),
+      deferKeypoints && engine == RecognitionModel.keypoints
+          ? RecognitionModel.oracle
+          : engine,
+      file: file,
+      frame: frame,
+      onProgress: onProgress,
+    );
+    final hit = matches.firstOrNull;
+    onOutline(
+      tray == null && hit?.fromTitle == true ? hit!.corners : result.corners,
+    );
+    return matches;
+  }
+
+  Future<List<Match>> refineTrayMatches(
+    List<Match> matches, {
+    String? file,
+    PreviewFrame? frame,
+    Uint8List? photo,
+    ScanProgress? onProgress,
+  }) => _preferKeypoints(
+    matches,
+    matches.first.corners,
+    file: file,
+    frame: frame,
+    photo: photo,
+    onProgress: onProgress,
+  );
 
   Future<int> save(Edition card, {ScanReview? review}) async {
     final folder = state.folder;

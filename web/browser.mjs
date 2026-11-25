@@ -17,6 +17,10 @@ function scanWorker() {
   worker.onmessage = ({data}) => {
     const request = requests.get(data.id);
     if (!request) return;
+    if (data.stage) {
+      request.progress?.(data.stage, data.corners);
+      return;
+    }
     requests.delete(data.id);
     if (data.error) request.reject(new Error(data.error));
     else request.resolve(data.value);
@@ -25,21 +29,22 @@ function scanWorker() {
   return worker;
 }
 
-async function scan(file, engine, tray) {
+async function scan(file, engine, tray, outlineOnly, progress) {
   const blob = await (await fetch(file)).blob();
-  return requestScan({blob, engine, tray});
+  return requestScan({blob, engine, tray, outlineOnly}, progress);
 }
 
-function requestScan(message) {
+function requestScan(message, progress) {
   return new Promise((resolve, reject) => {
     const instance = scanWorker();
     const id = ++serial;
     const timer = setTimeout(() => failWorker(new Error('Сканер не ответил')), 90000);
     requests.set(id, {
+      progress,
       resolve: (data) => { clearTimeout(timer); resolve(data); },
       reject: (error) => { clearTimeout(timer); reject(error); },
     });
-    instance.postMessage({id, ...message});
+    instance.postMessage({id, ...message, reportProgress: Boolean(progress)});
   });
 }
 
@@ -67,17 +72,24 @@ function jpeg(canvas) {
   ));
 }
 
-async function straighten(file, corners) {
-  if (corners.length !== 8 || !corners.every(Number.isFinite)) throw new Error('Не видно границ карты');
+const hasCorners = (corners) => corners.length === 8 && corners.every(Number.isFinite);
+
+async function photoCanvas(file, limit) {
   const bitmap = await bitmapFrom(file);
-  let source;
   try {
-    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-    source = canvasSize(Math.round(bitmap.width * scale), Math.round(bitmap.height * scale));
-    source.getContext('2d', {willReadFrequently: true}).drawImage(bitmap, 0, 0, source.width, source.height);
+    const scale = Math.min(1, limit / Math.max(bitmap.width, bitmap.height));
+    const canvas = canvasSize(Math.max(1, Math.round(bitmap.width * scale)),
+      Math.max(1, Math.round(bitmap.height * scale)));
+    canvas.getContext('2d', {willReadFrequently: true}).drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return canvas;
   } finally {
     bitmap.close();
   }
+}
+
+async function straighten(file, corners) {
+  if (!hasCorners(corners)) throw new Error('Не видно границ карты');
+  const source = await photoCanvas(file, 1600);
   const image = source.getContext('2d').getImageData(0, 0, source.width, source.height).data;
   const card = canvasSize(600, 840);
   const context = card.getContext('2d');
@@ -104,7 +116,8 @@ async function straighten(file, corners) {
 }
 
 async function crop(file, corners) {
-  return new Uint8Array(await (await jpeg(await straighten(file, corners))).arrayBuffer());
+  const photo = hasCorners(corners) ? await straighten(file, corners) : await photoCanvas(file, 840);
+  return new Uint8Array(await (await jpeg(photo)).arrayBuffer());
 }
 
 let ocr;
@@ -177,8 +190,8 @@ async function readTrayText(bytes) {
   return readTextOnCard(card);
 }
 
-async function warmTray() {
-  await Promise.all([requestScan({warm: true}), ocrEngine()]);
+async function warmTray(engine) {
+  await Promise.all([requestScan({warm: true, engine}), ocrEngine()]);
 }
 
 async function readCache(key) {
@@ -297,7 +310,18 @@ async function reload() {
   }
 }
 
-globalThis.kartoved = {scan, crop, unmirror, readCardText, trayPhoto, readTrayText, warmTray, guide, scannerModel, chime, unlockSound, readCache, writeCache, unpack, download, pickBackup, reload};
+function scannerTray(value) {
+  const key = `kartoved-scanner-tray:${root.pathname}`;
+  try {
+    if (value == null) return localStorage.getItem(key) !== 'false';
+    localStorage.setItem(key, String(value));
+  } catch (_) {
+    // Настройка остаётся доступна в текущем сеансе.
+  }
+  return value ?? true;
+}
+
+globalThis.kartoved = {scan, crop, unmirror, readCardText, trayPhoto, readTrayText, warmTray, guide, scannerModel, scannerTray, chime, unlockSound, readCache, writeCache, unpack, download, pickBackup, reload};
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register(new URL('sw.js', root), {updateViaCache: 'none'})

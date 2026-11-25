@@ -52,8 +52,9 @@ class AndroidActions {
           scanArguments(file: file, frame: frame, corners: corners),
         );
 
-  static Future<void> warmTray() =>
-      kIsWeb ? browserWarmTray() : _channel.invokeMethod<void>('warmTray');
+  static Future<void> warmTray(RecognitionModel engine) => kIsWeb
+      ? browserWarmTray(engine.name)
+      : _channel.invokeMethod<void>('warmTray');
 
   static Future<TrayPhoto?> trayPhoto({
     String? file,
@@ -111,6 +112,17 @@ class AndroidActions {
       return model ?? RecognitionModel.oracle;
     } on MissingPluginException {
       return model ?? RecognitionModel.oracle;
+    }
+  }
+
+  static Future<bool> scannerTray([bool? value]) async {
+    if (kIsWeb) return browserTrayPreference(value);
+    try {
+      return await _channel.invokeMethod<bool>('scannerTray', value) ?? true;
+    } on PlatformException {
+      return value ?? true;
+    } on MissingPluginException {
+      return value ?? true;
     }
   }
 

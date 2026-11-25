@@ -72,22 +72,12 @@ void main() {
     expect(refined.first.score, oracle.first.score);
   });
 
-  test('MTG без Oracle принимает уверенное совпадение на двух кадрах', () {
-    const best = (index: 1, score: .43);
-    expect(standaloneMtgHit([best, (index: 2, score: .38)]), isNull);
-    expect(standaloneMtgHit([(index: 1, score: .33)]), isNull);
-    expect(standaloneMtgHit([best, (index: 2, score: .34)]), best);
-
-    final scan = ScanCubit()..toggle();
-    addTearDown(scan.close);
-    const match = [
-      Match([en], score: .43),
-    ];
-    expect(scan.evaluate(match), isNull);
-    expect(scan.evaluate(match), isNull);
-    scan.setModel(RecognitionModel.mtgStandalone);
-    expect(scan.evaluate(match), isNull);
-    expect(scan.evaluate(match), en);
+  test('Сохранённый самостоятельный режим MTG заменяется Oracle', () {
+    expect(RecognitionModel.fromName('mtgStandalone'), RecognitionModel.oracle);
+    expect(
+      RecognitionModel.fromName('mtgIdentification'),
+      RecognitionModel.mtgIdentification,
+    );
   });
 
   test('Ключевые точки различают иллюстрации на контрольных изображениях', () {
@@ -123,15 +113,16 @@ void main() {
     expect(CardLanguage.trayCandidates('SNC + RU', [en, ru]), isEmpty);
   });
 
-  test('Лоток использует порог Oracle и подтверждает карту на двух кадрах', () {
+  test('Лоток использует порог выбранной модели и ждёт второй кадр', () {
     final scanner = ScanCubit()
-      ..setModel(RecognitionModel.mtgStandalone)
+      ..setModel(RecognitionModel.mtgIdentification)
       ..setMode(ScanMode.tray);
     addTearDown(scanner.close);
     const uncertain = [
       Match([en], score: .43),
     ];
     expect(scanner.evaluate(uncertain), isNull);
+    expect(scanner.state.model, RecognitionModel.mtgIdentification);
     expect(scanner.evaluate(uncertain), isNull);
     expect(scanner.evaluate(a), isNull);
     expect(scanner.evaluate(a), en);

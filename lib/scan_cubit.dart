@@ -11,6 +11,8 @@ class ScanGate {
   Edition? _last;
   Set<String> _seenNames = {};
 
+  bool get awaitingConfirmation => _candidate != null;
+
   void clearCandidate() => _candidate = null;
   void saved(Edition card, {Iterable<String> observedNames = const []}) {
     _last = card;
@@ -32,14 +34,23 @@ class ScanGate {
     if (manual) {
       return best.editions.where((e) => e.id == _last?.id).firstOrNull ?? card;
     }
-    final candidates = closeMatches(matches).map((m) => m.editions.first);
+    final close = closeMatches(matches);
+    final candidates = close.map((m) => m.editions.first);
     if (best.score < minimumScore ||
         candidates.any((e) => _seenNames.contains(e.name)) ||
         _sameCard(card, _last)) {
       clearCandidate();
       return null;
     }
-    final key = (candidates.map((e) => e.id).toList()..sort()).join('\n');
+    final key =
+        (close
+                .map(
+                  (m) =>
+                      m.fromTitle ? m.editions.first.name : m.editions.first.id,
+                )
+                .toList()
+              ..sort())
+            .join('\n');
     final stable = _candidate == key;
     _candidate = key;
     return stable ? card : null;
@@ -189,9 +200,7 @@ class ScanCubit extends Cubit<ScanSession> {
     return gate.accept(
       matches,
       manual: manual,
-      minimumScore: state.mode == ScanMode.tray
-          ? RecognitionModel.oracle.minimumScore
-          : state.model.minimumScore,
+      minimumScore: state.model.minimumScore,
     );
   }
 }

@@ -28,22 +28,32 @@ class CardText(private val context: Context) {
 
     fun photo(call: MethodCall, reply: MethodChannel.Result) {
         process(reply) {
-            val points = call.argument<List<Double>>("corners")
-            if (points?.size != 8) return@process null
             val source = bitmap(call)
             try {
-                val card = straighten(source, points) ?: return@process null
+                val points = call.argument<List<Double>>("corners")
+                val card = straighten(source, points) ?: thumbnail(source)
                 try {
                     ByteArrayOutputStream().use { out ->
                         if (card.compress(Bitmap.CompressFormat.JPEG, 88, out)) out.toByteArray() else null
                     }
                 } finally {
-                    card.recycle()
+                    if (card !== source) card.recycle()
                 }
             } finally {
                 source.recycle()
             }
         }
+    }
+
+    private fun thumbnail(source: Bitmap): Bitmap {
+        val largerSide = maxOf(source.width, source.height)
+        if (largerSide <= 840) return source
+        return Bitmap.createScaledBitmap(
+            source,
+            (source.width * 840 / largerSide).coerceAtLeast(1),
+            (source.height * 840 / largerSide).coerceAtLeast(1),
+            true,
+        )
     }
 
     private fun process(reply: MethodChannel.Result, work: () -> Any?) {

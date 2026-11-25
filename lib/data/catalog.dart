@@ -100,6 +100,78 @@ class Catalog {
     return rows.map(Edition.fromRow).toList();
   }
 
+  Future<String?> nameForScannedTitle(
+    String title, {
+    bool allowOneEdit = false,
+  }) async {
+    final compact = title
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), '')
+        .replaceAll('ё', 'е')
+        .replaceAll('’', "'");
+    final withoutMana = compact.replaceFirst(RegExp(r'[0-9]+[©¢@®™*.+]*$'), '');
+    if (compact.isEmpty || compact.length > 100) return null;
+    final names = spec.printingMetadata
+        ? 'search_names'
+        : '(SELECT DISTINCT name, lower(name) AS term FROM editions)';
+    final titles =
+        '''
+      WITH titles AS (
+        SELECT name, replace(replace(replace(term, ' ', ''), 'ё', 'е'), '’', char(39)) AS compact
+        FROM $names
+      )
+      ''';
+    final rows = await _query(
+      '''$titles
+      SELECT name, min(CASE WHEN compact = ? THEN 0 ELSE 1 END) AS rank
+      FROM titles WHERE compact IN (?, ?)
+      GROUP BY name ORDER BY rank LIMIT 2
+      ''',
+      [compact, compact, withoutMana],
+    );
+    if (rows.isNotEmpty) {
+      return rows.length == 2 && rows[0]['rank'] == rows[1]['rank']
+          ? null
+          : rows.first['name'] as String;
+    }
+    if (!allowOneEdit || withoutMana.length < 10) return null;
+    final middle = withoutMana.length ~/ 2;
+    final prefix = withoutMana.substring(0, middle);
+    final suffix = withoutMana.substring(middle);
+    final candidates = await _query(
+      '''$titles
+      SELECT DISTINCT name, compact FROM titles
+      WHERE length(compact) BETWEEN ? AND ?
+        AND (substr(compact, 1, ?) = ? OR substr(compact, ?) = ?)
+      ''',
+      [
+        withoutMana.length - 1,
+        withoutMana.length + 1,
+        prefix.length,
+        prefix,
+        -suffix.length,
+        suffix,
+      ],
+    );
+    final matches = {
+      for (final row in candidates)
+        if (_oneTitleEdit(withoutMana, row['compact'] as String))
+          row['name'] as String,
+    };
+    return matches.length == 1 ? matches.single : null;
+  }
+
+  bool _oneTitleEdit(String a, String b) {
+    final (short, long) = a.length <= b.length ? (a, b) : (b, a);
+    var common = 0;
+    while (common < short.length && short[common] == long[common]) {
+      common++;
+    }
+    if (common == short.length) return long.length == short.length + 1;
+    return short.substring(common + (short.length == long.length ? 1 : 0)) ==
+        long.substring(common + 1);
+  }
+
   Future<Edition> front(Edition card) async {
     if (!card.id.endsWith('-1')) return card;
     final id = card.id.substring(0, card.id.length - 2);

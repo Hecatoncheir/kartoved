@@ -7,7 +7,9 @@ import 'package:image/image.dart' as im;
 import 'package:onnxruntime_core/onnxruntime_core.dart';
 import 'package:path/path.dart' as p;
 
+import 'paddle_title.dart';
 import 'recognition_result.dart';
+import 'scan_progress.dart';
 import 'tray.dart';
 
 export 'recognition_result.dart';
@@ -20,8 +22,10 @@ Recognition identifyPhoto(
   String directory,
   String photo, {
   Uint8List? mtgGraph,
-  Uint8List? poseGraph,
   TrayArea? tray,
+  bool outlineOnly = false,
+  PaddleTitleAssets? titleAssets,
+  ScanProgress? onProgress,
 }) {
   final decoded = im.decodeImage(File(photo).readAsBytesSync());
   if (decoded == null) throw const FormatException('Не удалось открыть снимок');
@@ -29,8 +33,10 @@ Recognition identifyPhoto(
     directory,
     im.bakeOrientation(decoded),
     mtgGraph: mtgGraph,
-    poseGraph: poseGraph,
     tray: tray,
+    outlineOnly: outlineOnly,
+    titleAssets: titleAssets,
+    onProgress: onProgress,
   );
 }
 
@@ -38,10 +44,11 @@ Recognition identifyImage(
   String directory,
   im.Image original, {
   Uint8List? mtgGraph,
-  Uint8List? poseGraph,
   TrayArea? tray,
+  bool outlineOnly = false,
+  PaddleTitleAssets? titleAssets,
+  ScanProgress? onProgress,
 }) {
-  if (poseGraph != null) return _identifyMtg(original, poseGraph, mtgGraph!);
   final config = jsonDecode(
     File(p.join(directory, 'catalog.json')).readAsStringSync(),
   ) as Map;
@@ -57,6 +64,21 @@ Recognition identifyImage(
 
   Session open(String name) =>
       openGraph(File(p.join(directory, '$name.onnx')).readAsBytesSync());
+
+  TitleRead? titleFor(List<double> corners) {
+    if (titleAssets == null || corners.isEmpty) return null;
+    try {
+      final crop = tray?.corners ?? corners;
+      return readPaddleTitle(
+        original,
+        crop,
+        titleAssets,
+        onRead: () => onProgress?.call(ScanStage.title, crop),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 
   try {
     final detector = open('detector');
@@ -77,15 +99,39 @@ Recognition identifyImage(
         center,
         side.toDouble(),
       );
-      final quad = _trayQuad(tray, card, side, width, height, rotations);
-      if (quad == null) return (hits: [], mtgHits: [], corners: []);
-      final hits = _identifyCard(embed, search, config, bytes, side, quad);
-      if (hits.isEmpty || hits.first.score < .60) {
-        return (hits: [], mtgHits: [], corners: []);
+      if (card.vote / rotations < .5) {
+        return (hits: [], mtgHits: [], corners: [], title: null);
       }
-      return (hits: hits, mtgHits: [], corners: tray.corners);
+      final upright =
+          card.quad[0] < card.x &&
+          card.quad[1] < card.y &&
+          card.quad[2] > card.x &&
+          card.quad[3] < card.y;
+      final inside = upright && _isInTray(tray, side, width, height, card);
+      final corners = inside || card.short >= side * .09
+          ? _relativeCorners(card.quad, side, width, height)
+          : const <double>[];
+      if (!inside) {
+        return (hits: [], mtgHits: [], corners: corners, title: null);
+      }
+      onProgress?.call(ScanStage.card, corners);
+      final title = titleFor(corners);
+      onProgress?.call(ScanStage.artwork, tray.corners);
+      final (artwork, artQuad) = _trayArtwork(original, tray, side);
+      final hits = _identifyCard(embed, search, config, artwork, side, artQuad);
+      if ((hits.firstOrNull?.score ?? 0) < .60) {
+        return (hits: [], mtgHits: [], corners: corners, title: title);
+      }
+      return (
+        hits: hits,
+        mtgHits: mtgGraph == null ? [] : _runMtg(mtg, artwork, side, artQuad),
+        corners: corners,
+        title: title,
+      );
     }
 
+    var outline = const <double>[];
+    TitleRead? title;
     for (final window in _windows(side, width, height)) {
       final coarse = _detect(
         detector,
@@ -112,21 +158,27 @@ Recognition identifyImage(
         refine,
       );
       if (fine.vote / rotations < 0.5 || fine.short < side * 0.09) continue;
+      final corners = _relativeCorners(fine.quad, side, width, height);
+      if (outlineOnly) {
+        return (hits: [], mtgHits: [], corners: corners, title: null);
+      }
+      onProgress?.call(ScanStage.card, corners);
+      if (outline.isEmpty) {
+        outline = corners;
+        title = titleFor(corners);
+      }
+      onProgress?.call(ScanStage.artwork, corners);
       final hits = _identifyCard(embed, search, config, bytes, side, fine.quad);
       if (hits.isEmpty || hits.first.score < .60) continue;
       final mtgHits = mtgGraph == null
           ? const <Hit>[]
-          : _run(mtg, {
-              'scene': _pixels(bytes, side),
-              'quad': _floats(fine.quad, [4, 2]),
-            }, _readHits);
-      final corners = [
-        for (var i = 0; i < fine.quad.length; i++)
-          _unitCoord(fine.quad[i], side, i.isEven ? width : height),
-      ];
-      return (hits: hits, mtgHits: mtgHits, corners: corners);
+          : _runMtg(mtg, bytes, side, fine.quad);
+      if ((title?.confidence ?? 0) < .86 && !identical(outline, corners)) {
+        title = titleFor(corners);
+      }
+      return (hits: hits, mtgHits: mtgHits, corners: corners, title: title);
     }
-    return (hits: <Hit>[], mtgHits: <Hit>[], corners: <double>[]);
+    return (hits: [], mtgHits: [], corners: outline, title: title);
   } finally {
     for (final session in sessions.reversed) {
       session.release();
@@ -134,13 +186,22 @@ Recognition identifyImage(
   }
 }
 
-Float32List? _trayQuad(
-  TrayArea area,
-  _Detection card,
+List<double> _relativeCorners(
+  Float32List quad,
   int side,
   int width,
   int height,
-  int rotations,
+) => [
+  for (var i = 0; i < quad.length; i++)
+    _unitCoord(quad[i], side, i.isEven ? width : height),
+];
+
+bool _isInTray(
+  TrayArea area,
+  int side,
+  int width,
+  int height,
+  _Detection card,
 ) {
   final offsetX = (side - width) ~/ 2, offsetY = (side - height) ~/ 2;
   final l = offsetX + area.left * width, r = offsetX + area.right * width;
@@ -149,19 +210,7 @@ Float32List? _trayQuad(
   final near =
       (card.x - (l + r) / 2).abs() <= size * .11 &&
       (card.y - (t + b) / 2).abs() <= size * .11;
-  final upright =
-      card.quad[0] < card.x &&
-      card.quad[1] < card.y &&
-      card.quad[2] > card.x &&
-      card.quad[3] < card.y;
-  if (card.vote / rotations < .5 ||
-      !near ||
-      !upright ||
-      card.short < size * .75 ||
-      card.short > size * 1.25) {
-    return null;
-  }
-  return Float32List.fromList([l, t, r, t, r, b, l, b]);
+  return near && card.short >= size * .75 && card.short <= size * 1.25;
 }
 
 Session _openGraph(Uint8List graph) => Session.fromBytes(
@@ -192,73 +241,54 @@ Session _openGraph(Uint8List graph) => Session.fromBytes(
   );
 }
 
-Recognition _identifyMtg(im.Image original, Uint8List pose, Uint8List mtg) {
-  const side = 640;
-  final (bytes, width, height) = _scene(original, side);
-  final detector = _openGraph(pose);
-  Float32List? quad;
-  try {
-    quad = _run(detector, {'scene': _pixels(bytes, side)}, (outputs) {
-      if (outputs['score']!.view.float32s.first < .50) return null;
-      return Float32List.fromList(outputs['quad']!.view.float32s);
-    });
-  } finally {
-    detector.release();
+(Uint8List, Float32List) _trayArtwork(im.Image image, TrayArea tray, int side) {
+  final left = tray.left * image.width, right = tray.right * image.width;
+  final top = tray.top * image.height, bottom = tray.bottom * image.height;
+  final padX = (right - left) * .09, padY = (bottom - top) * .09;
+  final x = math.max(0, (left - padX).floor());
+  final y = math.max(0, (top - padY).floor());
+  final cropWidth = math.min(image.width, (right + padX).ceil()) - x;
+  final cropHeight = math.min(image.height, (bottom + padY).ceil()) - y;
+  final (bytes, width, height) = _scene(
+    im.copyCrop(image, x: x, y: y, width: cropWidth, height: cropHeight),
+    side,
+  );
+  final offsetX = (side - width) ~/ 2, offsetY = (side - height) ~/ 2;
+  final l = offsetX + (left - x) * width / cropWidth;
+  final r = offsetX + (right - x) * width / cropWidth;
+  final t = offsetY + (top - y) * height / cropHeight;
+  final b = offsetY + (bottom - y) * height / cropHeight;
+  var light = 0.0, samples = 0;
+  for (var y = t.ceil(); y < b; y += 13) {
+    for (var x = l.ceil(); x < r; x += 13) {
+      final offset = (y * side + x) * 4;
+      light +=
+          .21 * bytes[offset] +
+          .72 * bytes[offset + 1] +
+          .07 * bytes[offset + 2];
+      samples++;
+    }
   }
-  if (quad == null) return (hits: [], mtgHits: [], corners: []);
-
-  final encoder = _openGraph(mtg);
-  try {
-    final (hits, corners) = _mtgRotations(encoder, bytes, side, quad);
-    return (
-      hits: [],
-      mtgHits: hits,
-      corners: [
-        for (var i = 0; i < corners.length; i++)
-          _unitCoord(corners[i], side, i.isEven ? width : height),
-      ],
-    );
-  } finally {
-    encoder.release();
+  if (samples > 0 && light / samples < 90) {
+    for (var offset = 0; offset < bytes.length; offset += 4) {
+      for (var channel = 0; channel < 3; channel++) {
+        final i = offset + channel;
+        bytes[i] = (bytes[i] * 1.5625 - 32).round().clamp(0, 255);
+      }
+    }
   }
+  return (bytes, Float32List.fromList([l, t, r, t, r, b, l, b]));
 }
 
-(List<Hit>, Float32List) _mtgRotations(
+List<Hit> _runMtg(
   Session encoder,
   Uint8List scene,
   int side,
   Float32List quad,
-) {
-  final scores = <int, double>{};
-  var bestScore = -1.0;
-  var bestQuad = quad;
-  for (var offset = 0; offset < quad.length; offset += 2) {
-    final rotated = Float32List.fromList([
-      ...quad.skip(offset),
-      ...quad.take(offset),
-    ]);
-    final hits = _run(encoder, {
-      'scene': _pixels(scene, side),
-      'quad': _floats(rotated, [4, 2]),
-    }, _readHits);
-    final score = hits.firstOrNull?.score ?? -1;
-    if (score > bestScore) {
-      bestScore = score;
-      bestQuad = rotated;
-    }
-    for (final hit in hits) {
-      scores.update(
-        hit.index,
-        (score) => math.max(score, hit.score),
-        ifAbsent: () => hit.score,
-      );
-    }
-  }
-  final ranked = [
-    for (final score in scores.entries) (index: score.key, score: score.value),
-  ]..sort((a, b) => b.score.compareTo(a.score));
-  return (ranked, bestQuad);
-}
+) => _run(encoder, {
+  'scene': _pixels(scene, side),
+  'quad': _floats(quad, [4, 2]),
+}, _readHits);
 
 // Увеличиваем перекрывающиеся участки кадра, если общий проход пропустил карту.
 Iterable<({double x, double y, double extent})> _windows(

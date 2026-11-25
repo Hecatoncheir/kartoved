@@ -30,8 +30,10 @@ class CardLanguage {
     PreviewFrame? frame,
     required List<Edition> options,
     List<double> corners = const [],
+    void Function()? onRead,
   }) async {
     if (options.length == 1) return options;
+    onRead?.call();
     if (kIsWeb) {
       try {
         return candidates(await browserReadText(file!, corners), null, options);
@@ -180,11 +182,13 @@ class CardLanguage {
 
   static Future<List<Edition>> readTrayOptions(
     TrayPhoto photo,
-    List<Edition> options,
-  ) async {
+    List<Edition> options, {
+    void Function()? onRead,
+  }) async {
     if (options.length == 1) return options;
     final quick = trayCandidates(photo.footer, options);
     if (quick.isNotEmpty) return quick;
+    onRead?.call();
     try {
       final result = await AndroidActions.readTrayText(photo.bytes);
       return candidates(result.text, result.language, options);

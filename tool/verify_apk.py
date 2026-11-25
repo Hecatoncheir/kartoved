@@ -17,12 +17,16 @@ with zipfile.ZipFile(Path(sys.argv[1])) as apk:
                 raise ValueError(f"Контрольная сумма {name} отличается от манифеста")
     if not any(name.endswith("/libonnxruntime.so") for name in apk.namelist()):
         raise ValueError("В APK отсутствует ONNX Runtime")
-    for name in ("pose.onnx", "recognize.onnx", "printings.json"):
-        asset = Path("assets/mtg_identification") / name
+    for asset in map(Path, (
+        "assets/mtg_identification/recognize.onnx",
+        "assets/mtg_identification/printings.json",
+        "assets/paddleocr/title.onnx",
+        "assets/paddleocr/alphabet.json",
+    )):
         with asset.open("rb") as source:
             expected = hashlib.file_digest(source, "sha256").digest()
         with apk.open("assets/flutter_assets/" + asset.as_posix()) as source:
             actual = hashlib.file_digest(source, "sha256").digest()
         if actual != expected:
-            raise ValueError(f"Файл MTG Card Identification в APK отличается от исходного: {name}")
+            raise ValueError(f"Файл распознавания в APK отличается от исходного: {asset}")
 print(manifest["version"], manifest["count"])
