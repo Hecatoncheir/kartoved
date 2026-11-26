@@ -1,10 +1,13 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
+
 const headingFont = 'Nunito';
 const bodyFont = 'Nunito Sans';
 const monoFont = 'JetBrains Mono';
 const codeText = TextStyle(fontFamily: monoFont);
 const noticeDuration = Duration(seconds: 3);
+const chineseFallback = ['Kartoved Chinese'];
 
 ThemeData appTheme(ColorScheme colors) {
   final border = OutlineInputBorder(
@@ -14,6 +17,7 @@ ThemeData appTheme(ColorScheme colors) {
   final theme = ThemeData(
     colorScheme: colors,
     fontFamily: bodyFont,
+    fontFamilyFallback: chineseFallback,
     scaffoldBackgroundColor: colors.surface,
     inputDecorationTheme: InputDecorationThemeData(
       filled: true,
@@ -136,7 +140,7 @@ class SheetHeading extends StatelessWidget {
       ),
       if (ModalRoute.of(context) is PopupRoute)
         IconButton(
-          tooltip: 'Закрыть',
+          tooltip: context.strings.close,
           onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.close_rounded),
         ),

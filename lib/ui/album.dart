@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../data/catalog.dart';
 import 'library_style.dart';
 import 'picture.dart';
@@ -32,8 +33,8 @@ class AlbumHeader extends StatelessWidget {
                 Semantics(
                   container: true,
                   header: true,
-                  child: const Text(
-                    'Библиотека',
+                  child: Text(
+                    context.strings.library,
                     style: TextStyle(
                       fontFamily: headingFont,
                       fontSize: 36,
@@ -45,7 +46,7 @@ class AlbumHeader extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${albumCount(albums)} · ${cardCount(cards)}',
+                  '${context.strings.albumCount(albums)} · ${context.strings.cardCount(cards)}',
                   style: const TextStyle(
                     fontFamily: bodyFont,
                     fontSize: 16,
@@ -59,7 +60,7 @@ class AlbumHeader extends StatelessWidget {
           DecoratedBox(
             decoration: libraryActionSurface,
             child: IconButton(
-              tooltip: 'Создать коллекцию',
+              tooltip: context.strings.createCollection,
               onPressed: onCreate,
               color: Colors.white,
               icon: const Icon(Icons.add, size: 30),
@@ -71,14 +72,14 @@ class AlbumHeader extends StatelessWidget {
       Semantics(
         container: true,
         button: true,
-        label: 'Найти карту',
+        label: context.strings.findCard,
         enabled: onSearch != null,
         onTap: onSearch,
         excludeSemantics: true,
         child: LibraryGlass(
           radius: 15,
           onTap: onSearch,
-          child: const Padding(
+          child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
@@ -86,7 +87,7 @@ class AlbumHeader extends StatelessWidget {
                 SizedBox(width: 9),
                 Flexible(
                   child: Text(
-                    'Найти карту',
+                    context.strings.findCard,
                     style: TextStyle(
                       fontSize: 17,
                       color: libraryMuted,
@@ -122,7 +123,7 @@ class AlbumShelf extends StatelessWidget {
         return Semantics(
           key: ValueKey(group.id),
           button: true,
-          label: '${group.name}, ${cardCount(group.count)}',
+          label: '${group.name}, ${context.strings.cardCount(group.count)}',
           excludeSemantics: true,
           onTap: open,
           child: LibraryGlass(
@@ -209,8 +210,8 @@ class _AlbumPocket extends StatelessWidget {
       height: 1.12,
     ),
   );
-  Widget get _count => Text(
-    cardCount(group.count),
+  Widget _count(BuildContext context) => Text(
+    context.strings.cardCount(group.count),
     style: const TextStyle(
       fontFamily: bodyFont,
       fontSize: 15,
@@ -239,7 +240,11 @@ class _AlbumPocket extends StatelessWidget {
               flex: 5,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [_name(18), const SizedBox(height: 3), _count],
+                children: [
+                  _name(18),
+                  const SizedBox(height: 3),
+                  _count(context),
+                ],
               ),
             ),
             _arrow,
@@ -286,11 +291,14 @@ class _AlbumPocket extends StatelessWidget {
                           child: stacked
                               ? Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [_name(21), _count],
+                                  children: [_name(21), _count(context)],
                                 )
                               : _name(21),
                         ),
-                        if (!stacked) ...[const SizedBox(width: 8), _count],
+                        if (!stacked) ...[
+                          const SizedBox(width: 8),
+                          _count(context),
+                        ],
                         const SizedBox(width: 3),
                         _arrow,
                       ],

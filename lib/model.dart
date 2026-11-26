@@ -52,6 +52,8 @@ class Match {
   }
 }
 
+enum LibraryLoadError { collections, catalog }
+
 class LibraryState {
   const LibraryState({
     this.catalog,
@@ -78,20 +80,21 @@ class LibraryState {
   final List<LibraryAddition> additions;
   final Set<String> flags;
   final Map<int, ScanReview> reviews;
-  final String? error;
-  LibraryState withCatalog(Catalog? catalog, {String? error}) => LibraryState(
-    catalog: catalog,
-    groups: groups,
-    covers: covers,
-    pendingByFolder: pendingByFolder,
-    holdings: holdings,
-    folder: folder,
-    recent: recent,
-    additions: additions,
-    flags: flags,
-    reviews: reviews,
-    error: error,
-  );
+  final LibraryLoadError? error;
+  LibraryState withCatalog(Catalog? catalog, {LibraryLoadError? error}) =>
+      LibraryState(
+        catalog: catalog,
+        groups: groups,
+        covers: covers,
+        pendingByFolder: pendingByFolder,
+        holdings: holdings,
+        folder: folder,
+        recent: recent,
+        additions: additions,
+        flags: flags,
+        reviews: reviews,
+        error: error,
+      );
 
   List<CardCount> get printings {
     final rows = <String, CardCount>{};
@@ -126,7 +129,7 @@ class AppModel extends Cubit<LibraryState> {
   bool get libraryReady => _loadedRevision > 0 || state.groups.isNotEmpty;
   Catalog? _base;
   Catalog? get catalog => state.catalog;
-  String? get initialError => state.error;
+  LibraryLoadError? get initialError => state.error;
 
   Future<void>? _initializing;
   Future<void> initialize() => _initializing ??= _initialize().whenComplete(() {
@@ -141,7 +144,7 @@ class AppModel extends Cubit<LibraryState> {
       } catch (e, stack) {
         debugPrint('Открытие коллекций: $e\n$stack');
         if (!isClosed) {
-          emit(state.withCatalog(null, error: 'Не удалось открыть коллекции'));
+          emit(state.withCatalog(null, error: LibraryLoadError.collections));
         }
         return;
       }
@@ -154,9 +157,7 @@ class AppModel extends Cubit<LibraryState> {
     } catch (e, stack) {
       debugPrint('Подготовка каталога: $e\n$stack');
       if (!isClosed) {
-        emit(
-          state.withCatalog(_base, error: 'Не удалось подготовить базу карт'),
-        );
+        emit(state.withCatalog(_base, error: LibraryLoadError.catalog));
       }
     }
   }
@@ -236,7 +237,7 @@ class AppModel extends Cubit<LibraryState> {
   Future<LibraryBackup?> openBackup() async {
     if (kIsWeb) {
       final text = await browserPickBackup();
-      return text == null ? null : LibraryBackup.fromJson(jsonDecode(text));
+      return text == null ? null : LibraryBackup.parse(text);
     }
     return AndroidActions.withBackupFile((path) async {
       if (!await AndroidActions.openBackup(path)) return null;

@@ -2,15 +2,7 @@ import 'dart:convert';
 
 import 'catalog.dart' show Edition;
 
-enum ReviewReason {
-  artwork('Похожие рисунки'),
-  language('Уточните язык'),
-  printing('Уточните издание'),
-  batch('Расхождение с настройками стопки');
-
-  const ReviewReason(this.label);
-  final String label;
-}
+enum ReviewReason { artwork, language, printing, batch }
 
 class ScanReview {
   const ScanReview(this.reason, this.choices, {this.batchLabel = ''});

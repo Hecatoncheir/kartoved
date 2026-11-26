@@ -95,13 +95,7 @@ enum ScanMode {
   };
 }
 
-enum ScanOption {
-  essentials('Только необходимое'),
-  consecutive('Одинаковые подряд');
-
-  const ScanOption(this.label);
-  final String label;
-}
+enum ScanOption { essentials, consecutive }
 
 enum ScanLight { unavailable, off, on }
 

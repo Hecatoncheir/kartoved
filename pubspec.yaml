@@ -1,12 +1,15 @@
 name: kartoved
 description: Картовед — автономный сканер карт Magic для Android и браузера.
 publish_to: none
-version: 1.4.1+25
+version: 1.5.0+26
 environment:
   sdk: ^3.14.0
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.3
   material_ui: ^1.1.0
   camera: ^0.11.0
   camera_view_mask:
@@ -34,6 +37,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   sqflite_common_ffi: ^2.4.7
 flutter:
+  generate: true
   uses-material-design: true
   shaders:
     - shaders/scan_glass.frag
@@ -53,3 +57,6 @@ flutter:
     - family: JetBrains Mono
       fonts:
         - asset: assets/fonts/JetBrainsMono.ttf
+    - family: Kartoved Chinese
+      fonts:
+        - asset: assets/fonts/KartovedChinese.ttf

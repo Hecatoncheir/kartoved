@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../data/catalog.dart';
 import '../data/recognition_result.dart';
 import '../scan_cubit.dart';
@@ -8,19 +9,25 @@ import '../scan_decision.dart';
 import 'batch_settings.dart';
 import 'glass_sheet.dart';
 import 'scanner_style.dart';
+import 'scanner_strings.dart';
 import 'style.dart';
 
 enum ScannerMenuAction { targets, calibrate }
 
 enum _Page {
-  main('Меню сканера'),
-  details('Стопка и распознавание'),
-  language('Язык стопки'),
-  edition('Издание стопки'),
-  model('Модель распознавания');
+  main,
+  details,
+  language,
+  edition,
+  model;
 
-  const _Page(this.title);
-  final String title;
+  String title(BuildContext context) => switch (this) {
+    main => context.strings.scannerMenu,
+    details => context.strings.batchAndRecognition,
+    language => context.strings.batchLanguage,
+    edition => context.strings.batchEdition,
+    model => context.strings.recognitionModel,
+  };
 }
 
 class ScannerMenu extends StatefulWidget {
@@ -69,11 +76,15 @@ class _ScannerMenuState extends State<ScannerMenu> {
               activeThumbColor: scanPaper,
               inactiveTrackColor: const Color(0xff524d68),
               inactiveThumbColor: const Color(0xffddd5e2),
-              title: Text(option.label),
+              title: Text(
+                option == ScanOption.essentials
+                    ? context.strings.essentialsOnly
+                    : context.strings.consecutiveScan,
+              ),
               subtitle: Text(
                 option == ScanOption.essentials
-                    ? 'Сначала английское название'
-                    : 'В лотке — ещё одна копия через 2 с',
+                    ? context.strings.englishNameFirst
+                    : context.strings.repeatSameCard,
               ),
               value: state.options.contains(option),
               onChanged: (_) => widget.toggleOption(option),
@@ -85,13 +96,13 @@ class _ScannerMenuState extends State<ScannerMenu> {
           children: [
             _QuickButton(
               icon: Icons.crop_free,
-              label: 'Рамка и стекло',
+              label: context.strings.frameAndGlass,
               selected: state.showGuide,
               toggle: widget.toggleGuide,
             ),
             _QuickButton(
               icon: Icons.flashlight_on_outlined,
-              label: 'Фонарь',
+              label: context.strings.torch,
               selected: state.light == ScanLight.on,
               toggle: state.light == ScanLight.unavailable
                   ? null
@@ -100,7 +111,7 @@ class _ScannerMenuState extends State<ScannerMenu> {
           ],
         ),
         const Divider(height: 28),
-        _MenuRow(_Page.details.title, onTap: () => _go(_Page.details)),
+        _MenuRow(_Page.details.title(context), onTap: () => _go(_Page.details)),
       ],
     ),
   );
@@ -112,38 +123,38 @@ class _ScannerMenuState extends State<ScannerMenu> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _MenuRow(
-            _Page.language.title,
-            value: BatchField.language.label(state.batch.language),
+            _Page.language.title(context),
+            value: BatchField.language.label(context, state.batch.language),
             onTap: ready ? () => _go(_Page.language) : null,
           ),
           _MenuRow(
-            _Page.edition.title,
-            value: BatchField.edition.label(state.batch.setCode),
+            _Page.edition.title(context),
+            value: BatchField.edition.label(context, state.batch.setCode),
             code: state.batch.setCode != null,
             onTap: ready ? () => _go(_Page.edition) : null,
           ),
           if (!widget.rescan)
             _MenuRow(
-              'Искомые карты',
+              context.strings.targetCards,
               value: switch (state.targets.length) {
-                0 => 'Не выбраны',
+                0 => context.strings.noTargetsSelected,
                 1 => state.targets.single,
-                final n => 'Выбрано: $n',
+                final n => context.strings.targetsSelected(n),
               },
               onTap: ready
                   ? () => Navigator.pop(context, ScannerMenuAction.targets)
                   : null,
             ),
           _MenuRow(
-            _Page.model.title,
-            value: state.model.label,
+            _Page.model.title(context),
+            value: state.model.label(context),
             onTap: ready ? () => _go(_Page.model) : null,
           ),
           if (widget.calibrated && state.mode.usesTray)
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.crop_free),
-              title: const Text('Откалибровать лоток заново'),
+              title: Text(context.strings.recalibrateTray),
               onTap: () => Navigator.pop(context, ScannerMenuAction.calibrate),
             ),
         ],
@@ -176,13 +187,13 @@ class _ScannerMenuState extends State<ScannerMenu> {
       for (final model in RecognitionModel.values)
         ListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text(model.label),
+          title: Text(model.label(context)),
           subtitle: Text(switch (model) {
-            RecognitionModel.oracle => 'Каталог Картоведа',
+            RecognitionModel.oracle => context.strings.oracleModelDescription,
             RecognitionModel.mtgIdentification =>
-              'Уточняет близкие совпадения Oracle по галерее автора',
+              context.strings.mtgModelDescription,
             RecognitionModel.keypoints =>
-              'Сверяет варианты Oracle с изображениями Scryfall',
+              context.strings.keypointModelDescription,
           }),
           trailing: model == state.model
               ? const Icon(Icons.check, color: scanOrange)
@@ -227,7 +238,7 @@ class _ScannerMenuState extends State<ScannerMenu> {
                 child: page == _Page.main
                     ? null
                     : IconButton(
-                        tooltip: 'Назад',
+                        tooltip: context.strings.back,
                         onPressed: _back,
                         icon: const Icon(Icons.chevron_left),
                       ),
@@ -236,7 +247,7 @@ class _ScannerMenuState extends State<ScannerMenu> {
                 child: Semantics(
                   header: true,
                   child: Text(
-                    page.title,
+                    page.title(context),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontFamily: headingFont,
@@ -249,7 +260,7 @@ class _ScannerMenuState extends State<ScannerMenu> {
                 ),
               ),
               IconButton(
-                tooltip: 'Закрыть меню',
+                tooltip: context.strings.closeMenu,
                 style: IconButton.styleFrom(
                   backgroundColor: const Color(0x306c7297),
                   foregroundColor: scanPaper,

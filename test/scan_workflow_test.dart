@@ -654,7 +654,7 @@ void main() {
     await app.tap(find.byTooltip('Меню сканера'));
     await app.tap(find.text('Стопка и распознавание'));
     await app.tap(find.text('Модель распознавания'));
-    await app.tap(find.text(RecognitionModel.mtgIdentification.label));
+    await app.tap(find.text('MTG Card Identification + Oracle'));
     await app.closeMenu();
     expect(app.savedEngine, RecognitionModel.mtgIdentification.name);
     await app.reopenScanner();
@@ -665,7 +665,7 @@ void main() {
     await app.tap(find.byTooltip('Меню сканера'));
     await app.tap(find.text('Стопка и распознавание'));
     await app.tap(find.text('Модель распознавания'));
-    await app.tap(find.text(RecognitionModel.keypoints.label));
+    await app.tap(find.text('Ключевые точки + Oracle'));
     await app.closeMenu();
     expect(app.savedEngine, RecognitionModel.keypoints.name);
     await app.reopenScanner();

@@ -81,6 +81,22 @@ external JSPromise<JSAny?> _chime(String sound);
 external void releaseBrowserPhoto(String file);
 @JS('kartoved.reload')
 external void reloadBrowser();
+
+String? browserInterfaceLanguage(String? code) {
+  const key = 'kartoved.interfaceLanguage';
+  try {
+    final storage = web.window.localStorage;
+    if (code != null) storage.setItem(key, code);
+    return code ?? storage.getItem(key);
+  } catch (_) {
+    return null;
+  }
+}
+
+void browserPageLanguage(String code) {
+  web.document.documentElement?.setAttribute('lang', code);
+}
+
 @JS('kartoved.offlineScanner')
 external JSPromise<JSBoolean> _offlineScanner(bool prepare);
 

@@ -12,6 +12,7 @@ class MainActivity : FlutterActivity() {
     private var chime: ScanChime? = null
     private val documents by lazy { Documents(this) }
     private val settings by lazy { getSharedPreferences("scanner", MODE_PRIVATE) }
+    private val interfaceSettings by lazy { getSharedPreferences("interface", MODE_PRIVATE) }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -26,6 +27,11 @@ class MainActivity : FlutterActivity() {
                     "warmTray" -> textReader.warmTray(reply)
                     "trayPhoto" -> textReader.trayPhoto(call, reply)
                     "readTrayText" -> textReader.readTrayText(call, reply)
+                    "interfaceLanguage" -> {
+                        val code = call.arguments as? String
+                        if (code != null) interfaceSettings.edit().putString("language", code).apply()
+                        reply.success(code ?: interfaceSettings.getString("language", null))
+                    }
                     "scannerGuide" -> {
                         val visible = call.arguments as? Boolean
                         if (visible != null) settings.edit().putBoolean("guide", visible).apply()

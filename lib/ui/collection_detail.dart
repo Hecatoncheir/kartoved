@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../collection_rows.dart';
 import '../data/catalog.dart';
 import '../model.dart';
@@ -59,9 +60,9 @@ class _CollectionDetailState extends State<CollectionDetail> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             duration: noticeDuration,
-            content: Text('Не удалось сохранить изменение'),
+            content: Text(context.strings.saveChangeFailed),
           ),
         );
       }
@@ -99,18 +100,20 @@ class _CollectionDetailState extends State<CollectionDetail> {
       SnackBar(
         duration: noticeDuration,
         persist: false,
-        content: Text('В «${result.folderName}» · ${result.quantity}'),
+        content: Text(
+          context.strings.movedCopies(result.folderName, result.quantity),
+        ),
         action: SnackBarAction(
-          label: 'Отменить',
+          label: context.strings.undo,
           onPressed: () async {
             try {
               await model.undoMove(receipt);
             } catch (_) {
               if (messenger.mounted) {
                 messenger.showSnackBar(
-                  const SnackBar(
+                  SnackBar(
                     duration: noticeDuration,
-                    content: Text('Не удалось отменить перемещение'),
+                    content: Text(context.strings.undoMoveFailed),
                   ),
                 );
               }
@@ -156,9 +159,9 @@ class _CollectionDetailState extends State<CollectionDetail> {
               spacing: 12,
               runSpacing: 4,
               children: [
-                const ExcludeSemantics(
+                ExcludeSemantics(
                   child: Text(
-                    'Экземпляров',
+                    context.strings.copies,
                     style: TextStyle(
                       fontFamily: headingFont,
                       fontSize: 18,
@@ -170,7 +173,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      tooltip: 'Убрать один экземпляр',
+                      tooltip: context.strings.subtractCopy,
                       onPressed: canRemove
                           ? () => _write(() => model.takeOne(selected))
                           : null,
@@ -180,7 +183,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                       child: Semantics(
                         container: true,
                         liveRegion: true,
-                        label: 'Экземпляров: $quantity',
+                        label: context.strings.copiesCount(quantity),
                         excludeSemantics: true,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -203,7 +206,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                           ? const BoxDecoration()
                           : libraryActionSurface,
                       child: IconButton(
-                        tooltip: 'Добавить один экземпляр',
+                        tooltip: context.strings.addCopy,
                         onPressed: saving
                             ? null
                             : () => _write(() => model.save(selected)),
@@ -223,7 +226,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                       ? () => _write(() => _move(model, quantity))
                       : null,
                   icon: const Icon(Icons.drive_file_move_outline),
-                  label: const Text('Переместить'),
+                  label: Text(context.strings.move),
                 ),
                 if (selected.needsPrinting)
                   TextButton.icon(
@@ -231,7 +234,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
                         ? () => _write(() => _resolve(model))
                         : null,
                     icon: const Icon(Icons.style_outlined),
-                    label: const Text('Уточнить издание экземпляра'),
+                    label: Text(context.strings.refineCopyPrinting),
                   ),
               ],
             ),
@@ -322,10 +325,10 @@ class _CollectionDetailState extends State<CollectionDetail> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(16, 14, 16, 4),
           child: Text(
-            'Варианты в альбоме',
+            context.strings.albumVariants,
             style: TextStyle(
               fontFamily: headingFont,
               fontWeight: FontWeight.w800,
@@ -357,7 +360,7 @@ class _CollectionDetailState extends State<CollectionDetail> {
   );
 
   String _printingLabel(Edition card) =>
-      '${card.detail}  ·  ${card.foil ? 'Фольга' : 'Обычная'}';
+      '${card.detail}  ·  ${card.foil ? context.strings.foil : context.strings.nonFoil}';
 
   @override
   Widget build(BuildContext context) => BlocBuilder<AppModel, LibraryState>(
@@ -387,7 +390,9 @@ class _CollectionDetailState extends State<CollectionDetail> {
               ),
               actions: [
                 IconButton(
-                  tooltip: flagged ? 'Снять флажок' : 'Поставить флажок',
+                  tooltip: flagged
+                      ? context.strings.removeFlag
+                      : context.strings.addFlag,
                   onPressed: saving || quantity == 0
                       ? null
                       : () => _write(() => model.setFlag(selected, !flagged)),

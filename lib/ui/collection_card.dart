@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../collection_rows.dart';
 import 'library_style.dart';
 import 'picture.dart';
@@ -135,8 +136,12 @@ class _CollectionCardState extends State<CollectionCard>
           children: [
             _Action(
               icon: widget.flagged ? Icons.flag_outlined : Icons.flag_rounded,
-              label: widget.flagged ? 'Снять' : 'Флажок',
-              tooltip: widget.flagged ? 'Снять флажок' : 'Поставить флажок',
+              label: widget.flagged
+                  ? context.strings.unflag
+                  : context.strings.flag,
+              tooltip: widget.flagged
+                  ? context.strings.removeFlag
+                  : context.strings.addFlag,
               accent: const Color(0xffffb569),
               scale: _actionScale(2 * progress - 1),
               onTap: () {
@@ -146,8 +151,8 @@ class _CollectionCardState extends State<CollectionCard>
             ),
             _Action(
               icon: Icons.delete_outline_rounded,
-              label: 'Убрать',
-              tooltip: 'Убрать из коллекции',
+              label: context.strings.remove,
+              tooltip: context.strings.removeFromCollection,
               accent: const Color(0xfffbcec0),
               scale: _actionScale(2 * progress),
               onTap: () {
@@ -306,10 +311,12 @@ class _Face extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final card = item.card;
-    final action = item.multiple ? 'Выбрать вариант' : 'Действия с картой';
+    final action = item.multiple
+        ? context.strings.chooseVariant
+        : context.strings.cardActions;
     final mark = item.multiple
-        ? 'есть отмеченные варианты'
-        : 'отмечена флажком';
+        ? context.strings.hasFlaggedVariants
+        : context.strings.flaggedCard;
     return Padding(
       padding: _facePadding,
       child: Row(
@@ -331,8 +338,11 @@ class _Face extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   item.multiple
-                      ? 'Варианты · ${item.variants.length}'
-                      : [card.detail, if (card.foil) 'Фольга'].join('  ·  '),
+                      ? context.strings.variantsCount(item.variants.length)
+                      : [
+                          card.detail,
+                          if (card.foil) context.strings.foil,
+                        ].join('  ·  '),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

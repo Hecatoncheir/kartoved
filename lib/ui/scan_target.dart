@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../data/catalog.dart';
 import '../data/scan_names.dart';
 import '../scan_cubit.dart';
@@ -35,12 +36,12 @@ class _ScanTargetsPageState extends State<ScanTargetsPage> {
 
   @override
   Widget build(BuildContext context) => LookupPage(
-    title: 'Искомые карты',
+    title: context.strings.targetCards,
     scanner: true,
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('Готово'),
+        child: Text(context.strings.done),
       ),
     ],
     header: _searchField(),
@@ -61,13 +62,13 @@ class _ScanTargetsPageState extends State<ScanTargetsPage> {
     onChanged: search.search,
     decoration: InputDecoration(
       prefixIcon: const Icon(Icons.search),
-      labelText: 'Название карты',
+      labelText: context.strings.cardName,
       suffixIcon: ValueListenableBuilder(
         valueListenable: text,
         builder: (context, value, child) => value.text.isEmpty
             ? const SizedBox.shrink()
             : IconButton(
-                tooltip: 'Очистить поиск',
+                tooltip: context.strings.clearSearch,
                 icon: const Icon(Icons.close),
                 onPressed: _clearSearch,
               ),
@@ -81,7 +82,7 @@ class _ScanTargetsPageState extends State<ScanTargetsPage> {
       return Center(
         child: TextButton(
           onPressed: () => search.search(search.query),
-          child: const Text('Повторить поиск'),
+          child: Text(context.strings.retrySearch),
         ),
       );
     }
@@ -93,7 +94,7 @@ class _ScanTargetsPageState extends State<ScanTargetsPage> {
     }
     final names = state.data ?? const [];
     if (names.isEmpty) {
-      return const LookupHint(Icons.search_off_rounded, 'Совпадений нет');
+      return LookupHint(Icons.search_off_rounded, context.strings.noMatches);
     }
     return ListView.builder(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -105,7 +106,10 @@ class _ScanTargetsPageState extends State<ScanTargetsPage> {
           title: Text(name),
           selected: selected,
           trailing: selected
-              ? const Tooltip(message: 'Уже в списке', child: Icon(Icons.check))
+              ? Tooltip(
+                  message: context.strings.alreadyInList,
+                  child: Icon(Icons.check),
+                )
               : const Icon(Icons.add),
           onTap: selected
               ? null
@@ -120,9 +124,9 @@ class _ScanTargetsPageState extends State<ScanTargetsPage> {
 
   Widget _selected(Set<String> targets) {
     if (targets.isEmpty) {
-      return const LookupHint(
+      return LookupHint(
         Icons.saved_search_rounded,
-        'Введите название карты, чтобы добавить её',
+        context.strings.enterTargetName,
       );
     }
     final names = targets.toList();
@@ -135,7 +139,7 @@ class _ScanTargetsPageState extends State<ScanTargetsPage> {
           key: ValueKey(name),
           title: Text(name),
           trailing: IconButton(
-            tooltip: 'Убрать из поиска: $name',
+            tooltip: context.strings.removeTarget(name),
             icon: const Icon(Icons.remove_circle_outline),
             onPressed: () => widget.scan.removeTarget(name),
           ),

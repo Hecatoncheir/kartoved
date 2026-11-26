@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../data/backup.dart';
 import '../model.dart';
 import 'library_style.dart';
@@ -26,8 +27,14 @@ class _BackupPanelState extends State<BackupPanel> {
     });
     try {
       await action();
-    } on FormatException catch (error) {
-      message = error.message;
+    } on BackupFormatException catch (error) {
+      if (!mounted) return;
+      message = switch (error.issue) {
+        BackupFormatIssue.damaged => context.strings.invalidBackup,
+        BackupFormatIssue.wrongFile => context.strings.wrongBackupFile,
+        BackupFormatIssue.unsupportedVersion =>
+          context.strings.unsupportedBackup,
+      };
     } catch (_) {
       message = failure;
     } finally {
@@ -36,18 +43,20 @@ class _BackupPanelState extends State<BackupPanel> {
   }
 
   Future<void> _save() => _run(() async {
-    if (await widget.model.saveBackup()) message = 'Копия сохранена';
-  }, 'Не удалось сохранить копию. Проверьте место на диске и повторите.');
+    if (await widget.model.saveBackup() && mounted) {
+      message = context.strings.backupSaved;
+    }
+  }, context.strings.backupSaveFailed);
 
   Future<void> _open() => _run(() async {
     preview = await widget.model.openBackup();
-  }, 'Не удалось прочитать файл. Выберите его ещё раз.');
+  }, context.strings.backupReadFailed);
 
   Future<void> _restore(LibraryBackup backup) => _run(() async {
     await widget.model.restoreBackup(backup);
     preview = null;
-    message = 'Коллекции восстановлены';
-  }, 'Не удалось восстановить коллекции');
+    if (mounted) message = context.strings.collectionsRestored;
+  }, context.strings.backupRestoreFailed);
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
@@ -56,7 +65,9 @@ class _BackupPanelState extends State<BackupPanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SheetHeading(
-          preview == null ? 'Резервная копия' : 'Восстановить коллекции?',
+          preview == null
+              ? context.strings.backup
+              : context.strings.restoreCollectionsQuestion,
         ),
         const SizedBox(height: 12),
         if (preview case final backup?) ...[
@@ -64,12 +75,16 @@ class _BackupPanelState extends State<BackupPanel> {
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Text(
-                'Коллекций: ${backup.folders.length}  ·  Карт: ${backup.copies}  ·  На проверке: ${backup.pending}',
+                context.strings.backupSummary(
+                  backup.folders.length,
+                  backup.copies,
+                  backup.pending,
+                ),
               ),
             ),
           ),
           const SizedBox(height: 10),
-          const Text('Текущие коллекции будут заменены данными из файла.'),
+          Text(context.strings.backupReplaceWarning),
           const SizedBox(height: 16),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -77,19 +92,19 @@ class _BackupPanelState extends State<BackupPanel> {
               foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             onPressed: busy ? null : () => _restore(backup),
-            child: const Text('Заменить коллекции'),
+            child: Text(context.strings.replaceCollections),
           ),
           TextButton(
             onPressed: busy ? null : () => setState(() => preview = null),
-            child: const Text('Отмена'),
+            child: Text(context.strings.cancel),
           ),
         ] else ...[
           LibraryGlass(
             radius: 16,
             child: ListTile(
               leading: const Icon(Icons.save_alt_rounded),
-              title: const Text('Сохранить в файл'),
-              subtitle: const Text('Все коллекции и карты на проверке'),
+              title: Text(context.strings.saveToFile),
+              subtitle: Text(context.strings.backupContents),
               onTap: busy ? null : _save,
               trailing: const Icon(Icons.chevron_right),
             ),
@@ -99,7 +114,7 @@ class _BackupPanelState extends State<BackupPanel> {
             radius: 16,
             child: ListTile(
               leading: const Icon(Icons.restore_rounded),
-              title: const Text('Восстановить из файла'),
+              title: Text(context.strings.restoreFromFile),
               onTap: busy ? null : _open,
               trailing: const Icon(Icons.chevron_right),
             ),

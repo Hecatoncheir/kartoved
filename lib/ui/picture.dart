@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/catalog.dart';
 import '../data/pictures.dart';
 import 'library_style.dart';
+import '../l10n/strings.dart';
 import 'card_tilt.dart';
 
 class CardPicture extends StatefulWidget {
@@ -88,8 +89,12 @@ class _CardPictureState extends State<CardPicture> {
       child: widget.large ? _image(large, _thumbnail) : _thumbnail(),
     );
     return Semantics(
-      label:
-          '${widget.card.name}, ${widget.card.detail}${widget.card.foil ? ', фольга' : ''}',
+      label: widget.card.foil
+          ? context.strings.foilCardDescription(
+              widget.card.name,
+              widget.card.detail,
+            )
+          : '${widget.card.name}, ${widget.card.detail}',
       image: true,
       child: widget.tilt
           ? TiltCard(slot: widget.slot, foil: widget.card.foil, child: picture)

@@ -19,10 +19,23 @@
   <noscript>Включите JavaScript, чтобы открыть Картовед.</noscript>
   <script type="module">
     import './browser.mjs';
-    addEventListener('flutter-first-frame', () => document.getElementById('loading').remove(), {once: true});
+    const strings = new Map([
+      ['ru', ['Картовед', 'Картовед загружается…', 'Не удалось загрузить Картовед. Обновите страницу.']],
+      ['zh', ['卡牌通', '正在加载卡牌通…', '无法加载卡牌通。请刷新页面。']],
+      ['en', ['Kartoved', 'Loading Kartoved…', 'Could not load Kartoved. Reload the page.']],
+    ]);
+    let savedLanguage;
+    try { savedLanguage = localStorage.getItem('kartoved.interfaceLanguage'); } catch {}
+    const language = strings.has(savedLanguage) ? savedLanguage : 'ru';
+    const [title, loading, loadError] = strings.get(language);
+    document.documentElement.lang = language;
+    document.title = title;
+    const status = document.getElementById('loading');
+    status.textContent = loading;
+    addEventListener('flutter-first-frame', () => status.remove(), {once: true});
     const bootstrap = document.createElement('script');
     bootstrap.src = 'flutter_bootstrap.js';
-    bootstrap.onerror = () => document.getElementById('loading').textContent = 'Не удалось загрузить Картовед. Обновите страницу.';
+    bootstrap.onerror = () => status.textContent = loadError;
     document.body.append(bootstrap);
   </script>
 </body>

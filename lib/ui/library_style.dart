@@ -71,7 +71,6 @@ class LibraryActionButton extends StatelessWidget {
     ),
   );
 }
-
 class LibraryGlass extends StatelessWidget {
   const LibraryGlass({
     super.key,
@@ -124,16 +123,3 @@ class LibraryGlass extends StatelessWidget {
     );
   }
 }
-
-String _quantity(int count, String one, String few, String many) {
-  final word = switch ((count % 100, count % 10)) {
-    (>= 11 && <= 14, _) => many,
-    (_, 1) => one,
-    (_, >= 2 && <= 4) => few,
-    _ => many,
-  };
-  return '$count $word';
-}
-
-String albumCount(int n) => _quantity(n, 'альбом', 'альбома', 'альбомов');
-String cardCount(int n) => _quantity(n, 'карта', 'карты', 'карт');

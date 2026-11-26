@@ -1,0 +1,608 @@
+{
+  "@@locale": "ru",
+  "appTitle": "Картовед",
+  "interfaceLanguage": "Язык интерфейса",
+  "library": "Библиотека",
+  "createCollection": "Создать коллекцию",
+  "findCard": "Найти карту",
+  "backupSaved": "Копия сохранена",
+  "backupSaveFailed": "Не удалось сохранить копию. Проверьте место на диске и повторите.",
+  "backupReadFailed": "Не удалось прочитать файл. Выберите его ещё раз.",
+  "collectionsRestored": "Коллекции восстановлены",
+  "backupRestoreFailed": "Не удалось восстановить коллекции",
+  "backup": "Резервная копия",
+  "restoreCollectionsQuestion": "Восстановить коллекции?",
+  "backupSummary": "Коллекций: {collections}  ·  Карт: {cards}  ·  На проверке: {pending}",
+  "@backupSummary": {
+    "placeholders": {
+      "collections": {
+        "type": "int"
+      },
+      "cards": {
+        "type": "int"
+      },
+      "pending": {
+        "type": "int"
+      }
+    }
+  },
+  "backupReplaceWarning": "Текущие коллекции будут заменены данными из файла.",
+  "replaceCollections": "Заменить коллекции",
+  "cancel": "Отмена",
+  "saveToFile": "Сохранить в файл",
+  "backupContents": "Все коллекции и карты на проверке",
+  "restoreFromFile": "Восстановить из файла",
+  "invalidBackup": "Файл резервной копии повреждён",
+  "wrongBackupFile": "Выберите резервную копию Картоведа",
+  "unsupportedBackup": "Эта версия формата не поддерживается",
+  "trayAutoScan": "Автоскан в лотке",
+  "fastScan": "Быстрый",
+  "regularAutoScan": "Обычный автоскан",
+  "inTray": "В лотке",
+  "autoScan": "Автоскан",
+  "chooseAutoScanMode": "Выбрать режим автоскана",
+  "autoScanMode": "Режим автоскана",
+  "trayModeDescription": "Card Slinger · фиксированная область",
+  "fastModeDescription": "В лотке · добавление по первому уверенному кадру",
+  "regularModeDescription": "Для карт в руке · выравнивание кадра",
+  "batchLanguage": "Язык стопки",
+  "findLanguage": "Найти язык",
+  "batchEdition": "Издание стопки",
+  "findSetCode": "Найти код издания",
+  "automatic": "Авто",
+  "retryLoading": "Повторить загрузку",
+  "noMatchesShort": "Нет совпадений",
+  "clearSearch": "Очистить поиск",
+  "positiveIntegerRequired": "Введите целое число от 1",
+  "quantityTooLarge": "Слишком большое количество",
+  "onlyAvailable": "Доступно только {count}",
+  "@onlyAvailable": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "foil": "Фольга",
+  "nonFoil": "Обычная",
+  "close": "Закрыть",
+  "collection": "Коллекция",
+  "quantity": "Количество",
+  "decreaseQuantity": "Уменьшить количество",
+  "increaseQuantity": "Увеличить количество",
+  "newCollectionName": "Название новой коллекции",
+  "selectAllCount": "Выбрать все ({count})",
+  "@selectAllCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "foilOnly": "Только фольга",
+  "addToCollection": "В коллекцию",
+  "createAndMove": "Создать и переместить",
+  "move": "Переместить",
+  "openScryfall": "Открыть в Scryfall",
+  "scryfallLinkCopied": "Ссылка на Scryfall скопирована",
+  "loadingCardRules": "Загрузка текста и правил карты",
+  "cardRulesUnavailable": "Текст и правила карты недоступны",
+  "scryfallFirstLoad": "Для первой загрузки понадобится подключение к Scryfall.",
+  "scryfallData": "Данные Scryfall",
+  "currentOracleText": "Актуальный текст Oracle",
+  "rarityCommon": "обычная",
+  "rarityUncommon": "необычная",
+  "rarityRare": "редкая",
+  "rarityMythic": "мифическая",
+  "raritySpecial": "особая",
+  "rarityBonus": "бонусная",
+  "setName": "Выпуск · {name}",
+  "@setName": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "rarity": "Редкость · {name}",
+  "@rarity": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "manaValue": "Мановая ценность · {value}",
+  "@manaValue": {
+    "placeholders": {
+      "value": {
+        "type": "Object"
+      }
+    }
+  },
+  "artist": "Художник · {name}",
+  "@artist": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "rulingsUnavailable": "Разъяснения правил недоступны",
+  "rulingsCount": "Разъяснения правил · {count}",
+  "@rulingsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "formatLegal": "Разрешена",
+  "formatNotLegal": "Недоступна",
+  "formatRestricted": "Ограничена",
+  "formatBanned": "Запрещена",
+  "formatLegality": "Допуск в форматах",
+  "languageRussian": "Русский",
+  "languageEnglish": "Английский",
+  "languageGerman": "Немецкий",
+  "languageFrench": "Французский",
+  "languageSpanish": "Испанский",
+  "languageItalian": "Итальянский",
+  "languagePortuguese": "Португальский",
+  "languageJapanese": "Японский",
+  "languageKorean": "Корейский",
+  "languageChineseSimplified": "Китайский (упрощённый)",
+  "languageChineseTraditional": "Китайский (традиционный)",
+  "searchCards": "Поиск карт",
+  "cardName": "Название карты",
+  "catalog": "Каталог",
+  "myCards": "Мои карты",
+  "retrySearch": "Повторить поиск",
+  "enterCardName": "Введите название карты",
+  "noMatches": "Совпадений нет",
+  "refineName": "Уточните название, чтобы сузить поиск",
+  "noCollectionMatches": "В коллекциях совпадений нет",
+  "addedToCollection": "Добавлено в «{folder}» · {count}",
+  "@addedToCollection": {
+    "placeholders": {
+      "folder": {
+        "type": "Object"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "addCardFailed": "Не удалось добавить карту",
+  "printingNumberOrCode": "Издание, номер или код языка",
+  "retryPrintings": "Загрузить издания ещё раз",
+  "createCollectionFirst": "Чтобы добавлять карты, создайте коллекцию на главном экране.",
+  "selectReviewAlbum": "В каком альбоме проверить карты?",
+  "cardDatabase": "База карт",
+  "pendingCount": "На проверке · {count}",
+  "@pendingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "retryLibraryError": "{error}. Повторить",
+  "@retryLibraryError": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "openCollectionsFailed": "Не удалось открыть коллекции",
+  "loadCatalogFailed": "Не удалось подготовить базу карт",
+  "noAlbums": "Пока нет альбомов. Создайте первый кнопкой «+».",
+  "recentlyAdded": "Недавно добавленные",
+  "allCards": "Все карты",
+  "albums": "Альбомы",
+  "scanner": "Сканер",
+  "scanCard": "Сканировать карту",
+  "noRecentAdditions": "Подтверждённые карты появятся здесь",
+  "saveFlagFailed": "Не удалось сохранить флажок",
+  "removedCopies": "Убрано: {name} ×{count}",
+  "@removedCopies": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "undo": "Отменить",
+  "restoreCardFailed": "Не удалось вернуть карту",
+  "removeCardFailed": "Не удалось убрать карту",
+  "moxfieldExport": "Экспорт для Moxfield",
+  "includePending": "Включить карты на проверке",
+  "pendingExportExplanation": "Снимков на проверке — {count}. Для них в CSV попадут предварительные результаты распознавания.",
+  "@pendingExportExplanation": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "export": "Экспортировать",
+  "entireCollection": "Вся коллекция",
+  "flaggedOnly": "Только отмеченные",
+  "reviewCards": "Проверить карты",
+  "saveCsvFailed": "Не удалось сохранить CSV",
+  "collectionStats": "Названий · {names}\nФольга · {foils}",
+  "@collectionStats": {
+    "placeholders": {
+      "names": {
+        "type": "int"
+      },
+      "foils": {
+        "type": "int"
+      }
+    }
+  },
+  "noCardsYet": "Пока нет карт",
+  "cardsAwaitingReview": "Карты ожидают проверки",
+  "closeSearch": "Закрыть поиск",
+  "groupByName": "Группировать по названию",
+  "showAllCards": "Показать все карты",
+  "noFlaggedCards": "Нет отмеченных карт",
+  "unflag": "Снять",
+  "flag": "Флажок",
+  "removeFlag": "Снять флажок",
+  "addFlag": "Поставить флажок",
+  "remove": "Убрать",
+  "removeFromCollection": "Убрать из коллекции",
+  "chooseVariant": "Выбрать вариант",
+  "cardActions": "Действия с картой",
+  "hasFlaggedVariants": "есть отмеченные варианты",
+  "flaggedCard": "отмечена флажком",
+  "variantsCount": "Варианты · {count}",
+  "@variantsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "saveChangeFailed": "Не удалось сохранить изменение",
+  "movedCopies": "В «{folder}» · {count}",
+  "@movedCopies": {
+    "placeholders": {
+      "folder": {
+        "type": "Object"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "undoMoveFailed": "Не удалось отменить перемещение",
+  "copies": "Экземпляров",
+  "subtractCopy": "Убрать один экземпляр",
+  "copiesCount": "Экземпляров: {count}",
+  "@copiesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "addCopy": "Добавить один экземпляр",
+  "refineCopyPrinting": "Уточнить издание экземпляра",
+  "albumVariants": "Варианты в альбоме",
+  "changeCollectionFailed": "Не удалось изменить коллекцию. Попробуйте ещё раз.",
+  "collectionDeleted": "Коллекция «{folder}» удалена",
+  "@collectionDeleted": {
+    "placeholders": {
+      "folder": {
+        "type": "Object"
+      }
+    }
+  },
+  "cardsTransferred": "Карты перенесены в «{folder}»",
+  "@cardsTransferred": {
+    "placeholders": {
+      "folder": {
+        "type": "Object"
+      }
+    }
+  },
+  "collectionActions": "Действия с коллекцией",
+  "rename": "Переименовать",
+  "moveCardsAndDelete": "Перенести карты и удалить",
+  "deleteCollection": "Удалить коллекцию",
+  "deleteWithCards": "Удалить вместе с картами",
+  "newCollection": "Новая коллекция",
+  "renameCollection": "Переименовать коллекцию",
+  "name": "Название",
+  "create": "Создать",
+  "save": "Сохранить",
+  "deleteNamedCollection": "Удалить «{folder}»?",
+  "@deleteNamedCollection": {
+    "placeholders": {
+      "folder": {
+        "type": "Object"
+      }
+    }
+  },
+  "deleteCollectionStats": "Экземпляров: {count} · На проверке: {pending}",
+  "@deleteCollectionStats": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "pending": {
+        "type": "int"
+      }
+    }
+  },
+  "moveCollectionWarning": "Все карты, включая ожидающие проверки, будут перенесены.",
+  "moveDestination": "Куда перенести",
+  "deleteEmptyCollectionWarning": "Пустая коллекция будет удалена.",
+  "deleteAllCollectionWarning": "Все экземпляры и карты на проверке будут удалены без возможности отмены.",
+  "delete": "Удалить",
+  "moveAndDelete": "Перенести и удалить",
+  "printingAndLanguage": "Издание и язык",
+  "printingNumberOrLanguage": "Издание, номер или язык",
+  "noPrintingsForCard": "Для этой карты нет доступных изданий",
+  "foilCardDescription": "{name}, {printing}, фольга",
+  "@foilCardDescription": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      },
+      "printing": {
+        "type": "Object"
+      }
+    }
+  },
+  "cameraUnavailable": "Камера недоступна",
+  "allowCameraAccess": "Разрешите доступ к камере",
+  "switchCameraStreamFailed": "Не удалось переключить поток камеры",
+  "autoScanStopped": "Автоскан остановлен. Попробуйте ещё раз.",
+  "addedScan": "Учтено в «{folder}»",
+  "@addedScan": {
+    "placeholders": {
+      "folder": {
+        "type": "Object"
+      }
+    }
+  },
+  "printingUnconfirmed": "Издание не уточнено",
+  "pendingReason": "На проверке · {reason}",
+  "@pendingReason": {
+    "placeholders": {
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "cardNotFound": "Карта не найдена",
+  "processPhotoFailed": "Не удалось обработать снимок",
+  "scanActionFailed": "Не удалось выполнить действие. Попробуйте ещё раз.",
+  "torchUnavailable": "Фонарь недоступен",
+  "searchingForCard": "Ищу · {name}",
+  "@searchingForCard": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "searchingForCards": "Ищу · карт: {count}",
+  "@searchingForCards": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "essentialsOnly": "Только необходимое",
+  "keypoints": "Ключевые точки",
+  "tray": "Лоток",
+  "warmingScanModels": "{mode} · загрузка моделей",
+  "@warmingScanModels": {
+    "placeholders": {
+      "mode": {
+        "type": "Object"
+      }
+    }
+  },
+  "alignCardInTray": "{mode} · положите карту ровно",
+  "@alignCardInTray": {
+    "placeholders": {
+      "mode": {
+        "type": "Object"
+      }
+    }
+  },
+  "backToCollection": "К коллекции",
+  "scannerMenu": "Меню сканера",
+  "fromPhoto": "Из фото",
+  "addCard": "Добавить карту",
+  "takeNewPhoto": "Сделать новый снимок",
+  "undoLastAddition": "Отменить последнее добавление",
+  "rescanPendingCard": "Пересъёмка спорной карты",
+  "repeatCountdown": "{outcome} · Повтор через {seconds} с",
+  "@repeatCountdown": {
+    "placeholders": {
+      "outcome": {
+        "type": "Object"
+      },
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "openingCamera": "Открытие камеры…",
+  "batchAndRecognition": "Стопка и распознавание",
+  "recognitionModel": "Модель распознавания",
+  "consecutiveScan": "Одинаковые подряд",
+  "englishNameFirst": "Сначала английское название",
+  "repeatSameCard": "В лотке — ещё одна копия через 2 с",
+  "frameAndGlass": "Рамка и стекло",
+  "torch": "Фонарь",
+  "targetCards": "Искомые карты",
+  "noTargetsSelected": "Не выбраны",
+  "targetsSelected": "Выбрано: {count}",
+  "@targetsSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recalibrateTray": "Откалибровать лоток заново",
+  "oracleModelDescription": "Каталог Картоведа",
+  "mtgModelDescription": "Уточняет близкие совпадения Oracle по галерее автора",
+  "keypointModelDescription": "Сверяет варианты Oracle с изображениями Scryfall",
+  "keypointsModel": "Ключевые точки + Oracle",
+  "back": "Назад",
+  "closeMenu": "Закрыть меню",
+  "scanDestination": "В какой альбом сканировать?",
+  "saveReviewFailed": "Не удалось сохранить решение",
+  "allCardsReviewed": "Все карты проверены",
+  "backToAlbum": "К альбому",
+  "rescan": "Переснять",
+  "rescanNamedCard": "Переснять {name}",
+  "@rescanNamedCard": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "batchDetails": "Стопка · {batch}",
+  "@batchDetails": {
+    "placeholders": {
+      "batch": {
+        "type": "Object"
+      }
+    }
+  },
+  "detailFoil": "{printing} · Фольга",
+  "@detailFoil": {
+    "placeholders": {
+      "printing": {
+        "type": "Object"
+      }
+    }
+  },
+  "detailFoilOnly": "{language} · Только фольга",
+  "@detailFoilOnly": {
+    "placeholders": {
+      "language": {
+        "type": "Object"
+      }
+    }
+  },
+  "confirm": "Подтвердить",
+  "removeFromQueue": "Убрать из очереди",
+  "requiresReview": "Требует проверки",
+  "reviewSimilarArt": "Похожие рисунки",
+  "reviewLanguage": "Уточните язык",
+  "reviewPrinting": "Уточните издание",
+  "reviewBatchMismatch": "Расхождение с настройками стопки",
+  "scanCardOutline": "Контур карты",
+  "scanReadingTitle": "Читаю название",
+  "scanCheckingArtwork": "Сверяю иллюстрацию",
+  "scanCheckingDetails": "Сверяю детали карты",
+  "scanReadingFooter": "Читаю нижнюю строку",
+  "scanCheckingText": "Уточняю по тексту",
+  "done": "Готово",
+  "alreadyInList": "Уже в списке",
+  "enterTargetName": "Введите название карты, чтобы добавить её",
+  "removeTarget": "Убрать из поиска: {name}",
+  "@removeTarget": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "scanResult": "Результат",
+  "ownedCount": "В коллекциях · {count}",
+  "@ownedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "otherMatches": "Другие совпадения",
+  "textAndRules": "Текст и правила",
+  "downloadingScannerFiles": "Загружаются файлы сканера…",
+  "saveScannerFilesFailed": "Не удалось сохранить файлы. Проверьте соединение и свободное место, затем повторите.",
+  "databaseUpdated": "База обновлена",
+  "databaseUpToDate": "Установлена последняя версия",
+  "databaseUpdateFailed": "Не удалось обновить. Сохранённая база доступна.",
+  "artworkCount": "{count} иллюстраций",
+  "@artworkCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "offlineDatabaseDate": "От {day}.{month}.{year} · доступна офлайн",
+  "@offlineDatabaseDate": {
+    "placeholders": {
+      "month": {
+        "type": "Object"
+      },
+      "day": {
+        "type": "Object"
+      },
+      "year": {
+        "type": "int"
+      }
+    }
+  },
+  "scannerOfflineReady": "Сканер готов к работе без сети",
+  "prepareOfflineScanner": "Подготовить сканер без сети",
+  "offlineSetThumbnails": "Миниатюры выпуска офлайн",
+  "updating": "Обновление…",
+  "reloadPage": "Обновить страницу",
+  "checkUpdates": "Проверить обновления",
+  "findingPrintings": "Поиск изданий…",
+  "downloadProgress": "{done} из {total}",
+  "@downloadProgress": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "setLanguageNotFound": "Выпуск на этом языке не найден",
+  "thumbnailsSaved": "Миниатюры сохранены",
+  "downloadInterrupted": "Загрузка прервана. Можно продолжить.",
+  "setThumbnails": "Миниатюры выпуска",
+  "setCode": "Код выпуска",
+  "cardLanguage": "Язык",
+  "download": "Скачать",
+  "albumCount": "{count, plural, one{{count} альбом} few{{count} альбома} other{{count} альбомов}}",
+  "@albumCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cardCount": "{count, plural, one{{count} карта} few{{count} карты} other{{count} карт}}",
+  "@cardCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "flaggedExportSuffix": "Отмеченные"
+}

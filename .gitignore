@@ -46,6 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+/lib/l10n/generated/
 
 /integration_test/generated_acceptance_test.dart
 /tool/web/node_modules/

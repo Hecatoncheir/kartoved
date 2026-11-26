@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../data/catalog.dart';
 import 'style.dart';
 
@@ -13,7 +14,7 @@ class ScanDestination extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const SheetHeading('В какой альбом сканировать?'),
+      SheetHeading(context.strings.scanDestination),
       const SizedBox(height: 12),
       Flexible(
         child: ListView.builder(

@@ -9,6 +9,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../data/android.dart';
 import '../data/browser.dart';
 import '../data/card_reference.dart';
@@ -23,6 +24,7 @@ import '../scan_processing.dart';
 import 'auto_scan_controls.dart';
 import 'scanner_menu.dart';
 import 'scanner_style.dart';
+import 'scanner_strings.dart';
 import 'scan_destination.dart';
 import 'scan_frame.dart';
 import 'scan_outline.dart';
@@ -41,13 +43,15 @@ class Scanner extends StatefulWidget {
   State<Scanner> createState() => _ScannerState();
 }
 
+enum _CameraError { unavailable, access }
+
 class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   final scan = ScanCubit();
   final clock = Stopwatch()..start();
   CameraController? camera;
   Future<XFile>? _webCapture;
   Timer? _webFrames;
-  String? error;
+  _CameraError? error;
   bool reading = false, modal = false, writing = false;
   int _pendingUndos = 0;
   bool _modelSelected = false, _guideChosen = false, _settingTorch = false;
@@ -173,7 +177,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       Object e,
     ) {
       if (mounted && token == epoch) {
-        setState(() => error = 'Камера недоступна');
+        setState(() => error = _CameraError.unavailable);
       }
     });
   }
@@ -223,8 +227,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       if (mounted && token == epoch) {
         setState(
           () => error = e.code.contains('Access')
-              ? 'Разрешите доступ к камере'
-              : 'Камера недоступна',
+              ? _CameraError.access
+              : _CameraError.unavailable,
         );
       }
     }
@@ -294,7 +298,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       if (!mounted) return;
       scan.setMode(ScanMode.manual);
       _sweep(false);
-      message('Не удалось переключить поток камеры');
+      message(context.strings.switchCameraStreamFailed);
     });
   }
 
@@ -480,7 +484,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     if (accepts(token)) {
       if (scan.state.mode == ScanMode.fast) _stopPreviewWorker();
       _setMode(ScanMode.manual);
-      message('Автоскан остановлен. Попробуйте ещё раз.');
+      message(context.strings.autoScanStopped);
     } else if (_acceptsFrame(token)) {
       _observeOutline(const [], Size.zero, mirror: false);
     }
@@ -700,11 +704,14 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
           .where((entry) => entry.sequence == sequence)
           .firstOrNull
           ?.card;
-      final note = card?.needsPrinting == true ? ' · Издание не уточнено' : '';
-      return 'Учтено в «${library.state.title}»$note';
+      final saved = context.strings.addedScan(library.state.title);
+      return card?.needsPrinting == true
+          ? '$saved · ${context.strings.printingUnconfirmed}'
+          : saved;
     }
     final batch = review.batchLabel;
-    return 'На проверке · ${review.reason.label}${batch.isEmpty ? '' : ' ($batch)'}';
+    final pending = context.strings.pendingReason(review.reason.label(context));
+    return batch.isEmpty ? pending : '$pending ($batch)';
   }
 
   Future<void> _loadScannedCardDetails(Edition card) async {
@@ -748,9 +755,9 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       engine: previous == null ? engine : scan.state.model,
       onProgress: onProgress,
     );
-    if (!active) return;
+    if (!mounted || !active) return;
     if (matches.isEmpty) {
-      message('Карта не найдена');
+      message(context.strings.cardNotFound);
       return;
     }
     if (live) _sweep(true);
@@ -845,7 +852,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       if (file == null || !active) return;
       await _recognize(file, live: !gallery, previous: previous);
     } catch (e) {
-      message('Не удалось обработать снимок');
+      if (mounted) message(context.strings.processPhotoFailed);
     } finally {
       if (!gallery || kIsWeb) await _discard(file);
       if (mounted) {
@@ -882,7 +889,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     if (!mounted || !active || variants.isEmpty) return;
     final edition = await showGlassSheet<Edition>(
       context,
-      ResultSheet([Match(variants)], entry.card, action: 'Сохранить'),
+      ResultSheet([Match(variants)], entry.card, action: context.strings.save),
     );
     if (edition != null && active) {
       await library.replace(entry, edition);
@@ -898,7 +905,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     try {
       await action();
     } catch (_) {
-      message('Не удалось выполнить действие. Попробуйте ещё раз.');
+      if (mounted) message(context.strings.scanActionFailed);
     } finally {
       if (mounted) setState(() => modal = false);
     }
@@ -998,7 +1005,9 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         scan.setLight(turnOn ? ScanLight.on : ScanLight.off);
       }
     } catch (_) {
-      if (mounted && identical(c, camera)) message('Фонарь недоступен');
+      if (mounted && identical(c, camera)) {
+        message(context.strings.torchUnavailable);
+      }
     } finally {
       _settingTorch = false;
     }
@@ -1006,23 +1015,25 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
 
   String? get _targetLabel => switch (scan.state.targets.length) {
     0 => null,
-    1 => 'Ищу · ${scan.state.targets.single}',
-    final count => 'Ищу · карт: $count',
+    1 => context.strings.searchingForCard(scan.state.targets.single),
+    final count => context.strings.searchingForCards(count),
   };
 
   String? get _modelLabel {
     final model = essentials
-        ? 'Только необходимое'
+        ? context.strings.essentialsOnly
         : switch (scan.state.model) {
             RecognitionModel.oracle => 'Oracle',
             RecognitionModel.mtgIdentification => 'MTG + Oracle',
-            RecognitionModel.keypoints => 'Ключевые точки',
+            RecognitionModel.keypoints => context.strings.keypoints,
           };
     if (scan.state.mode.usesTray) {
-      final mode = scan.state.mode == ScanMode.fast ? 'Быстрый' : 'Лоток';
-      if (_warmingTray != null) return '$mode · загрузка моделей';
+      final mode = scan.state.mode == ScanMode.fast
+          ? context.strings.fastScan
+          : context.strings.tray;
+      if (_warmingTray != null) return context.strings.warmingScanModels(mode);
       return _trayArea == null
-          ? '$mode · положите карту ровно'
+          ? context.strings.alignCardInTray(mode)
           : '$mode · $model';
     }
     return engine == RecognitionModel.oracle && !essentials ? null : model;
@@ -1031,16 +1042,16 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   Widget _header() => Row(
     children: [
       IconButton(
-        tooltip: 'К коллекции',
+        tooltip: context.strings.backToCollection,
         onPressed: () => Navigator.maybePop(context),
         icon: const Icon(Icons.arrow_back, color: scanPaper),
       ),
       const Mark(size: 26, color: scanPaper),
       const SizedBox(width: 8),
-      const Expanded(
+      Expanded(
         child: Text(
-          'Картовед',
-          style: TextStyle(
+          context.strings.appTitle,
+          style: const TextStyle(
             fontFamily: headingFont,
             fontSize: 24,
             fontWeight: FontWeight.w900,
@@ -1051,7 +1062,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       ScanSurface(
         radius: 14,
         child: IconButton(
-          tooltip: 'Меню сканера',
+          tooltip: context.strings.scannerMenu,
           onPressed: modal || writing ? null : _menu,
           icon: Icon(
             Icons.tune,
@@ -1072,13 +1083,13 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         children: [
           _DockAction(
             Icons.photo_library_outlined,
-            'Из фото',
+            context.strings.fromPhoto,
             modal ? null : () => _manual(gallery: true),
           ),
           IconButton.filled(
             tooltip: widget.rescan == null
-                ? 'Добавить карту'
-                : 'Сделать новый снимок',
+                ? context.strings.addCard
+                : context.strings.takeNewPhoto,
             style: IconButton.styleFrom(
               backgroundColor: scanOrange,
               foregroundColor: scanInk,
@@ -1107,7 +1118,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         target ??
         entries.where((e) => e.sequence == scan.state.lastScan).firstOrNull;
     final status = [
-      ?((scan.state.showGuide ? _focus?.$1.label : null) ?? _modelLabel),
+      ?((scan.state.showGuide ? _focus?.$1.label(context) : null) ??
+          _modelLabel),
       ?_targetLabel,
       if (scan.state.batch.active) scan.state.batch.label,
     ].join('  ·  ');
@@ -1169,7 +1181,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                   ),
                   if (scan.state.lastAdded != null)
                     IconButton(
-                      tooltip: 'Отменить последнее добавление',
+                      tooltip: context.strings.undoLastAddition,
                       onPressed: _canUndo ? _undo : null,
                       icon: const Icon(Icons.undo, color: scanPaper),
                     ),
@@ -1194,9 +1206,12 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                 ),
                 Text(
                   target != null
-                      ? 'Пересъёмка спорной карты'
+                      ? context.strings.rescanPendingCard
                       : scan.state.repeatSeconds > 0
-                      ? '${_outcome(displayed.sequence)} · Повтор через ${scan.state.repeatSeconds} с'
+                      ? context.strings.repeatCountdown(
+                          _outcome(displayed.sequence),
+                          scan.state.repeatSeconds,
+                        )
                       : _outcome(displayed.sequence),
                   style: const TextStyle(color: scanMuted),
                 ),
@@ -1238,10 +1253,11 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
           Center(
             child: TextButton(
               onPressed: () => openCamera(true),
-              child: Text(
-                error ?? 'Открытие камеры…',
-                style: const TextStyle(color: scanPaper),
-              ),
+              child: Text(switch (error) {
+                _CameraError.access => context.strings.allowCameraAccess,
+                _CameraError.unavailable => context.strings.cameraUnavailable,
+                null => context.strings.openingCamera,
+              }, style: const TextStyle(color: scanPaper)),
             ),
           ),
       ],

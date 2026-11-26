@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/foundation.dart';
 
+import '../l10n/strings.dart';
 import '../scan_cubit.dart';
 import 'scanner_style.dart';
 import 'style.dart';
@@ -9,10 +10,10 @@ extension AutoScanProfile on ScanMode {
   static bool get supportsFast =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
-  String get label => switch (this) {
-    ScanMode.tray => 'Автоскан в лотке',
-    ScanMode.fast => 'Быстрый',
-    _ => 'Обычный автоскан',
+  String label(BuildContext context) => switch (this) {
+    ScanMode.tray => context.strings.trayAutoScan,
+    ScanMode.fast => context.strings.fastScan,
+    _ => context.strings.regularAutoScan,
   };
   IconData get icon => switch (this) {
     ScanMode.tray => Icons.inventory_2_outlined,
@@ -42,7 +43,7 @@ class AutoScanButton extends StatelessWidget {
       Semantics(
         excludeSemantics: true,
         toggled: running,
-        label: profile.label,
+        label: profile.label(context),
         enabled: onToggle != null,
         onTap: onToggle,
         onLongPress: onChoose,
@@ -71,9 +72,9 @@ class AutoScanButton extends StatelessWidget {
               ),
               Text(
                 switch (profile) {
-                  ScanMode.tray => 'В лотке',
-                  ScanMode.fast => 'Быстрый',
-                  _ => 'Автоскан',
+                  ScanMode.tray => context.strings.inTray,
+                  ScanMode.fast => context.strings.fastScan,
+                  _ => context.strings.autoScan,
                 },
                 style: const TextStyle(
                   fontSize: 12,
@@ -85,7 +86,7 @@ class AutoScanButton extends StatelessWidget {
         ),
       ),
       IconButton(
-        tooltip: 'Выбрать режим автоскана',
+        tooltip: context.strings.chooseAutoScanMode,
         onPressed: onChoose,
         icon: const Icon(Icons.arrow_drop_down),
       ),
@@ -104,7 +105,7 @@ class AutoScanModeSheet extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SheetHeading('Режим автоскана'),
+        SheetHeading(context.strings.autoScanMode),
         for (final mode in [
           ScanMode.tray,
           ScanMode.automatic,
@@ -112,12 +113,11 @@ class AutoScanModeSheet extends StatelessWidget {
         ])
           ListTile(
             leading: Icon(mode.icon),
-            title: Text(mode.label),
+            title: Text(mode.label(context)),
             subtitle: Text(switch (mode) {
-              ScanMode.tray => 'Card Slinger · фиксированная область',
-              ScanMode.fast =>
-                'В лотке · добавление по первому уверенному кадру',
-              _ => 'Для карт в руке · выравнивание кадра',
+              ScanMode.tray => context.strings.trayModeDescription,
+              ScanMode.fast => context.strings.fastModeDescription,
+              _ => context.strings.regularModeDescription,
             }),
             selected: mode == profile,
             trailing: mode == profile ? const Icon(Icons.check) : null,

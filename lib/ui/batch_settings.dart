@@ -1,19 +1,23 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import 'card_language.dart';
 import 'scanner_style.dart';
 import 'style.dart';
 
 enum BatchField {
-  language('Язык стопки', 'Найти язык'),
-  edition('Издание стопки', 'Найти код издания');
+  language,
+  edition;
 
-  const BatchField(this.title, this.hint);
-  final String title, hint;
+  String hint(BuildContext context) => this == language
+      ? context.strings.findLanguage
+      : context.strings.findSetCode;
 
-  String label(String? code) {
-    if (code == null) return 'Авто';
-    return this == language ? cardLanguageName(code) : code.toUpperCase();
+  String label(BuildContext context, String? code) {
+    if (code == null) return context.strings.automatic;
+    return this == language
+        ? cardLanguageName(context, code)
+        : code.toUpperCase();
   }
 }
 
@@ -39,11 +43,13 @@ class _BatchPickerState extends State<BatchPicker> {
   late Future<List<String>> options = _loadOptions();
 
   Future<List<String>> _loadOptions() async {
+    final preferred = cardLanguageNames(context).keys;
+    final field = widget.field;
     final codes = await widget.load();
-    if (widget.field == BatchField.edition) return codes;
+    if (field == BatchField.edition) return codes;
     final remaining = codes.toSet();
     return [
-      for (final code in cardLanguageNames.keys)
+      for (final code in preferred)
         if (remaining.remove(code)) code,
       ...remaining,
     ];
@@ -63,7 +69,7 @@ class _BatchPickerState extends State<BatchPicker> {
       selectedTileColor: const Color(0x225f638b),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       title: Text(
-        widget.field.label(code),
+        widget.field.label(context, code),
         style: TextStyle(
           fontFamily: code != null && widget.field == BatchField.edition
               ? monoFont
@@ -83,7 +89,7 @@ class _BatchPickerState extends State<BatchPicker> {
       return SliverToBoxAdapter(
         child: TextButton(
           onPressed: () => setState(() => options = _loadOptions()),
-          child: const Text('Повторить загрузку'),
+          child: Text(context.strings.retryLoading),
         ),
       );
     }
@@ -93,15 +99,16 @@ class _BatchPickerState extends State<BatchPicker> {
     final query = search.text.trim().toLowerCase();
     final codes = snapshot.requireData
         .where(
-          (code) =>
-              '$code ${widget.field.label(code)}'.toLowerCase().contains(query),
+          (code) => '$code ${widget.field.label(context, code)}'
+              .toLowerCase()
+              .contains(query),
         )
         .toList();
     if (codes.isEmpty) {
-      return const SliverToBoxAdapter(
+      return SliverToBoxAdapter(
         child: Padding(
           padding: EdgeInsets.all(16),
-          child: Center(child: Text('Нет совпадений')),
+          child: Center(child: Text(context.strings.noMatchesShort)),
         ),
       );
     }
@@ -125,7 +132,7 @@ class _BatchPickerState extends State<BatchPicker> {
                 : bodyFont,
           ),
           decoration: InputDecoration(
-            hintText: widget.field.hint,
+            hintText: widget.field.hint(context),
             hintStyle: const TextStyle(fontFamily: bodyFont, color: scanMuted),
             prefixIcon: const Icon(Icons.search),
             filled: true,
@@ -134,7 +141,7 @@ class _BatchPickerState extends State<BatchPicker> {
             suffixIcon: search.text.isEmpty
                 ? null
                 : IconButton(
-                    tooltip: 'Очистить поиск',
+                    tooltip: context.strings.clearSearch,
                     icon: const Icon(Icons.close),
                     onPressed: () => setState(search.clear),
                   ),

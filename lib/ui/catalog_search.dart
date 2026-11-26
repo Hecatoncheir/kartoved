@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../data/catalog.dart';
 import '../model.dart';
 import 'collections.dart';
@@ -40,7 +41,7 @@ class _CatalogSearchPageState extends State<CatalogSearchPage> {
 
   @override
   Widget build(BuildContext context) => LookupPage(
-    title: 'Поиск карт',
+    title: context.strings.searchCards,
     header: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -50,14 +51,14 @@ class _CatalogSearchPageState extends State<CatalogSearchPage> {
           onChanged: search.search,
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
-            hintText: 'Название карты',
+            hintText: context.strings.cardName,
             prefixIcon: const Icon(Icons.search_rounded),
             suffixIcon: ValueListenableBuilder(
               valueListenable: text,
               builder: (_, value, _) => value.text.isEmpty
                   ? const SizedBox.shrink()
                   : IconButton(
-                      tooltip: 'Очистить поиск',
+                      tooltip: context.strings.clearSearch,
                       icon: const Icon(Icons.close),
                       onPressed: () {
                         text.clear();
@@ -69,9 +70,9 @@ class _CatalogSearchPageState extends State<CatalogSearchPage> {
         ),
         const SizedBox(height: 8),
         SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(value: false, label: Text('Каталог')),
-            ButtonSegment(value: true, label: Text('Мои карты')),
+          segments: [
+            ButtonSegment(value: false, label: Text(context.strings.catalog)),
+            ButtonSegment(value: true, label: Text(context.strings.myCards)),
           ],
           selected: {mine},
           onSelectionChanged: (choice) {
@@ -92,7 +93,7 @@ class _CatalogSearchPageState extends State<CatalogSearchPage> {
       return Center(
         child: TextButton(
           onPressed: () => search.search(text.text),
-          child: const Text('Повторить поиск'),
+          child: Text(context.strings.retrySearch),
         ),
       );
     }
@@ -106,14 +107,14 @@ class _CatalogSearchPageState extends State<CatalogSearchPage> {
       return _OwnedResults(widget.model, search.query, state.data ?? const []);
     }
     if (!state.hasData) {
-      return const LookupHint(
+      return LookupHint(
         Icons.manage_search_rounded,
-        'Введите название карты',
+        context.strings.enterCardName,
       );
     }
     final names = state.requireData;
     if (names.isEmpty) {
-      return const LookupHint(Icons.search_off_rounded, 'Совпадений нет');
+      return LookupHint(Icons.search_off_rounded, context.strings.noMatches);
     }
     return _catalogNames(names);
   }
@@ -124,9 +125,7 @@ class _CatalogSearchPageState extends State<CatalogSearchPage> {
     separatorBuilder: (_, _) => const Divider(height: 1),
     itemBuilder: (context, i) {
       if (i == 60) {
-        return const ListTile(
-          subtitle: Text('Уточните название, чтобы сузить поиск'),
-        );
+        return ListTile(subtitle: Text(context.strings.refineName));
       }
       return ListTile(
         title: Text(names[i]),
@@ -179,9 +178,9 @@ class _OwnedResults extends StatelessWidget {
               .toList()
             ..sort();
       if (names.isEmpty) {
-        return const LookupHint(
+        return LookupHint(
           Icons.collections_bookmark_outlined,
-          'В коллекциях совпадений нет',
+          context.strings.noCollectionMatches,
         );
       }
       return ListView.builder(
@@ -236,6 +235,7 @@ class _PrintingsState extends State<_Printings> {
     );
     if (result == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
+    final strings = context.strings;
     try {
       await model.addFromCatalog(
         result.folderId!,
@@ -246,15 +246,15 @@ class _PrintingsState extends State<_Printings> {
         SnackBar(
           duration: noticeDuration,
           content: Text(
-            'Добавлено в «${result.folderName}» · ${result.quantity}',
+            strings.addedToCollection(result.folderName, result.quantity),
           ),
         ),
       );
     } catch (_) {
       messenger.showSnackBar(
-        const SnackBar(
+        SnackBar(
           duration: noticeDuration,
-          content: Text('Не удалось добавить карту'),
+          content: Text(strings.addCardFailed),
         ),
       );
     }
@@ -264,9 +264,9 @@ class _PrintingsState extends State<_Printings> {
   Widget build(BuildContext context) => LookupPage(
     title: widget.name,
     header: TextField(
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         prefixIcon: Icon(Icons.filter_list),
-        hintText: 'Издание, номер или код языка',
+        hintText: context.strings.printingNumberOrCode,
       ),
       onChanged: (value) => setState(() => filter = value.toLowerCase().trim()),
     ),
@@ -278,7 +278,7 @@ class _PrintingsState extends State<_Printings> {
             child: TextButton(
               onPressed: () =>
                   setState(() => editions = widget.catalog.byName(widget.name)),
-              child: const Text('Загрузить издания ещё раз'),
+              child: Text(context.strings.retryPrintings),
             ),
           );
         }
@@ -291,18 +291,19 @@ class _PrintingsState extends State<_Printings> {
             .where((c) => terms.every(c.detail.toLowerCase().contains))
             .toList();
         if (cards.isEmpty) {
-          return const LookupHint(Icons.search_off_rounded, 'Совпадений нет');
+          return LookupHint(
+            Icons.search_off_rounded,
+            context.strings.noMatches,
+          );
         }
         return ListView.builder(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           itemCount: cards.length + (canAdd ? 0 : 1),
           itemBuilder: (_, index) {
             if (!canAdd && index == 0) {
-              return const Padding(
+              return Padding(
                 padding: EdgeInsets.all(12),
-                child: Text(
-                  'Чтобы добавлять карты, создайте коллекцию на главном экране.',
-                ),
+                child: Text(context.strings.createCollectionFirst),
               );
             }
             final card = cards[canAdd ? index : index - 1];
@@ -316,7 +317,7 @@ class _PrintingsState extends State<_Printings> {
                 ),
               ),
               title: Text(card.detail, style: codeText),
-              subtitle: card.foil ? const Text('Только фольга') : null,
+              subtitle: card.foil ? Text(context.strings.foilOnly) : null,
               trailing: canAdd ? const Icon(Icons.add_circle_outline) : null,
               onTap: canAdd ? () => _add(card) : null,
             );

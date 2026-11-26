@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../data/catalog.dart';
 import 'card_language.dart';
 import 'glass_sheet.dart';
@@ -42,7 +43,7 @@ class _EditionPickerState extends State<_EditionPicker> {
     if (query.isEmpty) return widget.options;
     final terms = query.split(RegExp(r'\s+'));
     return widget.options.where((card) {
-      final label = '${card.detail} ${cardLanguageName(card.language)}'
+      final label = '${card.detail} ${cardLanguageName(context, card.language)}'
           .toLowerCase();
       return terms.every(label.contains);
     }).toList();
@@ -55,7 +56,7 @@ class _EditionPickerState extends State<_EditionPicker> {
         !current.needsPrinting &&
         card.id == current.id &&
         card.language == current.language;
-    final language = cardLanguageName(card.language);
+    final language = cardLanguageName(context, card.language);
     return ListTile(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       selected: selected,
@@ -68,7 +69,9 @@ class _EditionPickerState extends State<_EditionPicker> {
           fontWeight: FontWeight.w600,
         ),
       ),
-      subtitle: Text(card.foil ? '$language · Только фольга' : language),
+      subtitle: Text(
+        card.foil ? context.strings.detailFoilOnly(language) : language,
+      ),
       trailing: selected
           ? Icon(Icons.check_rounded, color: colors.primary)
           : null,
@@ -95,7 +98,7 @@ class _EditionPickerState extends State<_EditionPicker> {
                       Semantics(
                         header: true,
                         child: Text(
-                          'Издание и язык',
+                          context.strings.printingAndLanguage,
                           style: TextStyle(
                             fontFamily: headingFont,
                             fontSize: 24,
@@ -113,7 +116,7 @@ class _EditionPickerState extends State<_EditionPicker> {
                 ),
               ),
               IconButton(
-                tooltip: 'Закрыть',
+                tooltip: context.strings.close,
                 icon: const Icon(Icons.close),
                 onPressed: () => Navigator.pop(context),
               ),
@@ -128,7 +131,7 @@ class _EditionPickerState extends State<_EditionPicker> {
               onChanged: (_) => setState(() {}),
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                hintText: 'Издание, номер или язык',
+                hintText: context.strings.printingNumberOrLanguage,
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
                 fillColor: colors.surface.withValues(alpha: .65),
@@ -138,7 +141,7 @@ class _EditionPickerState extends State<_EditionPicker> {
                 suffixIcon: search.text.isEmpty
                     ? null
                     : IconButton(
-                        tooltip: 'Очистить поиск',
+                        tooltip: context.strings.clearSearch,
                         onPressed: () => setState(search.clear),
                         icon: const Icon(Icons.close),
                       ),
@@ -152,8 +155,8 @@ class _EditionPickerState extends State<_EditionPicker> {
               padding: const EdgeInsets.all(16),
               child: Text(
                 widget.options.isEmpty
-                    ? 'Для этой карты нет доступных изданий'
-                    : 'Совпадений нет',
+                    ? context.strings.noPrintingsForCard
+                    : context.strings.noMatches,
                 textAlign: TextAlign.center,
                 style: TextStyle(color: colors.onSurfaceVariant),
               ),

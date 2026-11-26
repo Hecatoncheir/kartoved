@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../data/android.dart';
 import '../data/catalog.dart';
 import '../model.dart';
@@ -22,6 +23,7 @@ import 'library_style.dart';
 import 'backup_panel.dart';
 import 'catalog_search.dart';
 import 'picture.dart';
+import 'interface_language_button.dart';
 
 Future<void> _openScanner(BuildContext context) =>
     Navigator.of(context)
@@ -106,7 +108,7 @@ class CollectionsPage extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SheetHeading('В каком альбоме проверить карты?'),
+                SheetHeading(context.strings.selectReviewAlbum),
                 Flexible(
                   child: ListView(
                     shrinkWrap: true,
@@ -135,21 +137,21 @@ class CollectionsPage extends StatelessWidget {
       foregroundColor: libraryInk,
       systemOverlayStyle: SystemUiOverlayStyle.dark,
       flexibleSpace: const _LibraryAcrylic(),
-      title: const Row(
+      title: Row(
         children: [
-          LibraryGlass(
+          const LibraryGlass(
             radius: 12,
             child: Padding(
               padding: EdgeInsets.all(6),
               child: Mark(size: 25, color: libraryInk),
             ),
           ),
-          SizedBox(width: 8),
+          const SizedBox(width: 8),
           Flexible(
             child: Text(
-              'Картовед',
+              context.strings.appTitle,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
+              style: const TextStyle(
                 fontFamily: headingFont,
                 fontWeight: FontWeight.w900,
                 color: libraryInk,
@@ -160,8 +162,9 @@ class CollectionsPage extends StatelessWidget {
         ],
       ),
       actions: [
+        const InterfaceLanguageButton(),
         IconButton(
-          tooltip: 'База карт',
+          tooltip: context.strings.cardDatabase,
           onPressed: ready
               ? () => showLibrarySheet<void>(context, CatalogPanel(model))
               : null,
@@ -172,7 +175,7 @@ class CollectionsPage extends StatelessWidget {
           child: LibraryGlass(
             radius: 12,
             child: IconButton(
-              tooltip: 'Резервная копия',
+              tooltip: context.strings.backup,
               onPressed: model.libraryReady
                   ? () => showLibrarySheet<void>(context, BackupPanel(model))
                   : null,
@@ -204,7 +207,7 @@ class CollectionsPage extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'На проверке · $pending',
+                  context.strings.pendingCount(pending),
                   style: const TextStyle(
                     color: libraryInk,
                     fontSize: 16,
@@ -256,7 +259,14 @@ class CollectionsPage extends StatelessWidget {
                         style: TextButton.styleFrom(
                           foregroundColor: libraryInk,
                         ),
-                        child: Text('$error. Повторить'),
+                        child: Text(
+                          context.strings.retryLibraryError(switch (error) {
+                            LibraryLoadError.collections =>
+                              context.strings.openCollectionsFailed,
+                            LibraryLoadError.catalog =>
+                              context.strings.loadCatalogFailed,
+                          }),
+                        ),
                       )
                     else if (!ready)
                       const Padding(
@@ -276,11 +286,11 @@ class CollectionsPage extends StatelessWidget {
                   ),
                 )
               else if (model.libraryReady)
-                const SliverToBoxAdapter(
+                SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.all(16),
                     child: Text(
-                      'Пока нет альбомов. Создайте первый кнопкой «+».',
+                      context.strings.noAlbums,
                       style: TextStyle(color: libraryInk),
                     ),
                   ),
@@ -295,8 +305,8 @@ class CollectionsPage extends StatelessWidget {
                       alignment: WrapAlignment.spaceBetween,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        const Text(
-                          'Недавно добавленные',
+                        Text(
+                          context.strings.recentlyAdded,
                           style: TextStyle(
                             fontFamily: headingFont,
                             color: libraryInk,
@@ -311,7 +321,7 @@ class CollectionsPage extends StatelessWidget {
                           style: TextButton.styleFrom(
                             foregroundColor: libraryMuted,
                           ),
-                          child: const Text('Все карты'),
+                          child: Text(context.strings.allCards),
                         ),
                       ],
                     ),
@@ -403,20 +413,20 @@ class _LibraryNavigation extends StatelessWidget {
               padding: const EdgeInsets.all(4),
               child: Row(
                 children: [
-                  const _LibraryTab(
+                  _LibraryTab(
                     Icons.collections_bookmark_outlined,
-                    'Альбомы',
+                    context.strings.albums,
                     selected: true,
                   ),
                   _LibraryTab(
                     Icons.center_focus_strong,
-                    'Сканер',
-                    semanticLabel: 'Сканировать карту',
+                    context.strings.scanner,
+                    semanticLabel: context.strings.scanCard,
                     onTap: onScan,
                   ),
                   _LibraryTab(
                     Icons.search_rounded,
-                    'Каталог',
+                    context.strings.catalog,
                     onTap: onCatalog,
                   ),
                 ],
@@ -498,10 +508,10 @@ class _RecentAdditions extends StatelessWidget {
     final albums = {for (final group in state.groups) group.id: group.name};
     return LibraryGlass(
       child: state.additions.isEmpty
-          ? const Padding(
+          ? Padding(
               padding: EdgeInsets.all(16),
               child: Text(
-                'Подтверждённые карты появятся здесь',
+                context.strings.noRecentAdditions,
                 style: TextStyle(color: libraryMuted),
               ),
             )
@@ -585,7 +595,7 @@ class _CollectionPageState extends State<CollectionPage> {
     try {
       await context.read<AppModel>().setFlag(card, value);
     } catch (_) {
-      if (context.mounted) _message(context, 'Не удалось сохранить флажок');
+      if (context.mounted) _message(context, context.strings.saveFlagFailed);
     }
   }
 
@@ -611,22 +621,22 @@ class _CollectionPageState extends State<CollectionPage> {
       final count = removed.scans.fold(0, (n, scan) => n + scan.quantity);
       _message(
         context,
-        'Убрано: ${card.name} ×$count',
+        context.strings.removedCopies(card.name, count),
         SnackBarAction(
-          label: 'Отменить',
+          label: context.strings.undo,
           onPressed: () async {
             try {
               await model.restore(removed);
             } catch (_) {
               if (context.mounted) {
-                _message(context, 'Не удалось вернуть карту');
+                _message(context, context.strings.restoreCardFailed);
               }
             }
           },
         ),
       );
     } catch (_) {
-      if (context.mounted) _message(context, 'Не удалось убрать карту');
+      if (context.mounted) _message(context, context.strings.removeCardFailed);
     }
   }
 
@@ -648,14 +658,14 @@ class _CollectionPageState extends State<CollectionPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SheetHeading('Экспорт для Moxfield'),
+              SheetHeading(context.strings.moxfieldExport),
               if (pending > 0)
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text('Включить карты на проверке'),
+                  title: Text(context.strings.includePending),
                   subtitle: Text(
-                    'Снимков на проверке — $pending. Для них в CSV попадут предварительные результаты распознавания.',
+                    context.strings.pendingExportExplanation(pending),
                   ),
                   value: includePending,
                   onChanged: (value) =>
@@ -671,19 +681,21 @@ class _CollectionPageState extends State<CollectionPage> {
                       )
                     : null,
                 child: Text(
-                  state.flags.isEmpty ? 'Экспортировать' : 'Вся коллекция',
+                  state.flags.isEmpty
+                      ? context.strings.export
+                      : context.strings.entireCollection,
                 ),
               ),
               if (state.flags.isNotEmpty)
                 ListTile(
                   leading: const Icon(Icons.flag_outlined),
-                  title: const Text('Только отмеченные'),
+                  title: Text(context.strings.flaggedOnly),
                   onTap: () => Navigator.pop(sheet, _ExportChoice.flagged),
                 ),
               if (pending > 0)
                 TextButton(
                   onPressed: () => Navigator.pop(sheet, _ExportChoice.review),
-                  child: const Text('Проверить карты'),
+                  child: Text(context.strings.reviewCards),
                 ),
             ],
           ),
@@ -713,7 +725,9 @@ class _CollectionPageState extends State<CollectionPage> {
       }
       final flaggedOnly = choice == _ExportChoice.flagged;
       final name = model.state.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-      final suffix = flaggedOnly ? '_Отмеченные' : '';
+      final suffix = flaggedOnly
+          ? '_${context.strings.flaggedExportSuffix}'
+          : '';
       final csv = await model.export(
         flaggedOnly: flaggedOnly,
         includePending: choice == _ExportChoice.includePending,
@@ -723,9 +737,9 @@ class _CollectionPageState extends State<CollectionPage> {
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             duration: noticeDuration,
-            content: Text('Не удалось сохранить CSV'),
+            content: Text(context.strings.saveCsvFailed),
           ),
         );
       }
@@ -775,9 +789,9 @@ class _CollectionPageState extends State<CollectionPage> {
                   ),
                 ),
                 Tooltip(
-                  message: 'Названий · $names\nФольга · $foils',
+                  message: context.strings.collectionStats(names, foils),
                   child: Text(
-                    cardCount(count),
+                    context.strings.cardCount(count),
                     style: const TextStyle(
                       fontFamily: bodyFont,
                       color: libraryMuted,
@@ -789,7 +803,7 @@ class _CollectionPageState extends State<CollectionPage> {
             ),
             actions: [
               IconButton(
-                tooltip: 'Экспорт для Moxfield',
+                tooltip: context.strings.moxfieldExport,
                 onPressed:
                     state.catalog == null ||
                         (items.isEmpty && state.reviews.isEmpty)
@@ -820,7 +834,9 @@ class _CollectionPageState extends State<CollectionPage> {
                                   color: Color(0xffb66614),
                                 )
                               : null,
-                          label: Text('На проверке · ${state.reviews.length}'),
+                          label: Text(
+                            context.strings.pendingCount(state.reviews.length),
+                          ),
                           selected: reviewOnly,
                           backgroundColor: const Color(0xd9faf5ff),
                           selectedColor: const Color(0xffffe1bb),
@@ -844,8 +860,8 @@ class _CollectionPageState extends State<CollectionPage> {
                               Center(
                                 child: Text(
                                   state.reviews.isEmpty
-                                      ? 'Пока нет карт'
-                                      : 'Карты ожидают проверки',
+                                      ? context.strings.noCardsYet
+                                      : context.strings.cardsAwaitingReview,
                                   style: const TextStyle(color: libraryMuted),
                                 ),
                               )
@@ -929,7 +945,7 @@ class _ScanButton extends StatelessWidget {
                 LibraryActionButton(
                   onPressed: enabled ? () => _openScanner(context) : null,
                   icon: Icons.center_focus_strong,
-                  label: 'Сканировать карту',
+                  label: context.strings.scanCard,
                 ),
               ],
             ),

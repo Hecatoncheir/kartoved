@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../data/catalog.dart';
 import 'picture.dart';
 import 'scanner_style.dart';
@@ -86,7 +87,7 @@ class _ScanStripState extends State<ScanStrip> {
                             top: 3,
                             right: 3,
                             child: Semantics(
-                              label: 'Требует проверки',
+                              label: context.strings.requiresReview,
                               child: const DecoratedBox(
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
@@ -120,8 +121,10 @@ class _ScanStripState extends State<ScanStrip> {
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   child: Text(
-                    'Переснять',
-                    semanticsLabel: 'Переснять ${entry.card.name}',
+                    context.strings.rescan,
+                    semanticsLabel: context.strings.rescanNamedCard(
+                      entry.card.name,
+                    ),
                   ),
                 ),
               ),

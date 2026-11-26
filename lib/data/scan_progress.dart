@@ -4,26 +4,15 @@ typedef CardRegion = ({double left, double top, double right, double bottom});
 const titleRegion = (left: .09, top: .08, right: .815, bottom: .16);
 
 enum ScanStage {
-  card('Контур карты'),
-  title('Читаю название', titleRegion),
+  card(),
+  title(titleRegion),
   // Основное окно иллюстрации Oracle. Остальные форматы проверяются параллельно.
-  artwork('Сверяю иллюстрацию', (
-    left: .08,
-    top: .115,
-    right: .92,
-    bottom: .553,
-  )),
-  details('Сверяю детали карты'),
-  footer('Читаю нижнюю строку', (
-    left: 0.0,
-    top: 730 / 840,
-    right: 440 / 600,
-    bottom: 1.0,
-  )),
-  text('Уточняю по тексту', (left: 0.0, top: .53, right: 1.0, bottom: 1.0));
+  artwork((left: .08, top: .115, right: .92, bottom: .553)),
+  details(),
+  footer((left: 0.0, top: 730 / 840, right: 440 / 600, bottom: 1.0)),
+  text((left: 0.0, top: .53, right: 1.0, bottom: 1.0));
 
-  const ScanStage(this.label, [this.region]);
-  final String label;
+  const ScanStage([this.region]);
   final CardRegion? region;
 
   List<double> focus(List<double> quad) {

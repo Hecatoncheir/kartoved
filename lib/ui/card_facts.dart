@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../data/android.dart';
 import '../data/card_reference.dart';
 import '../data/catalog.dart';
@@ -14,14 +15,14 @@ class ScryfallLink extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TextButton.icon(
     icon: const Icon(Icons.open_in_new),
-    label: const Text('Открыть в Scryfall'),
+    label: Text(context.strings.openScryfall),
     onPressed: () async {
       final page = card.scryfallPage;
       if (await AndroidActions.openScryfall(page)) return;
       await Clipboard.setData(ClipboardData(text: page.toString()));
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ссылка на Scryfall скопирована')),
+          SnackBar(content: Text(context.strings.scryfallLinkCopied)),
         );
       }
     },
@@ -51,22 +52,20 @@ class _CardFactsState extends State<CardFacts> {
     future: reference,
     builder: (context, snapshot) {
       if (snapshot.connectionState == ConnectionState.waiting) {
-        return const Padding(
+        return Padding(
           padding: EdgeInsets.only(top: 8),
           child: LinearProgressIndicator(
-            semanticsLabel: 'Загрузка текста и правил карты',
+            semanticsLabel: context.strings.loadingCardRules,
           ),
         );
       }
       if (!snapshot.hasData) {
         return ListTile(
-          title: const Text('Текст и правила карты недоступны'),
-          subtitle: const Text(
-            'Для первой загрузки понадобится подключение к Scryfall.',
-          ),
+          title: Text(context.strings.cardRulesUnavailable),
+          subtitle: Text(context.strings.scryfallFirstLoad),
           trailing: IconButton(
             onPressed: _retry,
-            tooltip: 'Повторить загрузку',
+            tooltip: context.strings.retryLoading,
             icon: const Icon(Icons.refresh),
           ),
         );
@@ -83,7 +82,7 @@ class _CardFactsState extends State<CardFacts> {
           Padding(
             padding: const EdgeInsets.only(top: 6, left: 12),
             child: Text(
-              'Данные Scryfall',
+              context.strings.scryfallData,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
                 fontSize: 12,
@@ -129,7 +128,7 @@ class _FaceText extends StatelessWidget {
               face.oracle != rules)
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              title: const Text('Актуальный текст Oracle'),
+              title: Text(context.strings.currentOracleText),
               children: [
                 Align(
                   alignment: Alignment.centerLeft,
@@ -159,13 +158,14 @@ class _EditionFacts extends StatelessWidget {
 
   final CardReference card;
 
-  static const rarityNames = {
-    'common': 'обычная',
-    'uncommon': 'необычная',
-    'rare': 'редкая',
-    'mythic': 'мифическая',
-    'special': 'особая',
-    'bonus': 'бонусная',
+  String _rarity(BuildContext context, String rarity) => switch (rarity) {
+    'common' => context.strings.rarityCommon,
+    'uncommon' => context.strings.rarityUncommon,
+    'rare' => context.strings.rarityRare,
+    'mythic' => context.strings.rarityMythic,
+    'special' => context.strings.raritySpecial,
+    'bonus' => context.strings.rarityBonus,
+    _ => rarity,
   };
 
   @override
@@ -174,11 +174,13 @@ class _EditionFacts extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (card.setName case final name?) Text('Выпуск · $name'),
+        if (card.setName case final name?) Text(context.strings.setName(name)),
         if (card.rarity case final rarity?)
-          Text('Редкость · ${rarityNames[rarity] ?? rarity}'),
-        if (card.manaValue case final value?) Text('Мановая ценность · $value'),
-        if (card.artist case final artist?) Text('Художник · $artist'),
+          Text(context.strings.rarity(_rarity(context, rarity))),
+        if (card.manaValue case final value?)
+          Text(context.strings.manaValue(value)),
+        if (card.artist case final artist?)
+          Text(context.strings.artist(artist)),
       ],
     ),
   );
@@ -195,17 +197,17 @@ class _Rules extends StatelessWidget {
     final list = rulings;
     if (list == null) {
       return ListTile(
-        title: const Text('Разъяснения правил недоступны'),
+        title: Text(context.strings.rulingsUnavailable),
         trailing: IconButton(
           onPressed: retry,
-          tooltip: 'Повторить загрузку',
+          tooltip: context.strings.retryLoading,
           icon: const Icon(Icons.refresh),
         ),
       );
     }
     if (list.isEmpty) return const SizedBox.shrink();
     return ExpansionTile(
-      title: Text('Разъяснения правил · ${list.length}'),
+      title: Text(context.strings.rulingsCount(list.length)),
       childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -231,16 +233,17 @@ class _Formats extends StatelessWidget {
 
   final Map<String, String> legalities;
 
-  static const statusNames = {
-    'legal': 'Разрешена',
-    'not_legal': 'Недоступна',
-    'restricted': 'Ограничена',
-    'banned': 'Запрещена',
+  String _status(BuildContext context, String status) => switch (status) {
+    'legal' => context.strings.formatLegal,
+    'not_legal' => context.strings.formatNotLegal,
+    'restricted' => context.strings.formatRestricted,
+    'banned' => context.strings.formatBanned,
+    _ => status,
   };
 
   @override
   Widget build(BuildContext context) => ExpansionTile(
-    title: const Text('Допуск в форматах'),
+    title: Text(context.strings.formatLegality),
     children: [
       for (final format in legalities.entries)
         ListTile(
@@ -248,7 +251,7 @@ class _Formats extends StatelessWidget {
           title: Text(
             '${format.key[0].toUpperCase()}${format.key.substring(1)}',
           ),
-          trailing: Text(statusNames[format.value] ?? format.value),
+          trailing: Text(_status(context, format.value)),
         ),
     ],
   );

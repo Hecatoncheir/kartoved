@@ -1,3 +1,4 @@
+import '../l10n/strings.dart';
 import 'picture.dart';
 import '../data/pictures.dart';
 
@@ -18,12 +19,12 @@ class ResultSheet extends StatefulWidget {
     this.matches,
     this.initial, {
     super.key,
-    this.action = 'В коллекцию',
+    this.action,
     this.owned,
   });
   final List<Match> matches;
   final Edition initial;
-  final String action;
+  final String? action;
   final int Function(String name)? owned;
   @override
   State<ResultSheet> createState() => _ResultSheetState();
@@ -38,7 +39,7 @@ class _ResultSheetState extends State<ResultSheet> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SheetHeading('Результат'),
+        SheetHeading(context.strings.scanResult),
         const SizedBox(height: 18),
         Row(
           children: [
@@ -65,7 +66,7 @@ class _ResultSheetState extends State<ResultSheet> {
                   ),
                   Text(card.detail, style: codeText),
                   if (widget.owned case final count?)
-                    Text('В коллекциях · ${count(card.name)}'),
+                    Text(context.strings.ownedCount(count(card.name))),
                 ],
               ),
             ),
@@ -76,7 +77,7 @@ class _ResultSheetState extends State<ResultSheet> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.layers_outlined),
-            title: const Text('Издание и язык'),
+            title: Text(context.strings.printingAndLanguage),
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
               final edition = await showEditionPicker(
@@ -91,7 +92,7 @@ class _ResultSheetState extends State<ResultSheet> {
           ExpansionTile(
             key: ValueKey(selected),
             tilePadding: EdgeInsets.zero,
-            title: const Text('Другие совпадения'),
+            title: Text(context.strings.otherMatches),
             children: [
               for (final (i, match) in widget.matches.indexed)
                 if (i != selected)
@@ -112,20 +113,20 @@ class _ResultSheetState extends State<ResultSheet> {
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           secondary: const Icon(Icons.auto_awesome_outlined),
-          title: const Text('Фольга'),
+          title: Text(context.strings.foil),
           value: card.foil,
           onChanged: (value) => setState(() => card = card.withFoil(value)),
         ),
         FilledButton.icon(
           onPressed: () => Navigator.pop(context, card),
           icon: const Icon(Icons.check),
-          label: Text(widget.action),
+          label: Text(widget.action ?? context.strings.addToCollection),
         ),
         ScryfallLink(card),
         ExpansionTile(
           key: ValueKey(card.id),
           tilePadding: EdgeInsets.zero,
-          title: const Text('Текст и правила'),
+          title: Text(context.strings.textAndRules),
           children: [CardFacts(card, key: ValueKey(card.id))],
         ),
       ],
@@ -177,7 +178,7 @@ class _CatalogPanelState extends State<CatalogPanel> {
   Future<void> _prepareOffline() async {
     setState(() {
       loading = true;
-      message = 'Загружаются файлы сканера…';
+      message = context.strings.downloadingScannerFiles;
     });
     try {
       final ready = await browserOfflineScanner(prepare: true);
@@ -189,9 +190,7 @@ class _CatalogPanelState extends State<CatalogPanel> {
       }
     } catch (_) {
       if (mounted) {
-        setState(
-          () => message = 'Не удалось сохранить файлы. Проверьте соединение и свободное место, затем повторите.',
-        );
+        setState(() => message = context.strings.saveScannerFilesFailed);
       }
     } finally {
       if (mounted) setState(() => loading = false);
@@ -199,6 +198,7 @@ class _CatalogPanelState extends State<CatalogPanel> {
   }
 
   Future<void> update() async {
+    final strings = context.strings;
     setState(() {
       loading = true;
       message = null;
@@ -206,11 +206,11 @@ class _CatalogPanelState extends State<CatalogPanel> {
     String result;
     try {
       result = await widget.model.update()
-          ? 'База обновлена'
-          : 'Установлена последняя версия';
+          ? strings.databaseUpdated
+          : strings.databaseUpToDate;
     } catch (e) {
       debugPrint('Обновление: $e');
-      result = 'Не удалось обновить. Сохранённая база доступна.';
+      result = strings.databaseUpdateFailed;
     }
     if (mounted) {
       setState(() {
@@ -229,7 +229,7 @@ class _CatalogPanelState extends State<CatalogPanel> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SheetHeading('База карт'),
+          SheetHeading(context.strings.cardDatabase),
           const SizedBox(height: 18),
           LibraryGlass(
             child: Padding(
@@ -243,14 +243,18 @@ class _CatalogPanelState extends State<CatalogPanel> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${spec.count} иллюстраций',
+                          context.strings.artworkCount(spec.count),
                           style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                         Text(
-                          'От ${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year} · доступна офлайн',
+                          context.strings.offlineDatabaseDate(
+                            date.month.toString().padLeft(2, '0'),
+                            date.day.toString().padLeft(2, '0'),
+                            date.year,
+                          ),
                         ),
                       ],
                     ),
@@ -267,14 +271,14 @@ class _CatalogPanelState extends State<CatalogPanel> {
               ),
               label: Text(
                 offlineReady
-                    ? 'Сканер готов к работе без сети'
-                    : 'Подготовить сканер без сети',
+                    ? context.strings.scannerOfflineReady
+                    : context.strings.prepareOfflineScanner,
               ),
               onPressed: loading || offlineReady ? null : _prepareOffline,
             ),
           TextButton.icon(
             icon: const Icon(Icons.download_outlined),
-            label: const Text('Миниатюры выпуска офлайн'),
+            label: Text(context.strings.offlineSetThumbnails),
             onPressed: loading
                 ? null
                 : () => showGlassSheet<void>(
@@ -299,10 +303,10 @@ class _CatalogPanelState extends State<CatalogPanel> {
                 : const Icon(Icons.sync),
             label: Text(
               loading && !kIsWeb
-                  ? 'Обновление…'
+                  ? context.strings.updating
                   : kIsWeb
-                  ? 'Обновить страницу'
-                  : 'Проверить обновления',
+                  ? context.strings.reloadPage
+                  : context.strings.checkUpdates,
             ),
           ),
         ],
@@ -326,9 +330,10 @@ class _PicturePackState extends State<PicturePack> {
   }
 
   Future<void> download() async {
+    final strings = context.strings;
     setState(() {
       loading = true;
-      status = 'Поиск изданий…';
+      status = strings.findingPrintings;
     });
     try {
       final cards = await widget.catalog.inSet(
@@ -339,15 +344,13 @@ class _PicturePackState extends State<PicturePack> {
       for (final card in cards) {
         if (!mounted) return;
         await Pictures.shared.official(card.id);
-        if (mounted) setState(() => status = '${++done} из ${cards.length}');
+        progress(strings.downloadProgress(++done, cards.length));
       }
       progress(
-        cards.isEmpty
-            ? 'Выпуск на этом языке не найден'
-            : 'Миниатюры сохранены',
+        cards.isEmpty ? strings.setLanguageNotFound : strings.thumbnailsSaved,
       );
     } catch (_) {
-      progress('Загрузка прервана. Можно продолжить.');
+      progress(strings.downloadInterrupted);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -359,12 +362,12 @@ class _PicturePackState extends State<PicturePack> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SheetHeading('Миниатюры выпуска'),
+        SheetHeading(context.strings.setThumbnails),
         const SizedBox(height: 16),
         TextField(
           enabled: !loading,
-          decoration: const InputDecoration(
-            labelText: 'Код выпуска',
+          decoration: InputDecoration(
+            labelText: context.strings.setCode,
             hintText: 'SNC',
           ),
           onChanged: (v) => setState(() => code = v),
@@ -373,8 +376,8 @@ class _PicturePackState extends State<PicturePack> {
         TextFormField(
           initialValue: language,
           enabled: !loading,
-          decoration: const InputDecoration(
-            labelText: 'Язык',
+          decoration: InputDecoration(
+            labelText: context.strings.cardLanguage,
             hintText: 'ru, en…',
           ),
           onChanged: (v) => setState(() => language = v),
@@ -390,7 +393,7 @@ class _PicturePackState extends State<PicturePack> {
           onPressed: code.trim().isEmpty || language.trim().isEmpty || loading
               ? null
               : download,
-          label: 'Скачать',
+          label: context.strings.download,
         ),
       ],
     ),

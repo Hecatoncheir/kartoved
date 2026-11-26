@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../data/backup.dart' show maxCardQuantity;
 import '../data/catalog.dart';
 import 'library_style.dart';
@@ -47,11 +48,13 @@ class _CardDestinationState extends State<CardDestination> {
 
   String? get quantityError {
     final count = quantity;
-    if (count == null || count < 1) return 'Введите целое число от 1';
-    if (count > maxCardQuantity) return 'Слишком большое количество';
+    if (count == null || count < 1) {
+      return context.strings.positiveIntegerRequired;
+    }
+    if (count > maxCardQuantity) return context.strings.quantityTooLarge;
     final available = widget.available;
     if (available != null && count > available) {
-      return 'Доступно только $available';
+      return context.strings.onlyAvailable(available);
     }
     return null;
   }
@@ -124,14 +127,14 @@ class _CardDestinationState extends State<CardDestination> {
             ),
             if (moving)
               Text(
-                foil ? 'Фольга' : 'Обычная',
+                foil ? context.strings.foil : context.strings.nonFoil,
                 style: const TextStyle(color: libraryMuted),
               ),
           ],
         ),
       ),
       IconButton(
-        tooltip: 'Закрыть',
+        tooltip: context.strings.close,
         onPressed: () => Navigator.pop(context),
         icon: const Icon(Icons.close),
       ),
@@ -148,7 +151,7 @@ class _CardDestinationState extends State<CardDestination> {
   Widget _folderField() => DropdownButtonFormField<int>(
     isExpanded: true,
     initialValue: folder ?? newCollection,
-    decoration: _field('Коллекция'),
+    decoration: _field(context.strings.collection),
     items: [
       for (final group in widget.groups)
         DropdownMenuItem(
@@ -156,9 +159,9 @@ class _CardDestinationState extends State<CardDestination> {
           child: Text(group.name, overflow: TextOverflow.ellipsis),
         ),
       if (moving)
-        const DropdownMenuItem(
+        DropdownMenuItem(
           value: newCollection,
-          child: Text('Создать коллекцию'),
+          child: Text(context.strings.createCollection),
         ),
     ],
     onChanged: (value) =>
@@ -174,16 +177,16 @@ class _CardDestinationState extends State<CardDestination> {
       textAlign: TextAlign.center,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      decoration: _field('Количество').copyWith(
+      decoration: _field(context.strings.quantity).copyWith(
         errorText: copies.text.isEmpty ? null : quantityError,
         errorMaxLines: 2,
         prefixIcon: IconButton(
-          tooltip: 'Уменьшить количество',
+          tooltip: context.strings.decreaseQuantity,
           onPressed: count > 1 ? () => _setQuantity(count - 1) : null,
           icon: const Icon(Icons.remove),
         ),
         suffixIcon: IconButton(
-          tooltip: 'Увеличить количество',
+          tooltip: context.strings.increaseQuantity,
           onPressed: count < limit ? () => _setQuantity(count + 1) : null,
           icon: const Icon(Icons.add),
         ),
@@ -208,7 +211,7 @@ class _CardDestinationState extends State<CardDestination> {
           initialValue: newName,
           maxLength: 80,
           textInputAction: TextInputAction.next,
-          decoration: _field('Название новой коллекции'),
+          decoration: _field(context.strings.newCollectionName),
           onChanged: (value) => setState(() => newName = value.trim()),
         ),
       ],
@@ -221,13 +224,15 @@ class _CardDestinationState extends State<CardDestination> {
             onPressed: quantity == available
                 ? null
                 : () => _setQuantity(available),
-            child: Text('Выбрать все ($available)'),
+            child: Text(context.strings.selectAllCount(available)),
           ),
         ),
       if (!moving)
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text(widget.card.foil ? 'Только фольга' : 'Фольга'),
+          title: Text(
+            widget.card.foil ? context.strings.foilOnly : context.strings.foil,
+          ),
           value: foil,
           onChanged: widget.card.foil
               ? null
@@ -240,9 +245,9 @@ class _CardDestinationState extends State<CardDestination> {
   Widget build(BuildContext context) {
     final action = LibraryActionButton(
       label: switch ((moving, folder)) {
-        (false, _) => 'В коллекцию',
-        (true, null) => 'Создать и переместить',
-        _ => 'Переместить',
+        (false, _) => context.strings.addToCollection,
+        (true, null) => context.strings.createAndMove,
+        _ => context.strings.move,
       },
       icon: moving ? Icons.drive_file_move_outline : Icons.add,
       onPressed: hasDestination && quantityError == null ? _submit : null,

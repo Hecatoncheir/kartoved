@@ -7,7 +7,15 @@ import 'review.dart';
 
 typedef BackupRow = Map<String, Object?>;
 
-const _invalid = FormatException('Файл резервной копии повреждён');
+enum BackupFormatIssue { damaged, wrongFile, unsupportedVersion }
+
+class BackupFormatException extends FormatException {
+  const BackupFormatException(this.issue) : super();
+
+  final BackupFormatIssue issue;
+}
+
+const _invalid = BackupFormatException(BackupFormatIssue.damaged);
 final maxCardQuantity = kIsWeb
     ? 9007199254740991
     : int.parse('9223372036854775807');
@@ -18,10 +26,13 @@ class LibraryBackup {
   final List<BackupRow> folders, scans;
   final int copies, pending;
 
-  static Future<LibraryBackup> read(String path) async {
+  static Future<LibraryBackup> read(String path) async =>
+      LibraryBackup.parse(await File(path).readAsString());
+
+  factory LibraryBackup.parse(String text) {
     final Object? json;
     try {
-      json = jsonDecode(await File(path).readAsString());
+      json = jsonDecode(text);
     } on FormatException {
       throw _invalid;
     }
@@ -30,10 +41,10 @@ class LibraryBackup {
 
   factory LibraryBackup.fromJson(Object? json) {
     if (json is! BackupRow || json['format'] != 'kartoved') {
-      throw const FormatException('Выберите резервную копию Картоведа');
+      throw const BackupFormatException(BackupFormatIssue.wrongFile);
     }
     if (json['version'] is! int || json['version'] != 1) {
-      throw const FormatException('Эта версия формата не поддерживается');
+      throw const BackupFormatException(BackupFormatIssue.unsupportedVersion);
     }
     final folderIds = <int>{};
     final folders = [

@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../collection_rows.dart';
 import '../data/catalog.dart';
 import '../model.dart';
@@ -75,9 +76,9 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
                   style: const TextStyle(color: libraryInk),
                   cursorColor: libraryInk,
                   textInputAction: TextInputAction.search,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     contentPadding: EdgeInsets.symmetric(horizontal: 12),
-                    hintText: 'Название карты',
+                    hintText: context.strings.cardName,
                     hintStyle: TextStyle(color: libraryMuted),
                     border: InputBorder.none,
                   ),
@@ -89,13 +90,13 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
                   ),
                   onPressed: () => setState(() => editing = true),
                   icon: const Icon(Icons.search),
-                  label: const Text('Найти карту'),
+                  label: Text(context.strings.findCard),
                 ),
         ),
         if (editing)
           IconButton(
             color: libraryInk,
-            tooltip: 'Закрыть поиск',
+            tooltip: context.strings.closeSearch,
             icon: const Icon(Icons.close),
             onPressed: () {
               search.search('');
@@ -104,14 +105,14 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
           ),
         IconButton(
           isSelected: flagsOnly,
-          tooltip: 'Только отмеченные',
+          tooltip: context.strings.flaggedOnly,
           color: flagsOnly ? const Color(0xff844202) : libraryMuted,
           icon: Icon(flagsOnly ? Icons.flag_rounded : Icons.flag_outlined),
           onPressed: () => setState(() => flagsOnly = !flagsOnly),
         ),
         IconButton(
           isSelected: grouped,
-          tooltip: 'Группировать по названию',
+          tooltip: context.strings.groupByName,
           color: grouped ? const Color(0xff844202) : libraryMuted,
           icon: Icon(grouped ? Icons.layers : Icons.layers_outlined),
           onPressed: () => setState(() => grouped = !grouped),
@@ -129,7 +130,7 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
           alignment: Alignment.centerLeft,
           child: InputChip(
             label: Text(name, overflow: TextOverflow.ellipsis),
-            deleteButtonTooltipMessage: 'Показать все карты',
+            deleteButtonTooltipMessage: context.strings.showAllCards,
             onDeleted: () => setState(() => focusName = null),
           ),
         ),
@@ -173,8 +174,8 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
               return Center(
                 child: TextButton(
                   onPressed: () => search.search(search.query),
-                  child: const Text(
-                    'Повторить поиск',
+                  child: Text(
+                    context.strings.retrySearch,
                     style: TextStyle(color: libraryInk),
                   ),
                 ),
@@ -183,8 +184,8 @@ class _CollectionBrowserState extends State<CollectionBrowser> {
             return Center(
               child: Text(
                 flagsOnly && term.isEmpty
-                    ? 'Нет отмеченных карт'
-                    : 'Совпадений нет',
+                    ? context.strings.noFlaggedCards
+                    : context.strings.noMatches,
                 style: const TextStyle(color: libraryMuted),
               ),
             );

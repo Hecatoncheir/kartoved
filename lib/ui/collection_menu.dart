@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../data/catalog.dart';
 import '../model.dart';
 import 'style.dart';
@@ -35,9 +36,9 @@ class _CollectionMenuState extends State<CollectionMenu> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             duration: noticeDuration,
-            content: Text('Не удалось изменить коллекцию. Попробуйте ещё раз.'),
+            content: Text(context.strings.changeCollectionFailed),
           ),
         );
       }
@@ -73,6 +74,7 @@ class _CollectionMenuState extends State<CollectionMenu> {
     final route = ModalRoute.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final target = result.target;
+    final strings = context.strings;
     await model.deleteFolder(library.folder, moveTo: target?.id);
     if (route?.isCurrent == true && navigator.canPop()) navigator.pop();
     if (!messenger.mounted) return;
@@ -82,8 +84,8 @@ class _CollectionMenuState extends State<CollectionMenu> {
         duration: noticeDuration,
         content: Text(
           target == null
-              ? 'Коллекция «${library.title}» удалена'
-              : 'Карты перенесены в «${target.name}»',
+              ? strings.collectionDeleted(library.title)
+              : strings.cardsTransferred(target.name),
         ),
       ),
     );
@@ -91,22 +93,22 @@ class _CollectionMenuState extends State<CollectionMenu> {
 
   @override
   Widget build(BuildContext context) => PopupMenuButton<_Action>(
-    tooltip: 'Действия с коллекцией',
+    tooltip: context.strings.collectionActions,
     enabled: !busy,
     onSelected: _manage,
     itemBuilder: (_) => [
-      const PopupMenuItem(value: _Action.rename, child: Text('Переименовать')),
+      PopupMenuItem(value: _Action.rename, child: Text(context.strings.rename)),
       if (widget.library.groups.length > 1 && widget.library.recent.isNotEmpty)
-        const PopupMenuItem(
+        PopupMenuItem(
           value: _Action.transfer,
-          child: Text('Перенести карты и удалить'),
+          child: Text(context.strings.moveCardsAndDelete),
         ),
       PopupMenuItem(
         value: _Action.delete,
         child: Text(
           widget.library.recent.isEmpty
-              ? 'Удалить коллекцию'
-              : 'Удалить вместе с картами',
+              ? context.strings.deleteCollection
+              : context.strings.deleteWithCards,
         ),
       ),
     ],
@@ -134,26 +136,30 @@ class _CollectionNameDialogState extends State<CollectionNameDialog> {
     scrollable: true,
     title: Text(
       widget.initialName == null
-          ? 'Новая коллекция'
-          : 'Переименовать коллекцию',
+          ? context.strings.newCollection
+          : context.strings.renameCollection,
     ),
     content: TextFormField(
       initialValue: widget.initialName,
       autofocus: true,
       maxLength: 80,
       textInputAction: TextInputAction.done,
-      decoration: const InputDecoration(labelText: 'Название'),
+      decoration: InputDecoration(labelText: context.strings.name),
       onChanged: (v) => setState(() => value = v.trim()),
       onFieldSubmitted: (_) => submit(),
     ),
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('Отмена'),
+        child: Text(context.strings.cancel),
       ),
       FilledButton(
         onPressed: valid ? submit : null,
-        child: Text(widget.initialName == null ? 'Создать' : 'Сохранить'),
+        child: Text(
+          widget.initialName == null
+              ? context.strings.create
+              : context.strings.save,
+        ),
       ),
     ],
   );
@@ -182,24 +188,27 @@ class _DeleteDialogState extends State<_DeleteDialog> {
         targets.isEmpty ? Icons.delete_outline : Icons.drive_file_move_outline,
         color: Theme.of(context).colorScheme.error,
       ),
-      title: Text('Удалить «${group.name}»?'),
+      title: Text(context.strings.deleteNamedCollection(group.name)),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Экземпляров: ${group.count} · На проверке: ${library.reviews.length}',
+            context.strings.deleteCollectionStats(
+              group.count,
+              library.reviews.length,
+            ),
           ),
           const SizedBox(height: 12),
           if (targets.isNotEmpty) ...[
-            const Text(
-              'Все карты, включая ожидающие проверки, будут перенесены.',
-            ),
+            Text(context.strings.moveCollectionWarning),
             const SizedBox(height: 12),
             DropdownButtonFormField<CardGroup>(
               initialValue: targets.first,
               isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Куда перенести'),
+              decoration: InputDecoration(
+                labelText: context.strings.moveDestination,
+              ),
               items: [
                 for (final target in targets)
                   DropdownMenuItem(
@@ -211,14 +220,16 @@ class _DeleteDialogState extends State<_DeleteDialog> {
             ),
           ] else
             Text(
-              library.recent.isEmpty ? 'Пустая коллекция будет удалена.' : 'Все экземпляры и карты на проверке будут удалены без возможности отмены.',
+              library.recent.isEmpty
+                  ? context.strings.deleteEmptyCollectionWarning
+                  : context.strings.deleteAllCollectionWarning,
             ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Отмена'),
+          child: Text(context.strings.cancel),
         ),
         FilledButton(
           style: FilledButton.styleFrom(
@@ -226,7 +237,11 @@ class _DeleteDialogState extends State<_DeleteDialog> {
             foregroundColor: Theme.of(context).colorScheme.onError,
           ),
           onPressed: () => Navigator.pop(context, (target: target)),
-          child: Text(targets.isEmpty ? 'Удалить' : 'Перенести и удалить'),
+          child: Text(
+            targets.isEmpty
+                ? context.strings.delete
+                : context.strings.moveAndDelete,
+          ),
         ),
       ],
     );

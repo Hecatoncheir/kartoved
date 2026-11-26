@@ -1,6 +1,8 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
+import 'scanner_strings.dart';
 import '../data/catalog.dart';
 import '../data/review.dart';
 import '../model.dart';
@@ -45,9 +47,9 @@ class ReviewList extends StatelessWidget {
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             duration: noticeDuration,
-            content: Text('Не удалось сохранить решение'),
+            content: Text(context.strings.saveReviewFailed),
           ),
         );
       }
@@ -75,8 +77,8 @@ class ReviewList extends StatelessWidget {
                     color: libraryMuted,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Все карты проверены',
+                  Text(
+                    context.strings.allCardsReviewed,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontFamily: headingFont,
@@ -88,7 +90,7 @@ class ReviewList extends StatelessWidget {
                   TextButton(
                     style: TextButton.styleFrom(foregroundColor: libraryInk),
                     onPressed: onBackToAlbum,
-                    child: const Text('К альбому'),
+                    child: Text(context.strings.backToAlbum),
                   ),
                 ],
               ),
@@ -129,7 +131,7 @@ class ReviewList extends StatelessWidget {
                     ),
                   ),
                   subtitle: Text(
-                    state.reviews[item.sequence]!.reason.label,
+                    state.reviews[item.sequence]!.reason.label(context),
                     style: const TextStyle(color: libraryMuted),
                   ),
                   trailing: const Icon(
@@ -149,8 +151,10 @@ class ReviewList extends StatelessWidget {
                           : () => onRescan!(item),
                       icon: const Icon(Icons.camera_alt_outlined, size: 19),
                       label: Text(
-                        'Переснять',
-                        semanticsLabel: 'Переснять ${card.name}',
+                        context.strings.rescan,
+                        semanticsLabel: context.strings.rescanNamedCard(
+                          card.name,
+                        ),
                       ),
                     ),
                   ),
@@ -181,8 +185,9 @@ class _ChoiceSheetState extends State<_ChoiceSheet> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SheetHeading(review.reason.label),
-        if (review.batchLabel.isNotEmpty) Text('Стопка · ${review.batchLabel}'),
+        SheetHeading(review.reason.label(context)),
+        if (review.batchLabel.isNotEmpty)
+          Text(context.strings.batchDetails(review.batchLabel)),
         const SizedBox(height: 8),
         Flexible(
           child: ListView.separated(
@@ -213,7 +218,9 @@ class _ChoiceSheetState extends State<_ChoiceSheet> {
                   ),
                   title: Text(card.name),
                   subtitle: Text(
-                    card.foil ? '${card.detail} · Фольга' : card.detail,
+                    card.foil
+                        ? context.strings.detailFoil(card.detail)
+                        : card.detail,
                     style: codeText,
                   ),
                   trailing: Icon(
@@ -232,11 +239,11 @@ class _ChoiceSheetState extends State<_ChoiceSheet> {
           onPressed: chosen == null
               ? null
               : () => Navigator.pop(context, (card: chosen)),
-          child: const Text('Подтвердить'),
+          child: Text(context.strings.confirm),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context, (card: null as Edition?)),
-          child: const Text('Убрать из очереди'),
+          child: Text(context.strings.removeFromQueue),
         ),
       ],
     );

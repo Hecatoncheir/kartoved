@@ -1,16 +1,20 @@
-const cardLanguageNames = {
-  'ru': 'Русский',
-  'en': 'Английский',
-  'de': 'Немецкий',
-  'fr': 'Французский',
-  'es': 'Испанский',
-  'it': 'Итальянский',
-  'pt': 'Португальский',
-  'ja': 'Японский',
-  'ko': 'Корейский',
-  'zhs': 'Китайский (упрощённый)',
-  'zht': 'Китайский (традиционный)',
+import 'package:flutter/widgets.dart';
+
+import '../l10n/strings.dart';
+
+Map<String, String> cardLanguageNames(BuildContext context) => {
+  'ru': context.strings.languageRussian,
+  'en': context.strings.languageEnglish,
+  'de': context.strings.languageGerman,
+  'fr': context.strings.languageFrench,
+  'es': context.strings.languageSpanish,
+  'it': context.strings.languageItalian,
+  'pt': context.strings.languagePortuguese,
+  'ja': context.strings.languageJapanese,
+  'ko': context.strings.languageKorean,
+  'zhs': context.strings.languageChineseSimplified,
+  'zht': context.strings.languageChineseTraditional,
 };
 
-String cardLanguageName(String code) =>
-    cardLanguageNames[code] ?? code.toUpperCase();
+String cardLanguageName(BuildContext context, String code) =>
+    cardLanguageNames(context)[code] ?? code.toUpperCase();

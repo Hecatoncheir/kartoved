@@ -17,12 +17,11 @@ const mtgIdentificationAssets = 'assets/mtg_identification';
 const nearMatchWindow = .05;
 
 enum RecognitionModel {
-  oracle('Oracle', .60),
-  mtgIdentification('MTG Card Identification + Oracle', .60),
-  keypoints('Ключевые точки + Oracle', .60);
+  oracle(.60),
+  mtgIdentification(.60),
+  keypoints(.60);
 
-  const RecognitionModel(this.label, this.minimumScore);
-  final String label;
+  const RecognitionModel(this.minimumScore);
   final double minimumScore;
 
   static RecognitionModel fromName(String? name) => switch (name) {
