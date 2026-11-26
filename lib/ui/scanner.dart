@@ -58,7 +58,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       scan.state.options.contains(ScanOption.essentials);
   RecognitionModel get engine =>
       essentials ? RecognitionModel.oracle : scan.state.model;
-  RecognitionModel? _warmingTray;
+  (RecognitionModel, bool)? _warmingTray;
+  (Catalog, RecognitionModel, Future<PreviewRecognizer>)? _previewWorker;
   ScanMode _autoMode = ScanMode.tray;
   TrayArea? _trayArea;
   final _trayChanges = TrayChangeDetector();
@@ -102,12 +103,20 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     frameSession++;
     _sweep(false);
     scan.setModel(saved);
+    if (_autoMode == ScanMode.fast) _warmSelectedModel(fast: true);
   }
 
   Future<void> _restoreAutoMode() async {
-    final tray = await AndroidActions.scannerTray();
+    final profile = await AndroidActions.scannerProfile();
     if (!mounted || _autoModeChosen) return;
-    setState(() => _autoMode = tray ? ScanMode.tray : ScanMode.automatic);
+    setState(
+      () => _autoMode = switch (profile) {
+        'automatic' => ScanMode.automatic,
+        'fast' when AutoScanProfile.supportsFast => ScanMode.fast,
+        _ => ScanMode.tray,
+      },
+    );
+    if (_autoMode == ScanMode.fast) _warmSelectedModel(fast: true);
   }
 
   Future<void> _restoreOption(ScanOption option) async {
@@ -258,10 +267,13 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       if (!mounted || selected == null) return;
       _autoModeChosen = true;
       setState(() => _autoMode = selected);
+      if (selected != ScanMode.fast) _stopPreviewWorker();
       if (scan.state.mode.isAutomatic && scan.state.mode != selected) {
         _setMode(selected);
+      } else if (selected == ScanMode.fast) {
+        _warmSelectedModel(fast: true);
       }
-      await AndroidActions.scannerTray(selected == ScanMode.tray);
+      await AndroidActions.scannerProfile(selected.name);
     });
   }
 
@@ -272,7 +284,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     _sweep(false);
     if (!mode.isAutomatic && !scan.state.showGuide) _outline = null;
     scan.setMode(mode);
-    if (mode == ScanMode.tray) _warmSelectedModel();
+    if (mode.usesTray) _warmSelectedModel(fast: mode == ScanMode.fast);
     _syncCameraStream();
   }
 
@@ -285,23 +297,57 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     });
   }
 
-  void _warmSelectedModel() {
-    if (_warmingTray != engine) unawaited(_warmTray(engine));
+  void _warmSelectedModel({required bool fast}) {
+    final selected = (engine, fast);
+    if (_warmingTray != selected) unawaited(_warmTray(selected));
   }
 
-  Future<void> _warmTray(RecognitionModel engine) async {
-    setState(() => _warmingTray = engine);
+  Future<void> _warmTray((RecognitionModel, bool) selected) async {
+    final (model, fast) = selected;
+    final catalog = library.catalog;
+    setState(() => _warmingTray = selected);
     try {
-      await AndroidActions.warmTray(
-        engine,
-        essentials: essentials,
-      ).timeout(const Duration(seconds: 30));
+      await Future.wait([
+        AndroidActions.warmTray(model, essentials: !fast && essentials),
+        if (fast && catalog != null) _previewWorkerFor(catalog, model),
+      ]).timeout(const Duration(seconds: 30));
     } catch (_) {
       // Следующий кадр повторит загрузку необходимых ресурсов.
     } finally {
-      if (mounted && _warmingTray == engine) {
+      if (mounted && _warmingTray == selected) {
         setState(() => _warmingTray = null);
       }
+    }
+  }
+
+  Future<PreviewRecognizer> _previewWorkerFor(
+    Catalog catalog,
+    RecognitionModel model,
+  ) {
+    if (_previewWorker case (final previous, final engine, final worker)
+        when identical(previous, catalog) && engine == model) {
+      return worker;
+    }
+    _stopPreviewWorker();
+    late final Future<PreviewRecognizer> worker;
+    worker = PreviewRecognizer.start(catalog, model).catchError((
+      Object error,
+      StackTrace trace,
+    ) {
+      if (identical(_previewWorker?.$3, worker)) _previewWorker = null;
+      Error.throwWithStackTrace(error, trace);
+    });
+    _previewWorker = (catalog, model, worker);
+    return worker;
+  }
+
+  void _stopPreviewWorker() {
+    final worker = _previewWorker?.$3;
+    _previewWorker = null;
+    if (worker != null) {
+      unawaited(
+        worker.then<void>((value) => value.close(), onError: (Object _) {}),
+      );
     }
   }
 
@@ -315,6 +361,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _stopPreviewWorker();
     _webFrames?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     openCamera(false);
@@ -340,7 +387,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       !writing &&
       library.catalog != null &&
       (scan.state.mode.isAutomatic || scan.state.showGuide) &&
-      (scan.state.mode != ScanMode.tray || _warmingTray == null);
+      (!scan.state.mode.usesTray || _warmingTray == null);
   bool accepts(int token) =>
       _acceptsFrame(token) && scan.state.mode.isAutomatic;
 
@@ -430,6 +477,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
 
   void _frameFailed(int token) {
     if (accepts(token)) {
+      if (scan.state.mode == ScanMode.fast) _stopPreviewWorker();
       _setMode(ScanMode.manual);
       message('Автоскан остановлен. Попробуйте ещё раз.');
     } else if (_acceptsFrame(token)) {
@@ -441,11 +489,10 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     reading = false;
     if (token != frameSession) return;
     if (mounted && _focus != null) setState(() => _focus = null);
-    final interval = switch (scan.state.mode) {
-      ScanMode.manual => 850,
-      ScanMode.tray => kIsWeb ? 0 : 80,
-      ScanMode.automatic => essentials || kIsWeb ? 0 : 220,
-    };
+    final interval = scan.state.mode.frameDelay(
+      web: kIsWeb,
+      essentials: essentials,
+    );
     nextFrame = clock.elapsedMilliseconds + interval;
   }
 
@@ -470,7 +517,8 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       showOutline(await library.previewOutline(file: file, frame: frame));
       return;
     }
-    final inTray = scan.state.mode == ScanMode.tray;
+    final inTray = scan.state.mode.usesTray;
+    final fast = scan.state.mode == ScanMode.fast;
     final canRepeat = inTray && scan.repeatReady;
     final consecutive =
         inTray && scan.state.options.contains(ScanOption.consecutive);
@@ -499,12 +547,18 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       if (showStages) _showScanStage(stage, corners, size, mirror: mirror);
     }
 
+    final selected = engine;
+    final worker = fast
+        ? await _previewWorkerFor(library.catalog!, selected)
+        : null;
+    if (!accepts(token)) return;
     final matches = await library.recognizePreview(
       file: file,
       frame: frame,
-      engine: engine,
+      engine: selected,
       tray: inTray ? _trayArea : null,
       deferKeypoints: inTray,
+      worker: worker,
       onOutline: showOutline,
       onProgress: scan.state.showGuide ? showProgress : null,
     );
@@ -526,10 +580,10 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     }
     final repeat = canRepeat ? scan.repeatFor(matches) : null;
     if (repeat != null && repeat.reuse) {
-      await _save((
-        decision: (card: repeat.card, review: null),
-        matches: matches,
-      ), trayScan: true);
+      await _save(
+        PreparedScan((card: repeat.card, review: null), matches),
+        trayScan: true,
+      );
       return;
     }
     final ready = repeat != null || scan.evaluate(matches) != null;
@@ -542,6 +596,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         file: file,
         frame: frame,
         tray: inTray ? _trayArea : null,
+        fast: fast,
         repeatCheck: !consecutive
             ? null
             : repeat == null
@@ -617,6 +672,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
         previous: previous,
         trayScan: trayScan,
       );
+      if (result.saveThumbnail case final save?) unawaited(Future<void>(save));
       if (!mounted) return;
       final targetFound = scan.state.targets.contains(card.name);
       final sound = review != null
@@ -713,6 +769,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     TrayArea? tray,
     TrayRepeatCheck? repeatCheck,
     bool refineTrayMatch = false,
+    bool fast = false,
     required bool Function() accept,
     ScanEntry? previous,
     ScanProgress? onProgress,
@@ -724,6 +781,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
       isCurrent: accept,
       rescan: previous != null,
       essentials: essentials,
+      fast: fast,
       file: file,
       frame: frame,
       tray: tray,
@@ -874,7 +932,9 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   Future<void> _selectModel(RecognitionModel selected) async {
     _modelSelected = true;
     scan.setModel(selected);
-    if (scan.state.mode == ScanMode.tray) _warmSelectedModel();
+    if (scan.state.mode.usesTray || _autoMode == ScanMode.fast) {
+      _warmSelectedModel(fast: _autoMode == ScanMode.fast);
+    }
     await AndroidActions.scannerModel(selected);
   }
 
@@ -936,11 +996,12 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
             RecognitionModel.mtgIdentification => 'MTG + Oracle',
             RecognitionModel.keypoints => 'Ключевые точки',
           };
-    if (scan.state.mode == ScanMode.tray) {
-      if (_warmingTray != null) return 'Лоток · загрузка моделей';
+    if (scan.state.mode.usesTray) {
+      final mode = scan.state.mode == ScanMode.fast ? 'Быстрый' : 'Лоток';
+      if (_warmingTray != null) return '$mode · загрузка моделей';
       return _trayArea == null
-          ? 'Лоток · положите карту ровно'
-          : 'Лоток · $model';
+          ? '$mode · положите карту ровно'
+          : '$mode · $model';
     }
     return engine == RecognitionModel.oracle && !essentials ? null : model;
   }

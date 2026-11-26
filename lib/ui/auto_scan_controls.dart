@@ -1,15 +1,24 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/foundation.dart';
 
 import '../scan_cubit.dart';
 import 'scanner_style.dart';
 import 'style.dart';
 
 extension AutoScanProfile on ScanMode {
-  String get label =>
-      this == ScanMode.tray ? 'Автоскан в лотке' : 'Обычный автоскан';
-  IconData get icon => this == ScanMode.tray
-      ? Icons.inventory_2_outlined
-      : Icons.center_focus_weak_rounded;
+  static bool get supportsFast =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  String get label => switch (this) {
+    ScanMode.tray => 'Автоскан в лотке',
+    ScanMode.fast => 'Быстрый',
+    _ => 'Обычный автоскан',
+  };
+  IconData get icon => switch (this) {
+    ScanMode.tray => Icons.inventory_2_outlined,
+    ScanMode.fast => Icons.bolt_outlined,
+    _ => Icons.center_focus_weak_rounded,
+  };
 }
 
 class AutoScanButton extends StatelessWidget {
@@ -61,7 +70,11 @@ class AutoScanButton extends StatelessWidget {
                 ],
               ),
               Text(
-                profile == ScanMode.tray ? 'В лотке' : 'Автоскан',
+                switch (profile) {
+                  ScanMode.tray => 'В лотке',
+                  ScanMode.fast => 'Быстрый',
+                  _ => 'Автоскан',
+                },
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
@@ -92,15 +105,20 @@ class AutoScanModeSheet extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SheetHeading('Режим автоскана'),
-        for (final mode in [ScanMode.tray, ScanMode.automatic])
+        for (final mode in [
+          ScanMode.tray,
+          ScanMode.automatic,
+          if (AutoScanProfile.supportsFast) ScanMode.fast,
+        ])
           ListTile(
             leading: Icon(mode.icon),
             title: Text(mode.label),
-            subtitle: Text(
-              mode == ScanMode.tray
-                  ? 'Card Slinger · фиксированная область'
-                  : 'Для карт в руке · выравнивание кадра',
-            ),
+            subtitle: Text(switch (mode) {
+              ScanMode.tray => 'Card Slinger · фиксированная область',
+              ScanMode.fast =>
+                'В лотке · добавление по первому уверенному кадру',
+              _ => 'Для карт в руке · выравнивание кадра',
+            }),
             selected: mode == profile,
             trailing: mode == profile ? const Icon(Icons.check) : null,
             onTap: () => Navigator.pop(context, mode),

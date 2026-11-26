@@ -139,7 +139,7 @@ class _ScannerMenuState extends State<ScannerMenu> {
             value: state.model.label,
             onTap: ready ? () => _go(_Page.model) : null,
           ),
-          if (widget.calibrated && state.mode == ScanMode.tray)
+          if (widget.calibrated && state.mode.usesTray)
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.crop_free),

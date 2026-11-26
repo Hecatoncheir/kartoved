@@ -11,10 +11,12 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
 class CardText(private val context: Context) {
     private val worker = Executors.newSingleThreadExecutor()
+    private val photoWorker = Executors.newSingleThreadExecutor()
     private val identifier = LanguageIdentification.getClient(
         LanguageIdentificationOptions.Builder().setConfidenceThreshold(0.75f).build()
     )
@@ -27,7 +29,7 @@ class CardText(private val context: Context) {
     }
 
     fun photo(call: MethodCall, reply: MethodChannel.Result) {
-        process(reply) {
+        process(reply, photoWorker) {
             val source = bitmap(call)
             try {
                 val points = call.argument<List<Double>>("corners")
@@ -56,8 +58,8 @@ class CardText(private val context: Context) {
         )
     }
 
-    private fun process(reply: MethodChannel.Result, work: () -> Any?) {
-        worker.execute {
+    private fun process(reply: MethodChannel.Result, executor: Executor = worker, work: () -> Any?) {
+        executor.execute {
             val result = runCatching(work).getOrNull()
             android.os.Handler(context.mainLooper).post { reply.success(result) }
         }
@@ -209,5 +211,6 @@ class CardText(private val context: Context) {
     fun close() {
         worker.execute { engine?.recycle(); identifier.close() }
         worker.shutdown()
+        photoWorker.shutdown()
     }
 }

@@ -144,16 +144,22 @@ void main() {
   });
 
   test('Быстрый режим сразу принимает уверенное совпадение и сохраняет защиту от дублей', () {
-    final scan = ScanCubit()..setOption(ScanOption.essentials, true);
-    addTearDown(scan.close);
-    expect(scan.evaluate(a), en);
-    scan.recorded(1, en, a);
-    expect(scan.evaluate(a), isNull);
-    const uncertain = [
-      Match([next], score: .70),
-    ];
-    expect(scan.evaluate(uncertain), isNull);
-    expect(scan.evaluate(uncertain), next);
+    for (final scan in [
+      ScanCubit()..setMode(ScanMode.fast),
+      ScanCubit()..setOption(ScanOption.essentials, true),
+    ]) {
+      addTearDown(scan.close);
+      expect(scan.evaluate(a), en);
+      scan.recorded(1, en, a);
+      expect(scan.evaluate(a), isNull);
+      const uncertain = [
+        Match([next], score: .70),
+      ];
+      expect(scan.evaluate(uncertain), isNull);
+      expect(scan.evaluate(uncertain), next);
+    }
+    expect(ScanMode.fast.frameDelay(), 0);
+    expect(ScanMode.tray.frameDelay(), 80);
   });
 
   test('MTG уточняет близкие совпадения и сохраняет границу Oracle', () {

@@ -155,6 +155,26 @@ class AndroidActions {
     }
   }
 
+  static Future<String> scannerProfile([String? profile]) async {
+    if (!kIsWeb) {
+      try {
+        final value = await _channel.invokeMethod<String>(
+          'scannerProfile',
+          profile,
+        );
+        if (value != null) return value;
+      } on PlatformException {
+        // Старый канал хранит выбор между лотком и обычным автосканом.
+      } on MissingPluginException {
+        // Старый канал хранит выбор между лотком и обычным автосканом.
+      }
+    }
+    final tray = await scannerTray(
+      profile == null ? null : profile != 'automatic',
+    );
+    return tray ? 'tray' : 'automatic';
+  }
+
   static Future<bool> scannerOption(String name, [bool? value]) async {
     if (kIsWeb) return browserScannerOption(name, value);
     try {

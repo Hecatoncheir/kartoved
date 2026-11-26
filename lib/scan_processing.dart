@@ -13,7 +13,13 @@ import 'data/tray.dart';
 import 'model.dart';
 import 'scan_decision.dart';
 
-typedef PreparedScan = ({ScanDecision decision, List<Match> matches});
+class PreparedScan {
+  const PreparedScan(this.decision, this.matches, {this.saveThumbnail});
+
+  final ScanDecision decision;
+  final List<Match> matches;
+  final Future<void> Function()? saveThumbnail;
+}
 
 enum TrayRepeatCheck { firstCopy, replacement }
 
@@ -28,12 +34,13 @@ Future<PreparedScan?> prepareScan(
   TrayArea? tray,
   bool refineTrayMatch = false,
   bool essentials = false,
+  bool fast = false,
   TrayRepeatCheck? repeatCheck,
   ScanProgress? onProgress,
 }) async {
   final corners = tray?.corners ?? detected.first.corners;
   final quick =
-      essentials &&
+      (essentials || fast) &&
       !rescan &&
       !batch.active &&
       repeatCheck != TrayRepeatCheck.replacement;
@@ -45,7 +52,7 @@ Future<PreparedScan?> prepareScan(
           detected.first.editions.length > 1);
   if (readFooter) onProgress?.call(ScanStage.footer, corners);
   var photo = await _preparePhoto(
-    tray,
+    fast && !readFooter ? null : tray,
     readFooter: readFooter,
     needTitle: quick && kIsWeb,
     file: file,
@@ -123,9 +130,15 @@ Future<PreparedScan?> prepareScan(
       (matches.first.score < .75 ||
           closeMatches(matches)
               .any((m) => m.editions.first.name != options.first.name));
+  final needsLanguage =
+      fast && evidence.map((e) => e.language).toSet().length > 1;
   var decision = verifyPrinting
       ? decideTrayRepeat(matches, evidence, batch)
-      : rescan || matches.first.titleOnly || ambiguous
+      : rescan ||
+            matches.first.titleOnly ||
+            ambiguous ||
+            needsLanguage ||
+            (fast && batch.active)
       ? decideScan(matches, evidence, batch)
       : (card: selectScannedEdition(evidence, batch), review: null);
   if (quick && !verifyPrinting && decision.review == null) {
@@ -142,15 +155,19 @@ Future<PreparedScan?> prepareScan(
       decision = (card: card.withoutPrinting(), review: null);
     }
   }
-  await _saveThumbnail(
+  Future<void> saveThumbnail() => _saveThumbnail(
     decision.card.id,
     photo?.bytes,
     file,
     frame,
     corners,
-    isCurrent,
+    fast ? () => true : isCurrent,
   );
-  return (decision: decision, matches: matches);
+  if (fast) {
+    return PreparedScan(decision, matches, saveThumbnail: saveThumbnail);
+  }
+  await saveThumbnail();
+  return PreparedScan(decision, matches);
 }
 
 Future<List<Edition>> _printingOptions(

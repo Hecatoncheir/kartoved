@@ -17,41 +17,35 @@ TitleRead? readPaddleTitle(
   im.Image source,
   List<double> quad,
   PaddleTitleAssets assets, {
+  required Session Function() session,
   List<double>? retryQuad,
   void Function(List<double>)? onRead,
 }) {
   final strip = _sample(source, quad, onRead);
   if (strip == null) return null;
-  final session = Session.fromBytes(
-    assets.graph,
-    options: const SessionOptions(intraOpNumThreads: 2),
-  );
-  try {
-    final color = _recognize(session, strip.pixels, assets.alphabet);
-    TitleCandidate? contrast;
-    if ((color?.confidence ?? 0) < .93) {
-      try {
-        final retry = retryQuad == null
-            ? strip
-            : _sample(source, retryQuad, onRead) ?? strip;
-        _increaseContrast(retry);
-        contrast = _recognize(session, retry.pixels, assets.alphabet);
-      } catch (_) {
-        if (color == null) rethrow;
-        // Исходное чтение остаётся доступным, если повторный проход прервался.
-      }
+  final recognizer = session();
+  final color = _recognize(recognizer, strip.pixels, assets.alphabet);
+  TitleCandidate? contrast;
+  if ((color?.confidence ?? 0) < .93) {
+    try {
+      final retry = retryQuad == null
+          ? strip
+          : _sample(source, retryQuad, onRead) ?? strip;
+      _increaseContrast(retry);
+      contrast = _recognize(recognizer, retry.pixels, assets.alphabet);
+    } catch (_) {
+      if (color == null) rethrow;
+      // Исходное чтение остаётся доступным, если повторный проход прервался.
     }
-    final first = color ?? contrast;
-    if (first == null) return null;
-    return (
-      text: first.text,
-      confidence: first.confidence,
-      corners: quad,
-      contrast: color == null ? null : contrast,
-    );
-  } finally {
-    session.release();
   }
+  final first = color ?? contrast;
+  if (first == null) return null;
+  return (
+    text: first.text,
+    confidence: first.confidence,
+    corners: quad,
+    contrast: color == null ? null : contrast,
+  );
 }
 
 _Strip? _sample(

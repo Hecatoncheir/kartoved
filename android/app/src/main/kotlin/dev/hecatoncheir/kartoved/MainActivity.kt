@@ -41,6 +41,12 @@ class MainActivity : FlutterActivity() {
                         if (tray != null) settings.edit().putBoolean("tray", tray).apply()
                         reply.success(tray ?: settings.getBoolean("tray", true))
                     }
+                    "scannerProfile" -> {
+                        val profile = call.arguments as? String
+                        if (profile != null) settings.edit().putString("profile", profile).apply()
+                        reply.success(profile ?: settings.getString("profile", null) ?:
+                            if (settings.getBoolean("tray", true)) "tray" else "automatic")
+                    }
                     "scannerOption" -> {
                         val key = requireNotNull(call.argument<String>("name"))
                         val value = call.argument<Boolean>("value")

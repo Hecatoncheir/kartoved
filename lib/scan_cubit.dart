@@ -81,9 +81,18 @@ class ScanGate {
 enum ScanMode {
   manual,
   automatic,
-  tray;
+  tray,
+  fast;
 
   bool get isAutomatic => this != manual;
+  bool get usesTray => this == tray || this == fast;
+
+  int frameDelay({bool web = false, bool essentials = false}) => switch (this) {
+    manual => 850,
+    automatic => web || essentials ? 0 : 220,
+    tray => web ? 0 : 80,
+    fast => 0,
+  };
 }
 
 enum ScanOption {
@@ -286,7 +295,7 @@ class ScanCubit extends Cubit<ScanSession> {
     _countdown?.cancel();
     final repeat =
         repeatable &&
-        state.mode == ScanMode.tray &&
+        state.mode.usesTray &&
         state.options.contains(ScanOption.consecutive);
     _repeatCard = repeat ? card : null;
     _repeatCandidates = repeat
@@ -333,7 +342,9 @@ class ScanCubit extends Cubit<ScanSession> {
       matches,
       manual: manual,
       fast:
-          state.options.contains(ScanOption.essentials) && !state.batch.active,
+          state.mode == ScanMode.fast ||
+          (state.options.contains(ScanOption.essentials) &&
+              !state.batch.active),
       minimumScore: state.model.minimumScore,
     );
   }

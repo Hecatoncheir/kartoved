@@ -8,6 +8,15 @@ import 'tray.dart';
 
 Future<void> warmTitleRecognition() async {}
 
+class PreviewRecognizer {
+  static Future<PreviewRecognizer> start(
+    Catalog catalog,
+    RecognitionModel engine,
+  ) => throw UnsupportedError('Прогрев кадров доступен на Android');
+
+  void close() {}
+}
+
 @JS('kartoved.scan')
 external JSPromise<_ScanResult> _scan(
   String file,
@@ -71,4 +80,5 @@ Future<Recognition> recognizeCameraFrame(
   TrayArea? tray,
   bool outlineOnly = false,
   ScanProgress? onProgress,
+  PreviewRecognizer? worker,
 }) => throw UnsupportedError('В браузере используются снимки с камеры');

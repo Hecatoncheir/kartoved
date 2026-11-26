@@ -466,6 +466,7 @@ class AppModel extends Cubit<LibraryState> {
     TrayArea? tray,
     bool outlineOnly = false,
     ScanProgress? onProgress,
+    PreviewRecognizer? worker,
   }) => frame == null
       ? recognizeFile(
           catalog!,
@@ -482,6 +483,7 @@ class AppModel extends Cubit<LibraryState> {
           tray: tray,
           outlineOnly: outlineOnly,
           onProgress: onProgress,
+          worker: worker,
         );
 
   Future<List<Match>> recognizeFrame(
@@ -512,6 +514,7 @@ class AppModel extends Cubit<LibraryState> {
     required RecognitionModel engine,
     TrayArea? tray,
     bool deferKeypoints = false,
+    PreviewRecognizer? worker,
     required void Function(List<double>) onOutline,
     ScanProgress? onProgress,
   }) async {
@@ -521,6 +524,7 @@ class AppModel extends Cubit<LibraryState> {
       engine: engine,
       tray: tray,
       onProgress: onProgress,
+      worker: worker,
     );
     final matches = await _matches(
       (

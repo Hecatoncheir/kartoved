@@ -52,7 +52,7 @@ typedef _Input = ({
   SendPort? updates,
 });
 
-Recognition _recognize(_Input input) {
+Recognition _recognize(_Input input, [OracleRecognizer? recognizer]) {
   final port = input.updates;
   final ScanProgress? publish = port == null
       ? null
@@ -82,9 +82,10 @@ Recognition _recognize(_Input input) {
       tray: input.tray,
       outlineOnly: input.outlineOnly,
       onProgress: publish,
+      recognizer: recognizer,
     );
   } finally {
-    port?.send(null);
+    if (recognizer == null) port?.send(null);
   }
 }
 
@@ -111,14 +112,146 @@ Future<Recognition> recognizeCameraFrame(
   TrayArea? tray,
   bool outlineOnly = false,
   ScanProgress? onProgress,
-}) => _run(
-  catalog,
-  frame: frame,
-  engine: engine,
-  tray: tray,
-  outlineOnly: outlineOnly,
-  onProgress: onProgress,
-);
+  PreviewRecognizer? worker,
+}) =>
+    worker?.recognize(frame, tray: tray, onProgress: onProgress) ??
+    _run(
+      catalog,
+      frame: frame,
+      engine: engine,
+      tray: tray,
+      outlineOnly: outlineOnly,
+      onProgress: onProgress,
+    );
+
+typedef _PreviewRequest = ({PreviewFrame frame, TrayArea? tray, bool progress});
+typedef _PreviewSetup = ({
+  String directory,
+  Uint8List? mtgGraph,
+  PaddleTitleAssets? titleAssets,
+  SendPort events,
+});
+
+// В главном изоляте остаются камера и каталог, сессии ONNX принадлежат обработчику.
+class PreviewRecognizer {
+  PreviewRecognizer._() {
+    _events.listen(_receive);
+  }
+
+  final _events = ReceivePort();
+  final _ready = Completer<void>();
+  Completer<Recognition>? _response;
+  ScanProgress? _onProgress;
+  SendPort? _commands;
+
+  static Future<PreviewRecognizer> start(
+    Catalog catalog,
+    RecognitionModel engine,
+  ) async {
+    final (mtgGraph, titleAssets) = await (
+      engine == RecognitionModel.mtgIdentification
+          ? _mtgGraph
+          : Future<Uint8List?>.value(),
+      _paddle ??= _loadPaddle(),
+    ).wait;
+    final worker = PreviewRecognizer._();
+    final events = worker._events.sendPort;
+    unawaited(
+      Isolate.spawn(
+        _recognizePreviews,
+        (
+          directory: catalog.directory.path,
+          mtgGraph: mtgGraph,
+          titleAssets: titleAssets,
+          events: events,
+        ),
+        onError: events,
+        onExit: events,
+        debugName: 'kartoved-preview',
+      ).then<void>((_) {}, onError: worker._fail),
+    );
+    await worker._ready.future;
+    return worker;
+  }
+
+  Future<Recognition> recognize(
+    PreviewFrame frame, {
+    TrayArea? tray,
+    ScanProgress? onProgress,
+  }) async {
+    final commands = _commands;
+    if (commands == null || _response != null) {
+      throw StateError('Обработчик кадров недоступен');
+    }
+    final response = _response = Completer<Recognition>();
+    _onProgress = onProgress;
+    try {
+      commands.send((frame: frame, tray: tray, progress: onProgress != null));
+      return await response.future;
+    } finally {
+      _response = null;
+      _onProgress = null;
+    }
+  }
+
+  void close() {
+    _commands?.send(null);
+    _commands = null;
+  }
+
+  void _receive(Object? message) {
+    switch (message) {
+      case final SendPort commands:
+        _commands = commands;
+        _ready.complete();
+      case (final ScanStage stage, final List<double> corners):
+        _onProgress?.call(stage, corners);
+      case final Recognition result:
+        _response?.complete(result);
+      case [final String error, final String trace]:
+        _fail(StateError(error), StackTrace.fromString(trace));
+      case null:
+        _fail(StateError('Обработчик кадров завершён'), StackTrace.current);
+    }
+  }
+
+  void _fail(Object error, StackTrace trace) {
+    _commands = null;
+    _events.close();
+    if (!_ready.isCompleted) _ready.completeError(error, trace);
+    final response = _response;
+    if (response != null && !response.isCompleted) {
+      response.completeError(error, trace);
+    }
+  }
+}
+
+Future<void> _recognizePreviews(_PreviewSetup setup) async {
+  final (:directory, :mtgGraph, :titleAssets, :events) = setup;
+  final recognizer = OracleRecognizer(directory);
+  final commands = ReceivePort();
+  try {
+    recognizer.warm(mtgGraph: mtgGraph, titleAssets: titleAssets);
+    events.send(commands.sendPort);
+    await for (final request in commands) {
+      if (request is! _PreviewRequest) break;
+      final result = _recognize((
+        directory: directory,
+        file: null,
+        frame: request.frame,
+        mtgGraph: mtgGraph,
+        titleAssets: titleAssets,
+        tray: request.tray,
+        outlineOnly: false,
+        updates: request.progress ? events : null,
+      ), recognizer);
+      events.send(result);
+    }
+  } finally {
+    commands.close();
+    recognizer.close();
+  }
+}
 
 Future<Recognition> _run(
   Catalog catalog, {

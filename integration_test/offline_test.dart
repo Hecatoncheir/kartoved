@@ -10,6 +10,7 @@ import 'package:kartoved/scan_cubit.dart';
 import 'package:kartoved/scan_decision.dart';
 import 'package:kartoved/scan_processing.dart';
 import 'package:kartoved/data/review.dart';
+import 'package:kartoved/data/recognition_result.dart';
 import 'package:kartoved/data/tray.dart';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -20,12 +21,18 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import 'package:kartoved/data/language.dart';
 
+import 'tray_latency.dart';
+
 void main() => runOfflineTests(
   const String.fromEnvironment('CARD_JPEG'),
   const String.fromEnvironment('RUSSIAN_JPEG'),
 );
 void runOfflineTests(String englishPhoto, String russianPhoto) {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  if (const bool.fromEnvironment('TRAY_LATENCY')) {
+    _testTrayLatency(englishPhoto, russianPhoto);
+    return;
+  }
   testWidgets('Холодный старт и добавление карты без сети', (tester) async {
     final model = AppModel(CatalogStore(), History());
     debugPrint('Автономная проверка: загрузка каталога');
@@ -54,7 +61,9 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
         reason: 'OCR должен прочитать текст за пределами иллюстрации',
       );
       debugPrint('Автономная проверка: карта у края кадра NV21');
-      final edgeFrame = _cameraFrame(_offsetPhoto(await photo.readAsBytes()));
+      final edgeFrame = cameraFrame(
+        img.decodeJpg(_offsetPhoto(await photo.readAsBytes()))!,
+      );
       final edgeMatches = await model.recognizeFrame(edgeFrame);
       expect(edgeMatches.first.editions.first.name, "Bouncer's Beatdown");
       expect(edgeMatches.first.corners[1], lessThan(.10));
@@ -130,7 +139,7 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
       );
       expect(ru.language, 'ru');
       debugPrint('Автономная проверка: распознавание кадра NV21');
-      final frame = _cameraFrame(await russian.readAsBytes());
+      final frame = cameraFrame(img.decodeJpg(await russian.readAsBytes())!);
       const area = TrayArea(.1, .1, .9, .9);
       final detector = TrayChangeDetector();
       final timer = Stopwatch()..start();
@@ -289,6 +298,35 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
     expect(rows.where((r) => r.card.foil).single.quantity, 1);
     expect(rows.where((r) => !r.card.foil).single.quantity, 3);
   });
+  _testTrayLatency(englishPhoto, russianPhoto);
+}
+
+void _testTrayLatency(String englishPhoto, String russianPhoto) {
+  testWidgets('Сравнение задержки лотка до сигнала', (_) async {
+    final previousPath = await getDatabasesPath();
+    final testDirectory = await Directory.systemTemp.createTemp(
+      'kartoved-latency-',
+    );
+    await databaseFactory.setDatabasesPath(testDirectory.path);
+    final model = AppModel(CatalogStore(), History());
+    try {
+      await model.initialize();
+      expect(model.initialError, isNull);
+      await AndroidActions.warmTray(RecognitionModel.oracle);
+      await compareTrayLatency(model, {
+        for (final (language, jpg) in [
+          ('en', englishPhoto),
+          ('ru', russianPhoto),
+        ])
+          language: cameraFrame(trayFixture(base64Decode(jpg))),
+      });
+    } finally {
+      await model.close();
+      await databaseFactory.setDatabasesPath(previousPath);
+      await deleteDatabase(p.join(testDirectory.path, 'collection.sqlite'));
+      await testDirectory.delete();
+    }
+  });
 }
 
 Uint8List _offsetPhoto(Uint8List jpg) {
@@ -302,8 +340,7 @@ Uint8List _offsetPhoto(Uint8List jpg) {
   return img.encodeJpg(scene, quality: 93);
 }
 
-PreviewFrame _cameraFrame(Uint8List jpg) {
-  final source = img.decodeJpg(jpg)!;
+PreviewFrame cameraFrame(img.Image source) {
   final width = source.width & ~1, height = source.height & ~1;
   final output = Uint8List(width * height * 3 ~/ 2);
   for (var y = 0; y < height; y++) {

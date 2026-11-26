@@ -15,6 +15,7 @@ class Pictures {
   final Map<String, Future<File>> _pending = {};
   final Map<String, Future<Uint8List>> _browserPending = {};
   final _unsavedScans = <String, Uint8List>{};
+  final _savingScans = <String, Future<void>>{};
   final _photos = StreamController<String>.broadcast();
   Stream<String> get photos => _photos.stream;
   Future<Directory>? _root;
@@ -156,7 +157,14 @@ class Pictures {
       bytes[bytes.length - 2] == 0xff &&
       bytes.last == 0xd9;
 
-  Future<void> saveScan(String id, Uint8List bytes) async {
+  Future<void> saveScan(String id, Uint8List bytes) => _savingScans.putIfAbsent(
+    id,
+    () => _writeScan(id, bytes).whenComplete(() {
+      _savingScans.remove(id);
+    }),
+  );
+
+  Future<void> _writeScan(String id, Uint8List bytes) async {
     if (bytes.isEmpty) return;
     address(id);
     if (kIsWeb) {

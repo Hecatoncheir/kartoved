@@ -48,46 +48,92 @@ Recognition identifyImage(
   bool outlineOnly = false,
   PaddleTitleAssets? titleAssets,
   ScanProgress? onProgress,
+  OracleRecognizer? recognizer,
 }) {
-  final config = jsonDecode(
-    File(p.join(directory, 'catalog.json')).readAsStringSync(),
-  ) as Map;
-  final constants = config['constants'] as Map;
-  final side = constants['scene'] as int;
-  final (bytes, width, height) = _scene(original, side);
-  final sessions = <Session>[];
-  Session openGraph(Uint8List graph) {
-    final session = _openGraph(graph);
-    sessions.add(session);
-    return session;
-  }
-
-  Session open(String name) =>
-      openGraph(File(p.join(directory, '$name.onnx')).readAsBytesSync());
-
-  TitleRead? titleFor(List<double> corners) {
-    if (titleAssets == null || corners.isEmpty) return null;
-    try {
-      final crop = tray?.corners ?? corners;
-      return readPaddleTitle(
-        original,
-        crop,
-        titleAssets,
-        retryQuad: tray == null ? null : corners,
-        onRead: (points) => onProgress?.call(ScanStage.title, points),
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
+  final active = recognizer ?? OracleRecognizer(directory);
   try {
-    final detector = open('detector');
+    return active.identify(
+      original,
+      mtgGraph: mtgGraph,
+      tray: tray,
+      outlineOnly: outlineOnly,
+      titleAssets: titleAssets,
+      onProgress: onProgress,
+    );
+  } finally {
+    if (recognizer == null) active.close();
+  }
+}
+
+class OracleRecognizer {
+  OracleRecognizer(this.directory)
+    : _config = jsonDecode(
+        File(p.join(directory, 'catalog.json')).readAsStringSync(),
+      ) as Map;
+
+  final String directory;
+  final _sessions = <String, Session>{};
+  final Map _config;
+
+  Session _open(String name) => _sessions.putIfAbsent(
+    name,
+    () => _openGraph(File(p.join(directory, '$name.onnx')).readAsBytesSync()),
+  );
+
+  Session _openExtra(String name, Uint8List graph) =>
+      _sessions.putIfAbsent(name, () => _openGraph(graph));
+
+  void warm({Uint8List? mtgGraph, PaddleTitleAssets? titleAssets}) {
+    _open('detector');
+    _open('embed');
+    _open('search');
+    if (mtgGraph != null) _openExtra('mtg', mtgGraph);
+    if (titleAssets != null) _openExtra('title', titleAssets.graph);
+  }
+
+  void close() {
+    for (final session in _sessions.values) {
+      session.release();
+    }
+    _sessions.clear();
+  }
+
+  Recognition identify(
+    im.Image original, {
+    Uint8List? mtgGraph,
+    TrayArea? tray,
+    required bool outlineOnly,
+    PaddleTitleAssets? titleAssets,
+    ScanProgress? onProgress,
+  }) {
+    final config = _config;
+    final constants = config['constants'] as Map;
+    final side = constants['scene'] as int;
+    final (bytes, width, height) = _scene(original, side);
+
+    TitleRead? titleFor(List<double> corners) {
+      if (titleAssets == null || corners.isEmpty) return null;
+      try {
+        final crop = tray?.corners ?? corners;
+        return readPaddleTitle(
+          original,
+          crop,
+          titleAssets,
+          session: () => _openExtra('title', titleAssets.graph),
+          retryQuad: tray == null ? null : corners,
+          onRead: (points) => onProgress?.call(ScanStage.title, points),
+        );
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final detector = _open('detector');
     final input = constants['det_input'] as int;
     final rotations = constants['rotations'] as int;
-    late final embed = open('embed');
-    late final search = open('search');
-    late final mtg = openGraph(mtgGraph!);
+    late final embed = _open('embed');
+    late final search = _open('search');
+    late final mtg = _openExtra('mtg', mtgGraph!);
 
     if (tray != null) {
       final center = side / 2;
@@ -182,10 +228,6 @@ Recognition identifyImage(
       return (hits: hits, mtgHits: mtgHits, corners: corners, title: title);
     }
     return (hits: [], mtgHits: [], corners: outline, title: title);
-  } finally {
-    for (final session in sessions.reversed) {
-      session.release();
-    }
   }
 }
 

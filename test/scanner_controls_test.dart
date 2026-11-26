@@ -55,6 +55,33 @@ void main() {
     expect(profile, ScanMode.tray);
   });
 
+  testWidgets('В меню Android можно выбрать быстрый лоток', (tester) async {
+    ScanMode? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                selected = await showModalBottomSheet<ScanMode>(
+                  context: context,
+                  builder: (_) => const AutoScanModeSheet(ScanMode.tray),
+                );
+              },
+              child: const Text('Режим автоскана'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Режим автоскана'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Быстрый'));
+    await tester.pumpAndSettle();
+    expect(selected, ScanMode.fast);
+    expect(selected?.usesTray, isTrue);
+  }, variant: const TargetPlatformVariant({TargetPlatform.android}));
+
   testWidgets('Проекция учитывает обрезку видео, стекло повторяет контур', (
     tester,
   ) async {
