@@ -2,7 +2,7 @@ name: Публикация Картоведа в браузере
 
 on:
   push:
-    branches: ['1.x.x']
+    branches: ['main']
     paths:
       - '.github/workflows/pages.yml'
       - 'assets/**'
