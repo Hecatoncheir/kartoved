@@ -31,41 +31,6 @@ Future<void> chooseReview(
   }
 }
 
-Future<bool> reviewBeforeExport(
-  BuildContext context,
-  AppModel model,
-  VoidCallback showReviews,
-) async {
-  final folder = model.state.folder;
-  final proceed = await showLibrarySheet<bool>(
-    context,
-    Builder(
-      builder: (sheet) => Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SheetHeading('Есть спорные карты'),
-          Text(
-            'В CSV попадут только подтверждённые экземпляры. На проверке: ${model.state.reviews.length}.',
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(sheet, false),
-            child: const Text('Проверить карты'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(sheet, true),
-            child: const Text('Экспортировать подтверждённые'),
-          ),
-        ],
-      ),
-    ),
-  );
-  if (proceed == false && context.mounted && model.state.folder == folder) {
-    showReviews();
-  }
-  return proceed == true;
-}
-
 class ReviewList extends StatelessWidget {
   const ReviewList({
     required this.onRescan,

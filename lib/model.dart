@@ -710,11 +710,15 @@ class AppModel extends Cubit<LibraryState> {
     await _refresh();
   }
 
-  Future<String> export({bool flaggedOnly = false}) async {
+  Future<String> export({
+    bool flaggedOnly = false,
+    bool includePending = true,
+  }) async {
     final base = catalog;
     final rows = await history.list(
       folder: state.folder,
       flaggedOnly: flaggedOnly,
+      includePending: includePending,
     );
     final byPrinting = <String, CardCount>{};
     for (final row in rows) {

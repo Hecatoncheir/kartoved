@@ -556,6 +556,8 @@ class _RecentAdditions extends StatelessWidget {
   }
 }
 
+enum _ExportChoice { confirmed, includePending, flagged, review }
+
 class CollectionPage extends StatefulWidget {
   const CollectionPage({
     super.key,
@@ -628,51 +630,95 @@ class _CollectionPageState extends State<CollectionPage> {
     }
   }
 
-  Future<void> _export(BuildContext context) async {
+  Future<_ExportChoice?> _exportChoice(
+    BuildContext context,
+    LibraryState state, {
+    required bool hasConfirmed,
+  }) {
+    final pending = state.reviews.length;
+    if (pending == 0 && state.flags.isEmpty) {
+      return Future.value(_ExportChoice.confirmed);
+    }
+    var includePending = pending > 0;
+    return showLibrarySheet<_ExportChoice>(
+      context,
+      StatefulBuilder(
+        builder: (sheet, setSheetState) => SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SheetHeading('Экспорт для Moxfield'),
+              if (pending > 0)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('Включить карты на проверке'),
+                  subtitle: Text(
+                    'Снимков на проверке — $pending. Для них в CSV попадут предварительные результаты распознавания.',
+                  ),
+                  value: includePending,
+                  onChanged: (value) =>
+                      setSheetState(() => includePending = value ?? false),
+                ),
+              FilledButton(
+                onPressed: hasConfirmed || includePending
+                    ? () => Navigator.pop(
+                        sheet,
+                        includePending
+                            ? _ExportChoice.includePending
+                            : _ExportChoice.confirmed,
+                      )
+                    : null,
+                child: Text(
+                  state.flags.isEmpty ? 'Экспортировать' : 'Вся коллекция',
+                ),
+              ),
+              if (state.flags.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.flag_outlined),
+                  title: const Text('Только отмеченные'),
+                  onTap: () => Navigator.pop(sheet, _ExportChoice.flagged),
+                ),
+              if (pending > 0)
+                TextButton(
+                  onPressed: () => Navigator.pop(sheet, _ExportChoice.review),
+                  child: const Text('Проверить карты'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _export(
+    BuildContext context, {
+    required bool hasConfirmed,
+  }) async {
     final model = context.read<AppModel>();
     try {
       final folder = model.state.folder;
-      if (model.state.reviews.isNotEmpty) {
-        final proceed = await reviewBeforeExport(
-          context,
-          model,
-          () => _showReviews(true),
-        );
-        if (!proceed || !context.mounted || model.state.folder != folder) {
-          return;
-        }
-      }
-      final flaggedOnly = model.state.flags.isEmpty
-          ? false
-          : await showLibrarySheet<bool>(
-              context,
-              Builder(
-                builder: (sheet) => Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SheetHeading('Экспорт для Moxfield'),
-                    ListTile(
-                      leading: const Icon(Icons.collections_bookmark_outlined),
-                      title: const Text('Вся коллекция'),
-                      onTap: () => Navigator.pop(sheet, false),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.flag_outlined),
-                      title: const Text('Только отмеченные'),
-                      onTap: () => Navigator.pop(sheet, true),
-                    ),
-                  ],
-                ),
-              ),
-            );
-      if (flaggedOnly == null ||
-          model.state.folder != folder ||
-          !context.mounted) {
+      final choice = await _exportChoice(
+        context,
+        model.state,
+        hasConfirmed: hasConfirmed,
+      );
+      if (choice == null || !context.mounted || model.state.folder != folder) {
         return;
       }
+      if (choice == _ExportChoice.review) {
+        _showReviews(true);
+        return;
+      }
+      final flaggedOnly = choice == _ExportChoice.flagged;
       final name = model.state.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
       final suffix = flaggedOnly ? '_Отмеченные' : '';
-      final csv = await model.export(flaggedOnly: flaggedOnly);
+      final csv = await model.export(
+        flaggedOnly: flaggedOnly,
+        includePending: choice == _ExportChoice.includePending,
+      );
+      if (!context.mounted || model.state.folder != folder) return;
       await AndroidActions.saveCsv('$name${suffix}_Moxfield.csv', csv);
     } catch (_) {
       if (context.mounted) {
@@ -744,9 +790,11 @@ class _CollectionPageState extends State<CollectionPage> {
             actions: [
               IconButton(
                 tooltip: 'Экспорт для Moxfield',
-                onPressed: items.isEmpty || state.catalog == null
+                onPressed:
+                    state.catalog == null ||
+                        (items.isEmpty && state.reviews.isEmpty)
                     ? null
-                    : () => _export(context),
+                    : () => _export(context, hasConfirmed: items.isNotEmpty),
                 icon: const Icon(Icons.ios_share_outlined),
               ),
               if (state.groups.isNotEmpty) CollectionMenu(state),

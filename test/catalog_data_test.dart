@@ -101,7 +101,12 @@ void main() {
     );
     expect(model.state.printings.single.quantity, 2);
     expect(model.state.groups.first.count, 0);
-    expect(await model.export(), isNot(contains('Russian')));
+    final confirmedCsv = await model.export(includePending: false);
+    expect(confirmedCsv, contains('"2","Opt","ELD","","English","","59"'));
+    final includedCsv = await model.export();
+    expect(includedCsv.trim().split('\n'), hasLength(2));
+    expect(includedCsv, contains('"3","Opt","ELD","","English","","59"'));
+    expect(await model.export(flaggedOnly: true), confirmedCsv);
     final saved = await model.save(en);
     await model.discardScan(saved);
     expect(model.state.printings.single.quantity, 2);

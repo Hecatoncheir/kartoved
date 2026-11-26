@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kartoved/collection_rows.dart';
 import 'package:kartoved/data/catalog.dart';
+import 'package:kartoved/data/review.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/ui/collection_card.dart';
 import 'package:kartoved/ui/collection_detail.dart';
@@ -338,7 +339,7 @@ void main() {
     },
   );
 
-  testWidgets('Поиск, группировка, точный счётчик и оба варианта экспорта', (
+  testWidgets('Поиск, группировка, точный счётчик и варианты экспорта', (
     tester,
   ) async {
     tester.platformDispatcher.accessibilityFeaturesTestValue =
@@ -444,10 +445,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('×3'), findsOneWidget);
     await tap(find.byTooltip('Только отмеченные'));
-    Future<String> export(String choice) async {
+    Future<String> export(String choice, {bool? includePending}) async {
       saved = null;
       await tap(find.byTooltip('Экспорт для Moxfield'));
       await tester.pumpAndSettle();
+      if (includePending != null) {
+        final checkbox = find.widgetWithText(
+          CheckboxListTile,
+          'Включить карты на проверке',
+        );
+        expect(tester.widget<CheckboxListTile>(checkbox).value, isTrue);
+        if (!includePending) await tap(checkbox);
+      }
       await tap(find.text(choice));
       await tester.pumpAndSettle();
       await waitFor(() => saved != null);
@@ -477,5 +486,29 @@ void main() {
     await tap(find.byTooltip('Экспорт для Moxfield'));
     await waitFor(() => saved != null);
     expect(saved!.arguments['csv'], all);
+
+    await tester.runAsync(() async {
+      final folder = await history.create('Новые снимки');
+      await history.add(
+        ru,
+        folder: folder,
+        review: const ScanReview(ReviewReason.printing, [en, ru]),
+      );
+      await model.select(folder);
+    });
+    await tester.pump();
+    expect(find.text('0 карт'), findsOneWidget);
+    final withPending = await export('Экспортировать', includePending: true);
+    expect(withPending.trim().split('\n'), hasLength(2));
+    expect(withPending, contains('"1","Opt","DOM","","Russian","foil","60"'));
+    expect(model.state.reviews, hasLength(1));
+    expect(model.state.printings, isEmpty);
+    await tester.runAsync(() => model.save(island));
+    await tester.pump();
+    final confirmed = await export('Экспортировать', includePending: false);
+    expect(confirmed.trim().split('\n'), hasLength(2));
+    expect(confirmed, contains('"1","Island"'));
+    final nextExport = await export('Экспортировать', includePending: true);
+    expect(nextExport, contains('"1","Opt","DOM","","Russian","foil","60"'));
   });
 }

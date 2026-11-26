@@ -190,7 +190,11 @@ void runOfflineTests(String englishPhoto, String russianPhoto) {
       expect(model.state.recent.single.card.id, english.id);
       await model.select(russianFolder);
       expect(model.state.reviews[seq]?.batchLabel, 'ELD');
-      expect(await model.export(), isNot(contains("Bouncer's Beatdown")));
+      expect(await model.export(), contains("Bouncer's Beatdown"));
+      expect(
+        await model.export(includePending: false),
+        isNot(contains("Bouncer's Beatdown")),
+      );
       expect(model.state.owned(english.name), 1);
       await model.confirmReview(seq, live);
       expect(model.state.printings.single.card.language, 'ru');

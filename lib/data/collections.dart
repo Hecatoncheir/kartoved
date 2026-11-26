@@ -463,10 +463,14 @@ class History {
   Future<List<CardCount>> list({
     int folder = 1,
     bool flaggedOnly = false,
+    bool includePending = false,
   }) async {
+    final reviewFilter = includePending && !flaggedOnly
+        ? ''
+        : 'AND review IS NULL';
     final flagFilter = flaggedOnly ? 'AND flagged=1' : '';
     final rows = await _db.rawQuery(
-      'SELECT id,name,set_code,number,lang,foil,sum(qty) AS total FROM scans WHERE folder=? AND review IS NULL $flagFilter GROUP BY id,lang,foil,set_code ORDER BY max(seq) DESC',
+      'SELECT id,name,set_code,number,lang,foil,sum(qty) AS total FROM scans WHERE folder=? $reviewFilter $flagFilter GROUP BY id,lang,foil,set_code ORDER BY max(seq) DESC',
       [folder],
     );
     return rows
