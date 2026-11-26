@@ -246,7 +246,7 @@ void main() {
       expect(decision.review!.choices, [en, next]);
       scan.recorded(42, en, uncertain);
       expect(scan.state.lastScan, 42);
-      scan.undone();
+      scan.undone(42);
       expect(scan.state.lastScan, isNull);
       expect(scan.state.mode, ScanMode.automatic);
       expect(scan.evaluate([]), isNull);

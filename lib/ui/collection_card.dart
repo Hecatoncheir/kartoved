@@ -81,6 +81,12 @@ class _CollectionCardState extends State<CollectionCard>
     duration: const Duration(milliseconds: 180),
   );
   static const corners = BorderRadius.all(collectionCardRadius);
+  static const _edgeShadow = BoxDecoration(
+    borderRadius: corners,
+    boxShadow: [
+      BoxShadow(color: Color(0x59170e2b), offset: Offset(4, 0), blurRadius: 12),
+    ],
+  );
 
   void _move(bool open) {
     final target = open ? 1.0 : 0.0;
@@ -108,132 +114,134 @@ class _CollectionCardState extends State<CollectionCard>
     super.dispose();
   }
 
+  static double _actionScale(double revealed) =>
+      .72 + .28 * Curves.easeInOutSine.transform(revealed.clamp(0.0, 1.0));
+
+  Widget _buildActionPanel(double width, double progress) => Positioned(
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: width + collectionCardRadius.x,
+    child: DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xff35284c), Color(0xff4b3858), Color(0xff653b50)],
+        ),
+      ),
+      child: Padding(
+        padding: EdgeInsets.only(left: collectionCardRadius.x),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Action(
+              icon: widget.flagged ? Icons.flag_outlined : Icons.flag_rounded,
+              label: widget.flagged ? 'Снять' : 'Флажок',
+              tooltip: widget.flagged ? 'Снять флажок' : 'Поставить флажок',
+              accent: const Color(0xffffb569),
+              scale: _actionScale(2 * progress - 1),
+              onTap: () {
+                _settle(false);
+                widget.flag();
+              },
+            ),
+            _Action(
+              icon: Icons.delete_outline_rounded,
+              label: 'Убрать',
+              tooltip: 'Убрать из коллекции',
+              accent: const Color(0xfffbcec0),
+              scale: _actionScale(2 * progress),
+              onTap: () {
+                _settle(false);
+                widget.remove();
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  void _tapFace() {
+    if (slide.value > 0) {
+      _settle(false);
+    } else {
+      widget.open();
+    }
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (_, box) {
       final width = math.min(148.0, box.maxWidth * .62);
-      final face = _Face(
-        widget.item,
-        flagged: widget.flagged,
-        toggle: widget.item.multiple
-            ? widget.open
-            : () => _settle(slide.value < .5),
+      final face = Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: const BoxDecoration(
+          borderRadius: corners,
+          color: Color(0xfff4eff9),
+          gradient: LinearGradient(
+            colors: [Color(0xfffcf7ff), Color(0xffebe5f5)],
+          ),
+        ),
+        foregroundDecoration: BoxDecoration(
+          borderRadius: corners,
+          border: Border.all(
+            color: widget.flagged ? const Color(0xffba7639) : libraryRim,
+          ),
+        ),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.item.multiple ? widget.open : _tapFace,
+          child: _Face(
+            widget.item,
+            flagged: widget.flagged,
+            toggle: widget.item.multiple
+                ? widget.open
+                : () => _settle(slide.value < .5),
+          ),
+        ),
       );
       return ClipRRect(
         borderRadius: corners,
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Color(0xfff4eff9),
-            gradient: LinearGradient(
-              colors: [Color(0xfffcf7ff), Color(0xffebe5f5)],
-            ),
-          ),
-          foregroundDecoration: BoxDecoration(
-            borderRadius: corners,
-            border: Border.all(
-              color: widget.flagged ? const Color(0xffba7639) : libraryRim,
-            ),
-          ),
-          child: widget.item.multiple
-              ? GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: widget.open,
+        child: widget.item.multiple
+            ? face
+            : GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onHorizontalDragStart: (_) {
+                  slide.stop();
+                  widget.select(true);
+                },
+                onHorizontalDragUpdate: (d) {
+                  slide.value -= d.delta.dx / width;
+                },
+                onHorizontalDragEnd: (d) {
+                  final speed = d.velocity.pixelsPerSecond.dx;
+                  _settle(speed.abs() > 400 ? speed < 0 : slide.value > .45);
+                },
+                onHorizontalDragCancel: () => _settle(slide.value > .5),
+                child: AnimatedBuilder(
+                  animation: slide,
                   child: face,
-                )
-              : GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onHorizontalDragStart: (_) {
-                    slide.stop();
-                    widget.select(true);
-                  },
-                  onHorizontalDragUpdate: (d) {
-                    slide.value -= d.delta.dx / width;
-                  },
-                  onHorizontalDragEnd: (d) {
-                    final speed = d.velocity.pixelsPerSecond.dx;
-                    _settle(speed.abs() > 400 ? speed < 0 : slide.value > .45);
-                  },
-                  onHorizontalDragCancel: () => _settle(slide.value > .5),
-                  child: AnimatedBuilder(
-                    animation: slide,
-                    child: face,
-                    builder: (_, front) => Stack(
+                  builder: (_, front) {
+                    final revealedWidth = width * slide.value;
+                    final isRevealed = revealedWidth > 0;
+                    return Stack(
                       fit: StackFit.expand,
                       children: [
-                        if (slide.value > 0)
-                          Positioned(
-                            right: width * (slide.value - 1),
-                            top: 0,
-                            bottom: 0,
-                            width: width + 32,
-                            child: DecoratedBox(
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    libraryInk,
-                                    Color(0xff44385c),
-                                    Color(0xff533957),
-                                    Color(0xff653b50),
-                                  ],
-                                  stops: [0, .37, .70, 1],
-                                ),
-                              ),
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: SizedBox(
-                                  width: width,
-                                  height: double.infinity,
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      _Action(
-                                        icon: widget.flagged
-                                            ? Icons.flag_outlined
-                                            : Icons.flag_rounded,
-                                        label: widget.flagged
-                                            ? 'Снять'
-                                            : 'Флажок',
-                                        tooltip: widget.flagged
-                                            ? 'Снять флажок'
-                                            : 'Поставить флажок',
-                                        accent: const Color(0xffffb569),
-                                        onTap: () {
-                                          _settle(false);
-                                          widget.flag();
-                                        },
-                                      ),
-                                      _Action(
-                                        icon: Icons.delete_outline_rounded,
-                                        label: 'Убрать',
-                                        tooltip: 'Убрать из коллекции',
-                                        accent: const Color(0xfffbcec0),
-                                        onTap: () {
-                                          _settle(false);
-                                          widget.remove();
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
+                        if (isRevealed) _buildActionPanel(width, slide.value),
                         Transform.translate(
-                          offset: Offset(-width * slide.value, 0),
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: slide.value > 0
-                                ? () => _settle(false)
-                                : widget.open,
+                          offset: Offset(-revealedWidth, 0),
+                          child: DecoratedBox(
+                            decoration: isRevealed
+                                ? _edgeShadow
+                                : const BoxDecoration(),
                             child: front,
                           ),
                         ),
                       ],
-                    ),
-                  ),
+                    );
+                  },
                 ),
-        ),
+              ),
       );
     },
   );
@@ -245,11 +253,13 @@ class _Action extends StatelessWidget {
     required this.label,
     required this.tooltip,
     required this.accent,
+    required this.scale,
     required this.onTap,
   });
   final IconData icon;
   final String label, tooltip;
   final Color accent;
+  final double scale;
   final VoidCallback onTap;
 
   @override
@@ -260,19 +270,26 @@ class _Action extends StatelessWidget {
         message: tooltip,
         child: InkWell(
           onTap: onTap,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: accent),
-              const SizedBox(height: 4),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  label,
-                  style: TextStyle(color: accent, fontWeight: FontWeight.w800),
+          child: Transform.scale(
+            scale: MediaQuery.disableAnimationsOf(context) ? 1 : scale,
+            transformHitTests: false,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: accent),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: accent,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

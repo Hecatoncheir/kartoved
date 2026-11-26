@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kartoved/collection_rows.dart';
 import 'package:kartoved/data/catalog.dart';
 import 'package:kartoved/model.dart';
 import 'package:kartoved/ui/collection_card.dart';
@@ -168,8 +169,23 @@ void main() {
         tester.getSize(tile(0)).width,
         lessThan(tester.getSize(tile(1)).width),
       );
-      await tester.drag(tile(3), const Offset(-170, 0));
+      final swipe = await tester.startGesture(tester.getCenter(tile(3)));
+      await swipe.moveBy(const Offset(-30, 0));
+      await swipe.moveBy(const Offset(-45, 0));
+      await tester.pump();
+      final flag = find.text('Флажок');
+      final remove = find.text('Убрать');
+      final flagCenter = tester.getCenter(flag);
+      final removeCenter = tester.getCenter(remove);
+      expect(flag.hitTestable(), findsNothing);
+      expect(remove.hitTestable(), findsOneWidget);
+
+      await swipe.moveBy(const Offset(-100, 0));
+      await swipe.up();
       await tester.pumpAndSettle();
+      expect(tester.getCenter(flag), flagCenter);
+      expect(tester.getCenter(remove), removeCenter);
+      expect(flag.hitTestable(), findsOneWidget);
       expect(find.byTooltip('Поставить флажок'), findsOneWidget);
       expect(find.byTooltip('Убрать из коллекции'), findsOneWidget);
       expect(position.pixels, closeTo(step * 2, 1));
@@ -190,6 +206,61 @@ void main() {
       position.jumpTo(0);
       await tester.pump();
       expect(tester.getTopLeft(tile(0)).dy, top);
+    },
+  );
+
+  testWidgets(
+    'Значки растут по мере открытия каждой кнопки, область нажатия постоянна',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: SizedBox(
+              width: 360,
+              height: 106,
+              child: CollectionCard(
+                item: CollectionRow([(card: opt, quantity: 1)]),
+                flagged: false,
+                selected: false,
+                select: (_) {},
+                flag: () {},
+                remove: () {},
+                open: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      final card = find.byType(CollectionCard);
+      final flag = find.byIcon(Icons.flag_rounded);
+      final remove = find.byIcon(Icons.delete_outline_rounded);
+      final removeTarget = find.ancestor(
+        of: remove,
+        matching: find.byType(InkWell),
+      );
+      double width(Finder finder) => tester.getRect(finder).width;
+
+      final swipe = await tester.startGesture(tester.getCenter(card));
+      await swipe.moveBy(const Offset(-30, 0));
+      await swipe.moveBy(const Offset(-45, 0));
+      await tester.pump();
+      final smallRemove = width(remove);
+      final smallFlag = width(flag);
+      final target = tester.getRect(removeTarget);
+
+      await swipe.moveBy(const Offset(-80, 0));
+      await tester.pump();
+      final shownRemove = width(remove);
+      final shownFlag = width(flag);
+      expect(shownRemove, greaterThan(smallRemove));
+      expect(shownFlag, greaterThan(smallFlag));
+
+      await swipe.up();
+      await tester.pumpAndSettle();
+      expect(width(remove), closeTo(shownRemove, .01));
+      expect(width(flag), greaterThan(shownFlag));
+      expect(width(flag), closeTo(width(remove), .01));
+      expect(tester.getRect(removeTarget), target);
     },
   );
 

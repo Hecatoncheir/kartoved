@@ -49,6 +49,7 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
   Timer? _webFrames;
   String? error;
   bool reading = false, modal = false, writing = false;
+  int _pendingUndos = 0;
   bool _modelSelected = false, _guideChosen = false, _settingTorch = false;
   bool _autoModeChosen = false;
   final _changedOptions = <ScanOption>{};
@@ -858,6 +859,10 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     scan.stopRepeats();
     if (library.state.reviews.containsKey(entry.sequence)) {
       await chooseReview(context, library, entry.sequence, scanner: true);
+      if (mounted &&
+          !library.state.recent.any((row) => row.sequence == entry.sequence)) {
+        scan.undone(entry.sequence);
+      }
       return;
     }
     if (entry.card.needsPrinting) {
@@ -960,10 +965,27 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
     if (mounted) scan.changedFolder();
   });
 
-  Future<void> _undo(int seq) => _paused(() async {
-    await library.discardScan(seq);
-    if (mounted) scan.undone();
-  });
+  bool get _canUndo => !writing && (!modal || _pendingUndos > 0);
+
+  Future<void> _undo() async {
+    if (!_canUndo) return;
+    _pendingUndos++;
+    if (_pendingUndos > 1) return;
+    await _paused(() async {
+      try {
+        while (mounted && _pendingUndos > 0) {
+          final seq = scan.state.lastAdded;
+          if (seq == null) break;
+          await library.discardScan(seq);
+          if (!mounted) break;
+          scan.undone(seq);
+          _pendingUndos--;
+        }
+      } finally {
+        _pendingUndos = 0;
+      }
+    });
+  }
 
   Future<void> _torch() async {
     final c = camera;
@@ -1145,10 +1167,10 @@ class _ScannerState extends State<Scanner> with WidgetsBindingObserver {
                             ),
                     ),
                   ),
-                  if (scan.state.lastAdded case final undo?)
+                  if (scan.state.lastAdded != null)
                     IconButton(
                       tooltip: 'Отменить последнее добавление',
-                      onPressed: modal || writing ? null : () => _undo(undo),
+                      onPressed: _canUndo ? _undo : null,
                       icon: const Icon(Icons.undo, color: scanPaper),
                     ),
                 ],

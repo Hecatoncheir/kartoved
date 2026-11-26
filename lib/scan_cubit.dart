@@ -133,9 +133,7 @@ class ScanSession {
   ScanSession copyWith({
     ScanMode? mode,
     BatchSettings? batch,
-    int? lastScan,
-    int? lastAdded,
-    bool clearLastScan = false,
+    ({int? scan, int? added})? latest,
     bool? showGuide,
     ScanLight? light,
     Set<String>? targets,
@@ -145,8 +143,8 @@ class ScanSession {
   }) => ScanSession(
     mode: mode ?? this.mode,
     batch: batch ?? this.batch,
-    lastScan: clearLastScan ? null : lastScan ?? this.lastScan,
-    lastAdded: clearLastScan ? null : lastAdded ?? this.lastAdded,
+    lastScan: latest == null ? lastScan : latest.scan,
+    lastAdded: latest == null ? lastAdded : latest.added,
     showGuide: showGuide ?? this.showGuide,
     light: light ?? this.light,
     targets: targets ?? this.targets,
@@ -159,6 +157,7 @@ class ScanSession {
 class ScanCubit extends Cubit<ScanSession> {
   ScanCubit() : super(const ScanSession());
   final gate = ScanGate();
+  final _additions = <int>[];
   Timer? _countdown;
   Edition? _repeatCard;
   Set<String> _repeatCandidates = {};
@@ -302,10 +301,10 @@ class ScanCubit extends Cubit<ScanSession> {
         ? {for (final e in matches.first.editions) e.id}
         : {};
     _savedSample = repeat ? (_savedSample ?? _currentSample) : null;
+    if (added) _additions.add(seq);
     emit(
       state.copyWith(
-        lastScan: seq,
-        lastAdded: added ? seq : null,
+        latest: (scan: seq, added: _additions.lastOrNull),
         repeatSeconds: repeat ? 2 : 0,
       ),
     );
@@ -318,15 +317,29 @@ class ScanCubit extends Cubit<ScanSession> {
     }
   }
 
-  void undone() {
+  void undone(int sequence) {
+    final index = _additions.lastIndexOf(sequence);
+    if (index < 0) return;
+    _additions.removeAt(index);
     stopRepeats();
     cancelFrame();
-    emit(state.copyWith(clearLastScan: true));
+    final lastAdded = _additions.lastOrNull;
+    emit(
+      state.copyWith(
+        latest: (
+          scan: state.lastScan == sequence ? lastAdded : state.lastScan,
+          added: lastAdded,
+        ),
+      ),
+    );
   }
 
   void changedFolder() {
     gate.reset();
-    undone();
+    _additions.clear();
+    stopRepeats();
+    cancelFrame();
+    emit(state.copyWith(latest: (scan: null, added: null)));
   }
 
   void shutter() => _force = true;

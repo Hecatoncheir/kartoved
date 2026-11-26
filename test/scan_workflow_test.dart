@@ -416,6 +416,95 @@ void main() {
   });
 
   scannerTest(
+    'Отмена остаётся после удаления результата и учитывает быстрые нажатия',
+    (app) async {
+      await app.openScanner();
+      final before = app.model.state.recent.single;
+      final undo = find.byTooltip('Отменить последнее добавление');
+      expect(undo, findsNothing);
+
+      app.cacheReference(bolt);
+      final matches = [
+        const Match([en]),
+        const Match([bolt]),
+        const Match([bolt], titleOnly: true, score: .70),
+      ];
+      for (final (index, match) in matches.indexed) {
+        app.model.matches = [match];
+        await app.tap(find.text('Из фото'));
+        await app.waitFor(() => app.sounds == index + 1);
+      }
+
+      final saved = app.model.state.recent
+          .map((entry) => entry.sequence)
+          .toList();
+      expect(saved.length, 4);
+      expect(app.model.state.reviews.keys, [saved.first]);
+      await app.tap(undo);
+      await app.waitFor(() => app.model.state.recent.length == 3);
+      expect(app.model.state.reviews, isEmpty);
+      expect(
+        app.model.state.recent.map((entry) => entry.sequence),
+        saved.skip(1),
+      );
+      expect(app.model.state.owned(bolt.name), 1);
+      expect(undo, findsOneWidget);
+
+      await app.tester.tap(undo);
+      await app.tester.tap(undo);
+      await app.waitFor(() => undo.evaluate().isEmpty);
+      final remaining = app.model.state.recent.single;
+      expect(remaining.sequence, before.sequence);
+      expect(remaining.card.printingKey, before.card.printingKey);
+      expect(remaining.quantity, before.quantity);
+      expect(app.model.state.owned(bolt.name), 0);
+      expect(app.model.state.owned(en.name), 3);
+    },
+  );
+
+  scannerTest(
+    'Снятие результата с проверки не занимает шаг отмены после нового скана',
+    (app) async {
+      await app.openScanner();
+      app.model.matches = const [
+        Match([en]),
+      ];
+      await app.tap(find.text('Из фото'));
+      await app.waitFor(() => app.sounds == 1);
+      final kept = app.model.state.recent.first.sequence;
+
+      app.model.matches = const [
+        Match([bolt], titleOnly: true, score: .70),
+      ];
+      await app.tap(find.text('Из фото'));
+      await app.waitFor(() => app.sounds == 2);
+      final pending = app.model.state.reviews.keys.single;
+      await app.tap(
+        find.descendant(
+          of: find.byKey(ValueKey(pending)),
+          matching: find.byType(InkWell),
+        ),
+      );
+      await app.tap(find.text('Убрать из очереди'));
+      await app.waitFor(() => app.model.state.reviews.isEmpty);
+
+      app.model.matches = const [
+        Match([en]),
+      ];
+      await app.tap(find.text('Из фото'));
+      await app.waitFor(() => app.sounds == 3);
+      expect(app.model.state.recent.first.sequence, pending);
+
+      final undo = find.byTooltip('Отменить последнее добавление');
+      await app.tap(undo);
+      await app.waitFor(() => app.model.state.recent.first.sequence == kept);
+      await app.tap(undo);
+      await app.waitFor(() => undo.evaluate().isEmpty);
+      expect(app.model.state.recent.length, 1);
+    },
+  );
+
+  scannerTest(
     'Сигнал сохранения работает без описания, спорный снимок звучит иначе',
     (app) async {
       await app.openScanner();
